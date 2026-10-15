@@ -215,12 +215,12 @@ class DashboardViewModel : ViewModel() {
         val end = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
         coroutineScope {
             val overTime = async { repository.statsValueOverTime(start, end).getOrNull() }
-            val byLocation = async { repository.statsByLocation().getOrDefault(emptyList()) }
-            val byTag = async { repository.statsByTag().getOrDefault(emptyList()) }
+            val breakdowns = async { repository.valueBreakdowns().getOrNull() }
+            val value = breakdowns.await()
             _charts.value = DashboardCharts(
                 valueOverTime = overTime.await(),
-                byLocation = byLocation.await(),
-                byTag = byTag.await(),
+                byLocation = value?.byLocation.orEmpty(),
+                byTag = value?.byTag.orEmpty(),
             )
         }
     }

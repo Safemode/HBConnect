@@ -26,7 +26,6 @@ import com.safemode.hbconnect.data.remote.models.TagOut
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.data.remote.models.TagUpdate
 import com.safemode.hbconnect.data.remote.models.TokenResponse
-import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
 import com.safemode.hbconnect.data.remote.models.TreeItem
 import com.safemode.hbconnect.data.remote.models.ValueOverTime
 import com.safemode.hbconnect.data.remote.models.UserSelfResponse
@@ -71,14 +70,6 @@ interface HomeboxApi {
 
     @GET("api/v1/groups/statistics")
     suspend fun statistics(): Response<GroupStatistics>
-
-    /** Summed purchase price grouped by location (a value total, not an item count). */
-    @GET("api/v1/groups/statistics/locations")
-    suspend fun statsByLocation(): Response<List<TotalsByOrganizer>>
-
-    /** Summed purchase price grouped by tag (a value total, not an item count). */
-    @GET("api/v1/groups/statistics/tags")
-    suspend fun statsByTag(): Response<List<TotalsByOrganizer>>
 
     /** Priced items created within [start]..[end] (yyyy-MM-dd), for a cumulative value line. */
     @GET("api/v1/groups/statistics/purchase-price")

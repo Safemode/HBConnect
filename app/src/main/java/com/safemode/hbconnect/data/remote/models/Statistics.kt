@@ -11,13 +11,23 @@ data class GroupStatistics(
 )
 
 /**
- * GET /api/v1/groups/statistics/locations and /api/v1/groups/statistics/tags.
- * [total] is the summed purchase price of the organizer's items, not an item count.
+ * A value total for one organizer (location or tag) — the summed purchase price of its items,
+ * not an item count.
  */
 data class TotalsByOrganizer(
     val id: String? = null,
     val name: String? = null,
     val total: Double = 0.0,
+)
+
+/**
+ * Value-by-location and value-by-tag for the dashboard, computed client-side from non-archived
+ * items. The server's /statistics/locations and /statistics/tags sum archived items too, which is
+ * inconsistent with the archived-excluded totals shown everywhere else in the app.
+ */
+data class ValueBreakdowns(
+    val byLocation: List<TotalsByOrganizer> = emptyList(),
+    val byTag: List<TotalsByOrganizer> = emptyList(),
 )
 
 /** A single priced item's contribution, keyed by its creation date (RFC 3339). */
