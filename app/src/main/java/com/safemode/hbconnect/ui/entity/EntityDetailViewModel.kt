@@ -76,6 +76,16 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
         }
     }
 
+    /** Fetches the server-rendered QR label PNG for this entity; [onResult] gets the bytes or an error. */
+    fun fetchLabel(isLocation: Boolean, onResult: (ByteArray?, String?) -> Unit) {
+        viewModelScope.launch {
+            repository.downloadLabel(entityId, isLocation).fold(
+                onSuccess = { onResult(it, null) },
+                onFailure = { onResult(null, it.message) },
+            )
+        }
+    }
+
     /** Duplicates this entity; [onResult] receives the new entity id on success. */
     fun duplicate(options: DuplicateOptions, onResult: (String?, String?) -> Unit) {
         viewModelScope.launch {

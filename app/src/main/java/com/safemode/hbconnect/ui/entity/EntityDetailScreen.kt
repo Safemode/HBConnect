@@ -7,13 +7,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import android.content.Intent
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -34,10 +40,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -56,6 +65,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,10 +74,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -87,6 +99,7 @@ import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
+import java.io.File
 
 @Suppress("UNCHECKED_CAST")
 private fun detailFactory(entityId: String) = object : ViewModelProvider.Factory {
@@ -119,6 +132,7 @@ fun EntityDetailScreen(
     var showDuplicate by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
     var showTags by remember { mutableStateOf(false) }
+    var showQrLabel by remember { mutableStateOf(false) }
 
     val entity = (state as? UiState.Success)?.data
     val isLocation = entity?.isLocation == true
@@ -142,19 +156,24 @@ fun EntityDetailScreen(
                         IconButton(onClick = { confirmDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")
                         }
-                        if (!isLocation) {
-                            var menuOpen by remember { mutableStateOf(false) }
-                            Box {
-                                IconButton(onClick = { menuOpen = true }) {
-                                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                                }
-                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                if (!isLocation) {
                                     DropdownMenuItem(
                                         text = { Text("Duplicate") },
                                         leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                                         onClick = { menuOpen = false; showDuplicate = true },
                                     )
                                 }
+                                DropdownMenuItem(
+                                    text = { Text("QR label") },
+                                    leadingIcon = { Icon(Icons.Filled.QrCode2, contentDescription = null) },
+                                    onClick = { menuOpen = false; showQrLabel = true },
+                                )
                             }
                         }
                     }
@@ -251,6 +270,14 @@ fun EntityDetailScreen(
                     }
                 }
             },
+        )
+    }
+
+    if (showQrLabel && entity?.id != null) {
+        QrLabelDialog(
+            entityName = entity.displayName,
+            onDismiss = { showQrLabel = false },
+            fetch = { onResult -> viewModel.fetchLabel(isLocation, onResult) },
         )
     }
 
@@ -556,6 +583,89 @@ private fun QuickActionsCard(
                 OutlinedButton(onClick = onEditTags, modifier = Modifier.weight(1f)) { Text("Edit tags") }
             }
         }
+    }
+}
+
+@Composable
+private fun QrLabelDialog(
+    entityName: String,
+    onDismiss: () -> Unit,
+    fetch: ((ByteArray?, String?) -> Unit) -> Unit,
+) {
+    val context = LocalContext.current
+    var bytes by remember { mutableStateOf<ByteArray?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        fetch { data, err ->
+            bytes = data
+            error = err
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("QR label") },
+        text = {
+            Box(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                val data = bytes
+                when {
+                    error != null -> Text(
+                        error ?: "Failed to load label.",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    data == null -> CircularProgressIndicator()
+                    else -> {
+                        val bmp = remember(data) {
+                            BitmapFactory.decodeByteArray(data, 0, data.size)?.asImageBitmap()
+                        }
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = "QR label for $entityName",
+                                modifier = Modifier.fillMaxWidth(),
+                                contentScale = ContentScale.FillWidth,
+                            )
+                        } else {
+                            Text("Couldn't display the label.", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = bytes != null,
+                onClick = { bytes?.let { shareLabelImage(context, it, entityName) } },
+            ) {
+                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Share")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** Writes the label PNG to the cache and launches a share chooser via FileProvider. */
+private fun shareLabelImage(context: android.content.Context, bytes: ByteArray, entityName: String) {
+    try {
+        val dir = File(context.cacheDir, "labels").apply { mkdirs() }
+        val safeName = entityName.ifBlank { "label" }.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val file = File(dir, "$safeName.png")
+        file.writeBytes(bytes)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share label").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Couldn't share the label", Toast.LENGTH_LONG).show()
     }
 }
 
