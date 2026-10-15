@@ -75,8 +75,6 @@ fun LocationsScreen(
                         icon = Icons.Outlined.Place,
                         title = "No locations",
                         message = "Add your first location to organize your items.",
-                        actionLabel = "Add location",
-                        onAction = onAddLocation,
                     )
                 } else {
                     LazyColumn(

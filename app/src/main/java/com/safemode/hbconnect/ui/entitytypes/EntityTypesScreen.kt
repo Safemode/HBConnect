@@ -89,8 +89,6 @@ fun EntityTypesScreen(viewModel: EntityTypesViewModel = viewModel()) {
                         icon = Icons.Filled.Category,
                         title = "No entity types",
                         message = "Add a type to categorize your items and locations.",
-                        actionLabel = "Add type",
-                        onAction = { editing = EntityTypeSummary() },
                     )
                 } else {
                     LazyColumn(

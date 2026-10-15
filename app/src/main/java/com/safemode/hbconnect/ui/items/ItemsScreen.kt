@@ -100,8 +100,6 @@ fun ItemsScreen(
                             title = if (query.isBlank()) "No items" else "No matches",
                             message = if (query.isBlank()) "Add your first item to get started."
                             else "Nothing matched \"$query\".",
-                            actionLabel = if (query.isBlank()) "Add item" else null,
-                            onAction = if (query.isBlank()) onAddItem else null,
                         )
                     } else {
                         LazyColumn(
