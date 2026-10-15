@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -85,7 +86,13 @@ fun ServerScreen(viewModel: ServerViewModel = viewModel()) {
                         value = form.host,
                         onValueChange = { v -> viewModel.update { it.copy(host = v) } },
                         label = { Text("Host / IP address") },
-                        placeholder = { Text("e.g. 192.168.1.50 or homebox.example.com") },
+                        placeholder = {
+                            Text(
+                                "e.g. 192.168.1.50 or hb.example.com",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
