@@ -52,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -118,11 +119,12 @@ fun AttachmentsScreen(
         }
     }
 
-    // Camera capture: the taken photo is written to a FileProvider URI, then uploaded.
-    var pendingPhoto by remember { mutableStateOf<File?>(null) }
+    // Camera capture: the taken photo is written to a FileProvider URI, then uploaded. The path is
+    // saved so it survives the Activity recreation caused by rotating the phone in the camera view.
+    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        val file = pendingPhoto
-        pendingPhoto = null
+        val file = pendingPhotoPath?.let(::File)
+        pendingPhotoPath = null
         if (success && file != null) {
             scope.launch {
                 val bytes = withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() }
@@ -142,7 +144,7 @@ fun AttachmentsScreen(
 
     fun launchCamera() {
         val file = createPhotoFile(context)
-        pendingPhoto = file
+        pendingPhotoPath = file.absolutePath
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         cameraLauncher.launch(uri)
     }
