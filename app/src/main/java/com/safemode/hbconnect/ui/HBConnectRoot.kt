@@ -52,6 +52,7 @@ import com.safemode.hbconnect.ui.about.AboutScreen
 import com.safemode.hbconnect.ui.attachments.AttachmentsScreen
 import com.safemode.hbconnect.ui.dashboard.DashboardScreen
 import com.safemode.hbconnect.ui.entity.EntityDetailScreen
+import com.safemode.hbconnect.ui.entitytypes.EntityTypesScreen
 import com.safemode.hbconnect.ui.items.ItemFormScreen
 import com.safemode.hbconnect.ui.items.ItemsScreen
 import com.safemode.hbconnect.ui.locations.LocationFormScreen
@@ -155,6 +156,7 @@ fun HBConnectRoot() {
                     )
                 }
                 composable(Routes.TAGS) { TagsScreen() }
+                composable(Routes.ENTITY_TYPES) { EntityTypesScreen() }
                 composable(Routes.MAINTENANCE_ALL) {
                     AllMaintenanceScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
