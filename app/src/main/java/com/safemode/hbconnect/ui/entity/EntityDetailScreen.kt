@@ -11,7 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -42,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -234,17 +240,8 @@ private fun ItemDetails(
             }
         }
 
-        val imageAttachmentId = entity.imageId?.ifBlank { null } ?: entity.thumbnailId?.ifBlank { null }
-        if (imageAttachmentId != null && entity.id != null) {
-            AsyncImage(
-                model = Graph.repository.attachmentUrl(entity.id, imageAttachmentId),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-            )
+        if (entity.id != null) {
+            ItemImageGallery(entityId = entity.id, imageIds = entity.imageAttachmentIds())
         }
 
         if (!entity.description.isNullOrBlank()) {
@@ -314,6 +311,76 @@ private fun ItemDetails(
         if (attachments.isNotEmpty()) {
             DetailCard("Attachments") {
                 attachments.forEach { DetailRow("File", it) }
+            }
+        }
+    }
+}
+
+/**
+ * Image attachment ids for an item, primary first. Falls back to the primary image/thumbnail id
+ * when the attachments list carries no photos.
+ */
+private fun EntityOut.imageAttachmentIds(): List<String> {
+    val fromAttachments = attachments.orEmpty()
+        .filter { it.type.equals("photo", ignoreCase = true) || it.mimeType?.startsWith("image/") == true }
+        .sortedByDescending { it.primary == true }
+        .mapNotNull { it.id?.ifBlank { null } }
+    if (fromAttachments.isNotEmpty()) return fromAttachments
+    return listOfNotNull(imageId?.ifBlank { null } ?: thumbnailId?.ifBlank { null })
+}
+
+/** Shows one image, or a swipeable pager with a dot indicator when an item has several photos. */
+@Composable
+private fun ItemImageGallery(entityId: String, imageIds: List<String>) {
+    if (imageIds.isEmpty()) return
+
+    if (imageIds.size == 1) {
+        AsyncImage(
+            model = Graph.repository.attachmentUrl(entityId, imageIds.first()),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .clip(RoundedCornerShape(16.dp)),
+        )
+        return
+    }
+
+    val pagerState = rememberPagerState(pageCount = { imageIds.size })
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HorizontalPager(
+            state = pagerState,
+            pageSpacing = 8.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) { page ->
+            AsyncImage(
+                model = Graph.repository.attachmentUrl(entityId, imageIds[page]),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            repeat(imageIds.size) { index ->
+                val selected = index == pagerState.currentPage
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 3.dp)
+                        .size(if (selected) 9.dp else 7.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant,
+                        ),
+                )
             }
         }
     }
