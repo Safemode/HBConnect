@@ -16,6 +16,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +61,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 )
             }
 
+            SettingCard("Labels") {
+                SwitchRow(
+                    title = "On-device QR code",
+                    subtitle = "Adds a \"QR code (on-device)\" action to item and location " +
+                        "details that generates a QR from this app, independent of the server.",
+                    checked = config.showDeviceQr,
+                    onCheckedChange = { v -> viewModel.updateAndSave { it.copy(showDeviceQr = v) } },
+                )
+            }
+
             SettingCard("Offline cache") {
                 Text(
                     "GET responses are cached so the app stays usable when the server is " +
@@ -81,6 +92,29 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 ) { Text("Clear cache") }
             }
         }
+    }
+}
+
+@Composable
+private fun SwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

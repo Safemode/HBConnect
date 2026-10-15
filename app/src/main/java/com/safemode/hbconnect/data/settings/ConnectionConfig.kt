@@ -48,6 +48,8 @@ data class ConnectionConfig(
     val cacheSize: CacheSize = CacheSize.MB_50,
     val themePreference: ThemePreference = ThemePreference.SYSTEM,
     val itemSortOrder: ItemSortOrder = ItemSortOrder.NAME_ASC,
+    /** Whether the detail screen offers the on-device QR code action. Off by default. */
+    val showDeviceQr: Boolean = false,
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean

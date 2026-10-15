@@ -7,13 +7,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -26,6 +33,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
@@ -34,11 +42,15 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,11 +63,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,10 +78,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,7 +102,10 @@ import com.safemode.hbconnect.ui.common.Option
 import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.formatMoney
+import com.safemode.hbconnect.ui.common.generateQrBitmap
 import com.safemode.hbconnect.ui.items.EntityRow
+import java.io.File
+import java.io.FileOutputStream
 
 @Suppress("UNCHECKED_CAST")
 private fun detailFactory(entityId: String) = object : ViewModelProvider.Factory {
@@ -114,11 +133,14 @@ fun EntityDetailScreen(
     val currency by Graph.currency.collectAsStateWithLifecycle()
     val locations by viewModel.locations.collectAsStateWithLifecycle()
     val tags by viewModel.tags.collectAsStateWithLifecycle()
+    val showDeviceQr by viewModel.showDeviceQr.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
     var showDuplicate by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
     var showTags by remember { mutableStateOf(false) }
+    var showQrLabel by remember { mutableStateOf(false) }
+    var showQrCode by remember { mutableStateOf(false) }
 
     val entity = (state as? UiState.Success)?.data
     val isLocation = entity?.isLocation == true
@@ -142,17 +164,29 @@ fun EntityDetailScreen(
                         IconButton(onClick = { confirmDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")
                         }
-                        if (!isLocation) {
-                            var menuOpen by remember { mutableStateOf(false) }
-                            Box {
-                                IconButton(onClick = { menuOpen = true }) {
-                                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                                }
-                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                if (!isLocation) {
                                     DropdownMenuItem(
                                         text = { Text("Duplicate") },
                                         leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                                         onClick = { menuOpen = false; showDuplicate = true },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("QR label") },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
+                                    onClick = { menuOpen = false; showQrLabel = true },
+                                )
+                                if (showDeviceQr) {
+                                    DropdownMenuItem(
+                                        text = { Text("QR code (on-device)") },
+                                        leadingIcon = { Icon(Icons.Filled.QrCode2, contentDescription = null) },
+                                        onClick = { menuOpen = false; showQrCode = true },
                                     )
                                 }
                             }
@@ -251,6 +285,22 @@ fun EntityDetailScreen(
                     }
                 }
             },
+        )
+    }
+
+    if (showQrLabel && entity?.id != null) {
+        ServerLabelDialog(
+            entityName = entity.displayName,
+            onDismiss = { showQrLabel = false },
+            fetch = { onResult -> viewModel.fetchLabel(isLocation, onResult) },
+        )
+    }
+
+    if (showQrCode && entity?.id != null) {
+        DeviceQrDialog(
+            entityName = entity.displayName,
+            deepLink = viewModel.entityWebUrl(isLocation),
+            onDismiss = { showQrCode = false },
         )
     }
 
@@ -556,6 +606,198 @@ private fun QuickActionsCard(
                 OutlinedButton(onClick = onEditTags, modifier = Modifier.weight(1f)) { Text("Edit tags") }
             }
         }
+    }
+}
+
+/** A tonal info callout — a rounded container with a leading info icon and supporting text. */
+@Composable
+private fun InfoCallout(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                Icons.Outlined.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+    }
+}
+
+/** Shows Homebox's server-generated PNG label (QR + title) and offers to share it. */
+@Composable
+private fun ServerLabelDialog(
+    entityName: String,
+    onDismiss: () -> Unit,
+    fetch: ((ByteArray?, String?) -> Unit) -> Unit,
+) {
+    val context = LocalContext.current
+    var bytes by remember { mutableStateOf<ByteArray?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        fetch { data, err ->
+            bytes = data
+            error = err
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("QR label") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val data = bytes
+                    when {
+                        error != null -> Text(
+                            error ?: "Failed to load label.",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        data == null -> CircularProgressIndicator()
+                        else -> {
+                            val bmp = remember(data) {
+                                BitmapFactory.decodeByteArray(data, 0, data.size)?.asImageBitmap()
+                            }
+                            if (bmp != null) {
+                                Image(
+                                    bitmap = bmp,
+                                    contentDescription = "QR label for $entityName",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentScale = ContentScale.FillWidth,
+                                )
+                            } else {
+                                Text("Couldn't display the label.", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+                InfoCallout(
+                    "Label not including your server URL in the QR code? Make sure your " +
+                        "HBOX_OPTIONS_HOSTNAME variable is configured.",
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = bytes != null,
+                onClick = { bytes?.let { shareLabelImage(context, it, entityName) } },
+            ) {
+                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Share")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** Writes the server label PNG to the cache and launches a share chooser via FileProvider. */
+private fun shareLabelImage(context: android.content.Context, bytes: ByteArray, entityName: String) {
+    try {
+        val dir = File(context.cacheDir, "labels").apply { mkdirs() }
+        val safeName = entityName.ifBlank { "label" }.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val file = File(dir, "$safeName.png")
+        file.writeBytes(bytes)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share label").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Couldn't share the label", Toast.LENGTH_LONG).show()
+    }
+}
+
+/** Generates a QR code on-device from the entity's web URL and offers to share it. */
+@Composable
+private fun DeviceQrDialog(
+    entityName: String,
+    deepLink: String,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val qr = remember(deepLink) { generateQrBitmap(deepLink) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("QR code") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    entityName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (qr != null) {
+                    Image(
+                        bitmap = qr.asImageBitmap(),
+                        contentDescription = "QR code for $entityName",
+                        modifier = Modifier.fillMaxWidth(0.72f),
+                        contentScale = ContentScale.FillWidth,
+                    )
+                } else {
+                    Text("Couldn't generate the QR code.", color = MaterialTheme.colorScheme.error)
+                }
+                Text(
+                    deepLink,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = qr != null,
+                onClick = { qr?.let { shareQrImage(context, it, entityName) } },
+            ) {
+                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Share")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** Writes the QR [bitmap] to the cache as a PNG and launches a share chooser via FileProvider. */
+private fun shareQrImage(context: android.content.Context, bitmap: Bitmap, entityName: String) {
+    try {
+        val dir = File(context.cacheDir, "labels").apply { mkdirs() }
+        val safeName = entityName.ifBlank { "label" }.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val file = File(dir, "$safeName-qr.png")
+        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share QR label").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Couldn't share the QR label", Toast.LENGTH_LONG).show()
     }
 }
 

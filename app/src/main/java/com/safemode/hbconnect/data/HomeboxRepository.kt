@@ -307,6 +307,40 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     suspend fun deleteAttachment(entityId: String, attachmentId: String): Result<Unit> =
         callUnit { it.deleteAttachment(entityId, attachmentId) }
 
+    // ---- Deep links ----
+
+    /**
+     * The Homebox web URL for an entity, e.g. `https://host/item/{id}`, built from the
+     * connected server address. Used to encode a scannable QR code that opens the entity.
+     */
+    fun entityWebUrl(entityId: String, isLocation: Boolean): String {
+        val base = apiProvider.currentConfig().baseUrl().trimEnd('/')
+        val kind = if (isLocation) "location" else "item"
+        return "$base/$kind/$entityId"
+    }
+
+    // ---- Label maker ----
+
+    /** URL of the server-generated PNG label (QR + title) for an item or location. */
+    fun labelUrl(entityId: String, isLocation: Boolean): String {
+        val base = apiProvider.currentConfig().baseUrl().trimEnd('/')
+        val kind = if (isLocation) "location" else "item"
+        return "$base/api/v1/labelmaker/$kind/$entityId"
+    }
+
+    /** Downloads the server-rendered label PNG using the authenticated client (off the main thread). */
+    suspend fun downloadLabel(entityId: String, isLocation: Boolean): Result<ByteArray> =
+        runCatching {
+            val url = labelUrl(entityId, isLocation)
+            val client = apiProvider.authenticatedImageClient()
+            withContext(Dispatchers.IO) {
+                client.newCall(Request.Builder().url(url).build()).execute().use {
+                    if (!it.isSuccessful) throw IllegalStateException("Label request failed (${it.code}).")
+                    it.body.bytes()
+                }
+            }
+        }
+
     /** Updates an attachment's title, type, and primary flag (all required by the API). */
     suspend fun updateAttachment(
         entityId: String,
