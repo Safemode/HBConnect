@@ -112,6 +112,8 @@ data class EntityCreate(
     val parentId: String? = null,
     val quantity: Int? = null,
     val tagIds: List<String>? = null,
+    val manufacturer: String? = null,
+    val modelNumber: String? = null,
 )
 
 /** Body for PUT /api/v1/entities/{id} */

@@ -125,13 +125,17 @@ class ItemFormViewModel(
         }
     }
 
-    /** Fills blank form fields from a looked-up product (keeps anything already typed). */
+    /**
+     * Fills blank form fields from a looked-up product (keeps anything already typed). Values are
+     * clamped to Homebox's create limits (name/manufacturer/model 255, description 1000) because
+     * barcode databases often return very long titles/descriptions that would 422 on save.
+     */
     fun applyBarcodeProduct(p: BarcodeProduct) {
         _form.value = _form.value.copy(
-            name = _form.value.name.ifBlank { p.item?.name?.trim().orEmpty() },
-            description = _form.value.description.ifBlank { p.item?.description?.trim().orEmpty() },
-            manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim().orEmpty() },
-            modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim().orEmpty() },
+            name = _form.value.name.ifBlank { p.item?.name?.trim()?.take(255).orEmpty() },
+            description = _form.value.description.ifBlank { p.item?.description?.trim()?.take(1000).orEmpty() },
+            manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim()?.take(255).orEmpty() },
+            modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim()?.take(255).orEmpty() },
         )
     }
 
@@ -195,6 +199,8 @@ class ItemFormViewModel(
                         parentId = f.parentId,
                         quantity = f.quantity.toIntOrNull() ?: 1,
                         tagIds = tagList.ifEmpty { null },
+                        manufacturer = f.manufacturer.trim().ifBlank { null },
+                        modelNumber = f.modelNumber.trim().ifBlank { null },
                     ),
                 ).map { }
             }
