@@ -46,6 +46,21 @@ class AttachmentsViewModel(private val entityId: String) : ViewModel() {
         }
     }
 
+    fun update(
+        attachmentId: String,
+        type: String,
+        title: String,
+        primary: Boolean,
+        onResult: (Boolean, String?) -> Unit,
+    ) {
+        viewModelScope.launch {
+            repository.updateAttachment(entityId, attachmentId, type, title, primary).fold(
+                onSuccess = { load(); onResult(true, null) },
+                onFailure = { onResult(false, it.message) },
+            )
+        }
+    }
+
     fun delete(attachmentId: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             repository.deleteAttachment(entityId, attachmentId).fold(

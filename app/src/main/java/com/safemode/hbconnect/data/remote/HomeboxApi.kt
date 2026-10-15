@@ -1,10 +1,13 @@
 package com.safemode.hbconnect.data.remote
 
 import com.safemode.hbconnect.data.remote.models.ApiSummary
+import com.safemode.hbconnect.data.remote.models.AttachmentUpdate
 import com.safemode.hbconnect.data.remote.models.Currency
+import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityListResult
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
@@ -27,6 +30,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Multipart
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Part
@@ -105,8 +109,19 @@ interface HomeboxApi {
     @PUT("api/v1/entities/{id}")
     suspend fun updateEntity(@Path("id") id: String, @Body body: EntityUpdate): Response<EntityOut>
 
+    /** Partial update; omitted/null fields are left unchanged. */
+    @PATCH("api/v1/entities/{id}")
+    suspend fun patchEntity(@Path("id") id: String, @Body body: EntityPatch): Response<EntityOut>
+
+    @POST("api/v1/entities/{id}/duplicate")
+    suspend fun duplicateEntity(@Path("id") id: String, @Body body: DuplicateOptions): Response<EntityOut>
+
     @DELETE("api/v1/entities/{id}")
     suspend fun deleteEntity(@Path("id") id: String): Response<ResponseBody>
+
+    /** Look up items by asset id (digits; dashes are ignored server-side). */
+    @GET("api/v1/assets/{id}")
+    suspend fun getByAssetId(@Path("id") assetId: String): Response<EntityListResult>
 
     @GET("api/v1/entities/tree")
     suspend fun getTree(@Query("withItems") withItems: Boolean = false): Response<List<TreeItem>>
@@ -141,6 +156,13 @@ interface HomeboxApi {
     suspend fun uploadAttachment(
         @Path("id") id: String,
         @Part parts: List<MultipartBody.Part>,
+    ): Response<EntityOut>
+
+    @PUT("api/v1/entities/{id}/attachments/{attachmentId}")
+    suspend fun updateAttachment(
+        @Path("id") id: String,
+        @Path("attachmentId") attachmentId: String,
+        @Body body: AttachmentUpdate,
     ): Response<EntityOut>
 
     @DELETE("api/v1/entities/{id}/attachments/{attachmentId}")

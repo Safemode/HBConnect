@@ -3,9 +3,12 @@ package com.safemode.hbconnect.ui.entity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
+import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,8 +35,55 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
     private val _deleted = MutableStateFlow(false)
     val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
 
+    // Picker data for the move/retag quick actions, loaded lazily on first use.
+    private val _locations = MutableStateFlow<List<EntitySummary>>(emptyList())
+    val locations: StateFlow<List<EntitySummary>> = _locations.asStateFlow()
+
+    private val _tags = MutableStateFlow<List<TagSummary>>(emptyList())
+    val tags: StateFlow<List<TagSummary>> = _tags.asStateFlow()
+
+    private var pickersLoaded = false
+
     init {
         load(showLoading = true)
+    }
+
+    /** Loads locations and tags for the quick-action pickers (once). */
+    fun loadPickers() {
+        if (pickersLoaded) return
+        pickersLoaded = true
+        viewModelScope.launch {
+            _locations.value = repository.getLocations().getOrDefault(emptyList())
+            _tags.value = repository.getTags().getOrDefault(emptyList())
+        }
+    }
+
+    fun setQuantity(quantity: Double, onResult: (Boolean, String?) -> Unit) =
+        patch(EntityPatch(id = entityId, quantity = quantity), onResult)
+
+    fun move(parentId: String, onResult: (Boolean, String?) -> Unit) =
+        patch(EntityPatch(id = entityId, parentId = parentId), onResult)
+
+    fun setTags(tagIds: List<String>, onResult: (Boolean, String?) -> Unit) =
+        patch(EntityPatch(id = entityId, tagIds = tagIds), onResult)
+
+    private fun patch(body: EntityPatch, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            repository.patchEntity(entityId, body).fold(
+                onSuccess = { load(showLoading = false); onResult(true, null) },
+                onFailure = { onResult(false, it.message) },
+            )
+        }
+    }
+
+    /** Duplicates this entity; [onResult] receives the new entity id on success. */
+    fun duplicate(options: DuplicateOptions, onResult: (String?, String?) -> Unit) {
+        viewModelScope.launch {
+            repository.duplicateEntity(entityId, options).fold(
+                onSuccess = { onResult(it.id, null) },
+                onFailure = { onResult(null, it.message) },
+            )
+        }
     }
 
     fun load(showLoading: Boolean = false) {
