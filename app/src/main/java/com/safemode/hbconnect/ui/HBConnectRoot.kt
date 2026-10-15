@@ -138,6 +138,7 @@ fun HBConnectRoot() {
                         onOpenLocations = { navController.navigate(Routes.LOCATIONS) },
                         onOpenTags = { navController.navigate(Routes.TAGS) },
                         onOpenServer = { navController.navigate(Routes.SERVER) },
+                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
                     )
                 }
                 composable(Routes.ITEMS) {

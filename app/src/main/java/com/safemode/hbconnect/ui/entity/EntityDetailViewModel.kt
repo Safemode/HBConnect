@@ -9,10 +9,12 @@ import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class EntityDetailViewModel(private val entityId: String) : ViewModel() {
     private val repository = Graph.repository
+    private val settings = Graph.settingsRepository
 
     private val _state = MutableStateFlow<UiState<EntityOut>>(UiState.Loading)
     val state: StateFlow<UiState<EntityOut>> = _state.asStateFlow()
@@ -41,7 +43,8 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
             )
             val entity = result.getOrNull()
             if (entity?.isLocation == true) {
-                _children.value = repository.getChildren(entityId).getOrDefault(emptyList())
+                val includeArchived = settings.config.first().showArchived
+                _children.value = repository.getChildren(entityId, includeArchived).getOrDefault(emptyList())
             } else {
                 _children.value = emptyList()
             }

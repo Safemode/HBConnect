@@ -51,7 +51,7 @@ class LocationsViewModel : ViewModel() {
             return
         }
         if (showLoading) _state.value = UiState.Loading
-        _state.value = repository.getLocations().fold(
+        _state.value = repository.getLocations(includeArchived = config.showArchived).fold(
             onSuccess = { UiState.Success(it) },
             onFailure = { UiState.Error(it.message ?: "Failed to load locations.") },
         )

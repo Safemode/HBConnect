@@ -218,6 +218,9 @@ fun ItemFormScreen(
 
                 SectionHeader("Other")
                 ToggleRow("Insured", form.insured) { v -> viewModel.update { it.copy(insured = v) } }
+                if (viewModel.isEdit) {
+                    ToggleRow("Archived", form.archived) { v -> viewModel.update { it.copy(archived = v) } }
+                }
                 OutlinedTextField(
                     value = form.notes,
                     onValueChange = { v -> viewModel.update { it.copy(notes = v) } },

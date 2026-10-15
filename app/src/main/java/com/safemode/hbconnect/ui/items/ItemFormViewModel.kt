@@ -33,6 +33,7 @@ data class ItemForm(
     val lifetimeWarranty: Boolean = false,
     val warrantyDetails: String = "",
     val insured: Boolean = false,
+    val archived: Boolean = false,
 )
 
 class ItemFormViewModel(
@@ -99,6 +100,7 @@ class ItemFormViewModel(
                     lifetimeWarranty = entity.lifetimeWarranty == true,
                     warrantyDetails = entity.warrantyDetails.orEmpty(),
                     insured = entity.insured == true,
+                    archived = entity.archived == true,
                 )
             } else {
                 // Default the entity type to the first item type when creating.
@@ -141,7 +143,7 @@ class ItemFormViewModel(
                         parentId = f.parentId,
                         quantity = f.quantity.toIntOrNull(),
                         insured = f.insured,
-                        archived = prior?.archived,
+                        archived = f.archived,
                         lifetimeWarranty = f.lifetimeWarranty,
                         assetId = prior?.assetId,
                         manufacturer = f.manufacturer.trim().ifBlank { null },

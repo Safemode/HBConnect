@@ -72,7 +72,11 @@ class ItemsViewModel : ViewModel() {
             return
         }
         if (showLoading) _state.value = UiState.Loading
-        _state.value = repository.getItems(query = _query.value, sort = config.itemSortOrder).fold(
+        _state.value = repository.getItems(
+            query = _query.value,
+            sort = config.itemSortOrder,
+            includeArchived = config.showArchived,
+        ).fold(
             onSuccess = { UiState.Success(it) },
             onFailure = { UiState.Error(it.message ?: "Failed to load items.") },
         )
