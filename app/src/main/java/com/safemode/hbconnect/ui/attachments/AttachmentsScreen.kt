@@ -1,6 +1,8 @@
 package com.safemode.hbconnect.ui.attachments
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -21,11 +23,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
@@ -48,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +61,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -113,6 +119,47 @@ fun AttachmentsScreen(
         }
     }
 
+    // Camera capture: the taken photo is written to a FileProvider URI, then uploaded. The path is
+    // saved so it survives the Activity recreation caused by rotating the phone in the camera view.
+    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        val file = pendingPhotoPath?.let(::File)
+        pendingPhotoPath = null
+        if (success && file != null) {
+            scope.launch {
+                val bytes = withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() }
+                withContext(Dispatchers.IO) { file.delete() }
+                if (bytes == null) {
+                    Toast.makeText(context, "Couldn't read the photo", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                viewModel.upload(file.name, "image/jpeg", bytes) { ok, err ->
+                    Toast.makeText(context, if (ok) "Uploaded" else (err ?: "Upload failed"), Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            file?.delete()
+        }
+    }
+
+    fun launchCamera() {
+        val file = createPhotoFile(context)
+        pendingPhotoPath = file.absolutePath
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        cameraLauncher.launch(uri)
+    }
+
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera()
+        else Toast.makeText(context, "Camera permission is needed to take a photo", Toast.LENGTH_LONG).show()
+    }
+
+    fun takePhoto() {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) launchCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -126,14 +173,29 @@ fun AttachmentsScreen(
         },
         floatingActionButton = {
             if (state is UiState.Success) {
-                ExtendedFloatingActionButton(
-                    text = { Text(if (busy) "Uploading…" else "Upload") },
-                    icon = {
-                        if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Filled.Upload, contentDescription = null)
-                    },
-                    onClick = { if (!busy) picker.launch("*/*") },
-                )
+                var addMenuOpen by remember { mutableStateOf(false) }
+                Box {
+                    ExtendedFloatingActionButton(
+                        text = { Text(if (busy) "Uploading…" else "Add") },
+                        icon = {
+                            if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Filled.Add, contentDescription = null)
+                        },
+                        onClick = { if (!busy) addMenuOpen = true },
+                    )
+                    DropdownMenu(expanded = addMenuOpen, onDismissRequest = { addMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Take photo") },
+                            leadingIcon = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
+                            onClick = { addMenuOpen = false; takePhoto() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Upload file") },
+                            leadingIcon = { Icon(Icons.Filled.Upload, contentDescription = null) },
+                            onClick = { addMenuOpen = false; picker.launch("*/*") },
+                        )
+                    }
+                }
             }
         },
     ) { padding ->
@@ -146,9 +208,7 @@ fun AttachmentsScreen(
                     EmptyState(
                         icon = Icons.Filled.AttachFile,
                         title = "No attachments",
-                        message = "Upload a photo, receipt, or manual for this item.",
-                        actionLabel = "Upload",
-                        onAction = { picker.launch("*/*") },
+                        message = "Add a photo, receipt, or manual for this item.",
                     )
                 } else {
                     LazyColumn(
@@ -338,6 +398,12 @@ private fun AttachmentRow(
             }
         }
     }
+}
+
+/** A fresh file under the shared `attachments` cache dir for the camera to write a photo into. */
+private fun createPhotoFile(context: android.content.Context): File {
+    val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
+    return File(dir, "photo_${System.currentTimeMillis()}.jpg")
 }
 
 private data class PickedFile(val name: String, val mime: String?, val bytes: ByteArray)

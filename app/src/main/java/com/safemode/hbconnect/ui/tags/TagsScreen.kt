@@ -87,8 +87,6 @@ fun TagsScreen(viewModel: TagsViewModel = viewModel()) {
                         icon = Icons.Filled.Sell,
                         title = "No tags",
                         message = "Add a tag to start organizing your items.",
-                        actionLabel = "Add tag",
-                        onAction = { editing = TagSummary() },
                     )
                 } else {
                     LazyColumn(

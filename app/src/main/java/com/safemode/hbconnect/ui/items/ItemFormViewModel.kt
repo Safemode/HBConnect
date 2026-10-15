@@ -3,6 +3,7 @@ package com.safemode.hbconnect.ui.items
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
@@ -68,6 +69,9 @@ class ItemFormViewModel(
      */
     private var original: com.safemode.hbconnect.data.remote.models.EntityOut? = null
 
+    /** Id of an item created this session; lets a re-save complete it instead of creating a duplicate. */
+    private var createdId: String? = null
+
     init {
         viewModelScope.launch {
             _locations.value = repository.getLocations().getOrDefault(emptyList())
@@ -114,6 +118,30 @@ class ItemFormViewModel(
         _form.value = transform(_form.value)
     }
 
+    /** Looks up a scanned barcode; [onResult] gets the candidate products, or an error message. */
+    fun lookupBarcode(code: String, onResult: (List<BarcodeProduct>?, String?) -> Unit) {
+        viewModelScope.launch {
+            repository.searchFromBarcode(code).fold(
+                onSuccess = { onResult(it, null) },
+                onFailure = { onResult(null, it.message) },
+            )
+        }
+    }
+
+    /**
+     * Fills blank form fields from a looked-up product (keeps anything already typed). Values are
+     * clamped to Homebox's create limits (name/manufacturer/model 255, description 1000) because
+     * barcode databases often return very long titles/descriptions that would 422 on save.
+     */
+    fun applyBarcodeProduct(p: BarcodeProduct) {
+        _form.value = _form.value.copy(
+            name = _form.value.name.ifBlank { p.item?.name?.trim()?.take(255).orEmpty() },
+            description = _form.value.description.ifBlank { p.item?.description?.trim()?.take(1000).orEmpty() },
+            manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim()?.take(255).orEmpty() },
+            modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim()?.take(255).orEmpty() },
+        )
+    }
+
     fun toggleTag(tagId: String) {
         val current = _form.value.tagIds
         _form.value = _form.value.copy(
@@ -130,60 +158,98 @@ class ItemFormViewModel(
         }
         viewModelScope.launch {
             _saving.value = true
-            val tagList = f.tagIds.toList()
-            val result = if (isEdit) {
-                val prior = original
-                repository.updateEntity(
-                    itemId!!,
-                    EntityUpdate(
-                        id = itemId,
-                        name = f.name.trim(),
-                        description = f.description.trim().ifBlank { null },
-                        entityTypeId = f.entityTypeId,
-                        parentId = f.parentId,
-                        quantity = f.quantity.toIntOrNull(),
-                        insured = f.insured,
-                        archived = f.archived,
-                        lifetimeWarranty = f.lifetimeWarranty,
-                        assetId = prior?.assetId,
-                        manufacturer = f.manufacturer.trim().ifBlank { null },
-                        modelNumber = f.modelNumber.trim().ifBlank { null },
-                        serialNumber = f.serialNumber.trim().ifBlank { null },
-                        notes = f.notes.trim().ifBlank { null },
-                        purchaseFrom = f.purchaseFrom.trim().ifBlank { null },
-                        purchasePrice = f.purchasePrice.toDoubleOrNull(),
-                        purchaseDate = f.purchaseDate.ifBlank { null },
-                        // Preserved from the loaded entity (not editable in this form).
-                        soldTo = prior?.soldTo,
-                        soldPrice = prior?.soldPrice,
-                        soldDate = prior?.soldDate,
-                        soldNotes = prior?.soldNotes,
-                        warrantyExpires = if (f.lifetimeWarranty) null else f.warrantyExpires.ifBlank { null },
-                        warrantyDetails = f.warrantyDetails.trim().ifBlank { null },
-                        syncChildEntityLocations = prior?.let { false },
-                        fields = prior?.fields,
-                        tagIds = tagList,
-                    ),
-                ).map { }
-            } else {
-                repository.createEntity(
-                    EntityCreate(
-                        name = f.name.trim(),
-                        description = f.description.trim().ifBlank { null },
-                        entityTypeId = f.entityTypeId,
-                        parentId = f.parentId,
-                        quantity = f.quantity.toIntOrNull() ?: 1,
-                        tagIds = tagList.ifEmpty { null },
-                    ),
-                ).map { }
+            try {
+                // itemId when editing, or createdId when completing an item made earlier this session.
+                val existingId = itemId?.ifBlank { null } ?: createdId
+                if (existingId != null) {
+                    repository.updateEntity(existingId, buildUpdate(f, existingId)).fold(
+                        onSuccess = { onResult(true, null) },
+                        onFailure = { onResult(false, it.message) },
+                    )
+                } else {
+                    // The create endpoint accepts only a subset of fields; persist the rest with a
+                    // follow-up update so details entered on a new item (serial, notes, purchase,
+                    // warranty, insured) aren't lost.
+                    repository.createEntity(buildCreate(f)).fold(
+                        onSuccess = { created ->
+                            original = created
+                            createdId = created.id
+                            val id = created.id
+                            if (id == null || !needsDetailUpdate(f)) {
+                                onResult(true, null)
+                            } else {
+                                repository.updateEntity(id, buildUpdate(f, id)).fold(
+                                    onSuccess = { onResult(true, null) },
+                                    onFailure = {
+                                        onResult(
+                                            false,
+                                            "Item created, but some details didn't save: " +
+                                                "${it.message}. Tap Save again to retry.",
+                                        )
+                                    },
+                                )
+                            }
+                        },
+                        onFailure = { onResult(false, it.message) },
+                    )
+                }
+            } finally {
+                _saving.value = false
             }
-            _saving.value = false
-            result.fold(
-                onSuccess = { onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
-            )
         }
     }
+
+    private fun buildCreate(f: ItemForm) = EntityCreate(
+        name = f.name.trim(),
+        description = f.description.trim().ifBlank { null },
+        entityTypeId = f.entityTypeId,
+        parentId = f.parentId,
+        quantity = f.quantity.toIntOrNull() ?: 1,
+        tagIds = f.tagIds.toList().ifEmpty { null },
+        manufacturer = f.manufacturer.trim().ifBlank { null },
+        modelNumber = f.modelNumber.trim().ifBlank { null },
+    )
+
+    /** Full-replace update body, carrying through fields this form doesn't expose from [original]. */
+    private fun buildUpdate(f: ItemForm, id: String): EntityUpdate {
+        val prior = original
+        return EntityUpdate(
+            id = id,
+            name = f.name.trim(),
+            description = f.description.trim().ifBlank { null },
+            entityTypeId = f.entityTypeId,
+            parentId = f.parentId,
+            quantity = f.quantity.toIntOrNull(),
+            insured = f.insured,
+            archived = f.archived,
+            lifetimeWarranty = f.lifetimeWarranty,
+            assetId = prior?.assetId,
+            manufacturer = f.manufacturer.trim().ifBlank { null },
+            modelNumber = f.modelNumber.trim().ifBlank { null },
+            serialNumber = f.serialNumber.trim().ifBlank { null },
+            notes = f.notes.trim().ifBlank { null },
+            purchaseFrom = f.purchaseFrom.trim().ifBlank { null },
+            purchasePrice = f.purchasePrice.toDoubleOrNull(),
+            purchaseDate = f.purchaseDate.ifBlank { null },
+            // Preserved from the loaded/created entity (not editable in this form).
+            soldTo = prior?.soldTo,
+            soldPrice = prior?.soldPrice,
+            soldDate = prior?.soldDate,
+            soldNotes = prior?.soldNotes,
+            warrantyExpires = if (f.lifetimeWarranty) null else f.warrantyExpires.ifBlank { null },
+            warrantyDetails = f.warrantyDetails.trim().ifBlank { null },
+            syncChildEntityLocations = prior?.let { false },
+            fields = prior?.fields,
+            tagIds = f.tagIds.toList(),
+        )
+    }
+
+    /** True when a new item has fields the create endpoint can't set, needing a follow-up update. */
+    private fun needsDetailUpdate(f: ItemForm): Boolean =
+        f.serialNumber.isNotBlank() || f.notes.isNotBlank() ||
+            f.purchaseFrom.isNotBlank() || f.purchasePrice.isNotBlank() ||
+            f.purchaseDate.isNotBlank() || f.warrantyExpires.isNotBlank() ||
+            f.lifetimeWarranty || f.warrantyDetails.isNotBlank() || f.insured
 
     private fun formatNum(value: Double): String =
         if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()

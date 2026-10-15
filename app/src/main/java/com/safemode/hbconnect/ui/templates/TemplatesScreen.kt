@@ -105,8 +105,6 @@ fun TemplatesScreen(
                         icon = Icons.Filled.Description,
                         title = "No templates",
                         message = "Create a template to quickly add items with preset defaults.",
-                        actionLabel = "Add template",
-                        onAction = { formTemplate = null; showForm = true },
                     )
                 } else {
                     LazyColumn(

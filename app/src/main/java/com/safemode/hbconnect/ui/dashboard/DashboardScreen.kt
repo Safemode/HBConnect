@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudOff
@@ -36,6 +37,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -84,6 +86,7 @@ fun DashboardScreen(
     onOpenTags: () -> Unit,
     onOpenServer: () -> Unit,
     onOpenEntity: (String) -> Unit,
+    onAddItem: () -> Unit,
     viewModel: DashboardViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -156,7 +159,18 @@ fun DashboardScreen(
         )
     }
 
-    Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        floatingActionButton = {
+            if (state is UiState.Success) {
+                ExtendedFloatingActionButton(
+                    text = { Text("Add item") },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    onClick = onAddItem,
+                )
+            }
+        },
+    ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)

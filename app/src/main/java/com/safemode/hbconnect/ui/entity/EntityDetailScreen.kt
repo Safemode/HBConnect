@@ -11,11 +11,17 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import android.content.Intent
 import android.graphics.Bitmap
@@ -37,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -78,14 +85,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -144,6 +158,15 @@ fun EntityDetailScreen(
 
     val entity = (state as? UiState.Success)?.data
     val isLocation = entity?.isLocation == true
+
+    // Reload when returning to this screen (e.g. after adding attachments) so the image and
+    // attachment list reflect changes made elsewhere, without a manual pull-to-refresh. The first
+    // resume is skipped because init already loaded.
+    var firstResume by remember { mutableStateOf(true) }
+    LifecycleResumeEffect(Unit) {
+        if (firstResume) firstResume = false else viewModel.load(showLoading = false)
+        onPauseOrDispose { }
+    }
 
     Scaffold(
         topBar = {
@@ -527,6 +550,8 @@ private fun EntityOut.imageAttachmentIds(): List<String> {
 @Composable
 private fun ItemImageGallery(entityId: String, imageIds: List<String>) {
     if (imageIds.isEmpty()) return
+    // Index of the image open in the full-screen viewer, or null when closed.
+    var viewerIndex by remember { mutableStateOf<Int?>(null) }
 
     if (imageIds.size == 1) {
         AsyncImage(
@@ -536,47 +561,143 @@ private fun ItemImageGallery(entityId: String, imageIds: List<String>) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp)
-                .clip(RoundedCornerShape(16.dp)),
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { viewerIndex = 0 },
         )
-        return
+    } else {
+        val pagerState = rememberPagerState(pageCount = { imageIds.size })
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HorizontalPager(
+                state = pagerState,
+                pageSpacing = 8.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) { page ->
+                AsyncImage(
+                    model = Graph.repository.attachmentUrl(entityId, imageIds[page]),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { viewerIndex = page },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                repeat(imageIds.size) { index ->
+                    val selected = index == pagerState.currentPage
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(if (selected) 9.dp else 7.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outlineVariant,
+                            ),
+                    )
+                }
+            }
+        }
     }
 
-    val pagerState = rememberPagerState(pageCount = { imageIds.size })
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HorizontalPager(
-            state = pagerState,
-            pageSpacing = 8.dp,
-            modifier = Modifier.fillMaxWidth(),
-        ) { page ->
-            AsyncImage(
-                model = Graph.repository.attachmentUrl(entityId, imageIds[page]),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            repeat(imageIds.size) { index ->
-                val selected = index == pagerState.currentPage
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .size(if (selected) 9.dp else 7.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outlineVariant,
-                        ),
+    viewerIndex?.let { index ->
+        ImageViewerDialog(
+            entityId = entityId,
+            imageIds = imageIds,
+            initialIndex = index,
+            onDismiss = { viewerIndex = null },
+        )
+    }
+}
+
+/** Full-screen, in-app image viewer: swipe between photos, pinch or double-tap to zoom. */
+@Composable
+private fun ImageViewerDialog(
+    entityId: String,
+    imageIds: List<String>,
+    initialIndex: Int,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { imageIds.size })
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                ZoomableImage(url = Graph.repository.attachmentUrl(entityId, imageIds[page]))
+            }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(8.dp),
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+            }
+            if (imageIds.size > 1) {
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${imageIds.size}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.align(Alignment.BottomCenter).systemBarsPadding().padding(16.dp),
                 )
             }
         }
+    }
+}
+
+/** A single image that supports pinch-to-zoom, panning while zoomed, and double-tap to toggle zoom. */
+@Composable
+private fun ZoomableImage(url: String) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                // Only handle (and consume) the gesture while zooming or already zoomed in; at normal
+                // zoom a single-finger drag is left for the pager so swiping between photos still works.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val zoom = event.calculateZoom()
+                        if (scale > 1f || event.changes.size > 1) {
+                            scale = (scale * zoom).coerceIn(1f, 5f)
+                            offset = if (scale > 1f) offset + event.calculatePan() else Offset.Zero
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        if (scale > 1f) {
+                            scale = 1f
+                            offset = Offset.Zero
+                        } else {
+                            scale = 2.5f
+                        }
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                },
+        )
     }
 }
 

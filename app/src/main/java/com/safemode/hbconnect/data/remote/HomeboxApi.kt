@@ -2,6 +2,7 @@ package com.safemode.hbconnect.data.remote
 
 import com.safemode.hbconnect.data.remote.models.ApiSummary
 import com.safemode.hbconnect.data.remote.models.AttachmentUpdate
+import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityCreate
@@ -137,6 +138,10 @@ interface HomeboxApi {
     /** Look up items by asset id (digits; dashes are ignored server-side). */
     @GET("api/v1/assets/{id}")
     suspend fun getByAssetId(@Path("id") assetId: String): Response<EntityListResult>
+
+    /** Looks up product details for a scanned UPC/EAN barcode across Homebox's configured databases. */
+    @GET("api/v1/products/search-from-barcode")
+    suspend fun searchFromBarcode(@Query("productEAN") ean: String): Response<List<BarcodeProduct>>
 
     @GET("api/v1/entities/tree")
     suspend fun getTree(@Query("withItems") withItems: Boolean = false): Response<List<TreeItem>>

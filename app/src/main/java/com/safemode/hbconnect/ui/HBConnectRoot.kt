@@ -136,6 +136,7 @@ fun HBConnectRoot() {
                             onOpenTags = { navController.navigate(Routes.TAGS) },
                             onOpenServer = { navController.navigate(Routes.SERVER) },
                             onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                            onAddItem = { navController.navigate(Routes.itemForm()) },
                         )
                     }
                 }

@@ -106,8 +106,6 @@ fun MaintenanceScreen(
                         icon = Icons.Filled.Build,
                         title = "No maintenance yet",
                         message = "Log repairs and scheduled upkeep for this item.",
-                        actionLabel = "Add entry",
-                        onAction = { editing = MaintenanceEntry() },
                     )
                 } else {
                     LazyColumn(

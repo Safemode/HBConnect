@@ -13,8 +13,8 @@ android {
         applicationId = "com.safemode.hbconnect"
         minSdk = 24
         targetSdk = 37
-        versionCode = 12
-        versionName = "0.9.1"
+        versionCode = 13
+        versionName = "0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -82,8 +82,9 @@ dependencies {
     // Images
     implementation(libs.coil.compose)
 
-    // QR code generation
+    // QR code generation + barcode scanning
     implementation(libs.zxing.core)
+    implementation(libs.zxing.android.embedded)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
