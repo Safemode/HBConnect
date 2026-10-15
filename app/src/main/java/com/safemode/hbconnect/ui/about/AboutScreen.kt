@@ -17,7 +17,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.safemode.hbconnect.Graph
 import kotlinx.coroutines.flow.first
@@ -26,6 +28,13 @@ import kotlinx.coroutines.flow.first
 fun AboutScreen() {
     val host by produceState(initialValue = "—") {
         value = Graph.settingsRepository.config.first().baseUrl()
+    }
+
+    val context = LocalContext.current
+    val version = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "—"
     }
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
@@ -51,7 +60,7 @@ fun AboutScreen() {
             }
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    AboutRow("Version", "1.0")
+                    AboutRow("Version", version)
                     AboutRow("Connected host", host)
                     AboutRow("Homebox project", "homebox.software")
                 }

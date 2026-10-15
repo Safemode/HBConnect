@@ -23,15 +23,22 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -82,6 +89,15 @@ fun AttachmentsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var deleting by remember { mutableStateOf<ItemAttachment?>(null) }
+    var renaming by remember { mutableStateOf<ItemAttachment?>(null) }
+    var retyping by remember { mutableStateOf<ItemAttachment?>(null) }
+
+    fun applyUpdate(att: ItemAttachment, type: String, title: String, primary: Boolean) {
+        val id = att.id ?: return
+        viewModel.update(id, type, title, primary) { ok, err ->
+            if (!ok) Toast.makeText(context, err ?: "Update failed", Toast.LENGTH_LONG).show()
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -155,6 +171,11 @@ fun AttachmentsScreen(
                                         )
                                     }
                                 },
+                                onSetPrimary = {
+                                    applyUpdate(att, att.type ?: "attachment", att.title.orEmpty(), primary = true)
+                                },
+                                onRename = { renaming = att },
+                                onRetype = { retyping = att },
                                 onDelete = { deleting = att },
                             )
                         }
@@ -181,16 +202,74 @@ fun AttachmentsScreen(
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
     }
+
+    renaming?.let { att ->
+        var title by remember(att) { mutableStateOf(att.title.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { renaming = null },
+            title = { Text("Rename attachment") },
+            text = {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = title.isNotBlank(),
+                    onClick = {
+                        applyUpdate(att, att.type ?: "attachment", title.trim(), att.primary == true)
+                        renaming = null
+                    },
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } },
+        )
+    }
+
+    retyping?.let { att ->
+        AlertDialog(
+            onDismissRequest = { retyping = null },
+            title = { Text("Change type") },
+            text = {
+                Column {
+                    ATTACHMENT_TYPES.forEach { type ->
+                        DropdownMenuItem(
+                            text = { Text(type.replaceFirstChar { it.uppercase() }) },
+                            trailingIcon = {
+                                if (att.type == type) Icon(Icons.Filled.Star, contentDescription = null)
+                            },
+                            onClick = {
+                                applyUpdate(att, type, att.title.orEmpty(), att.primary == true)
+                                retyping = null
+                            },
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { retyping = null }) { Text("Close") } },
+        )
+    }
 }
+
+private val ATTACHMENT_TYPES = listOf("photo", "attachment", "manual", "warranty", "receipt")
 
 @Composable
 private fun AttachmentRow(
     attachment: ItemAttachment,
     imageUrl: String?,
     onOpen: () -> Unit,
+    onSetPrimary: () -> Unit,
+    onRename: () -> Unit,
+    onRetype: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val isImage = attachment.mimeType?.startsWith("image/") == true || attachment.type == "photo"
+    var menuOpen by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
         Row(
             modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
@@ -228,8 +307,34 @@ private fun AttachmentRow(
                     Text(sub, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (isImage && attachment.primary != true) {
+                        DropdownMenuItem(
+                            text = { Text("Set as primary") },
+                            leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
+                            onClick = { menuOpen = false; onSetPrimary() },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                        onClick = { menuOpen = false; onRename() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Change type") },
+                        leadingIcon = { Icon(Icons.Filled.Label, contentDescription = null) },
+                        onClick = { menuOpen = false; onRetype() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; onDelete() },
+                    )
+                }
             }
         }
     }

@@ -22,24 +22,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +57,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,10 +75,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
+import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPath
+import com.safemode.hbconnect.data.remote.models.EntitySummary
+import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
+import com.safemode.hbconnect.ui.common.Option
+import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
@@ -96,8 +112,13 @@ fun EntityDetailScreen(
     val path by viewModel.path.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
+    val locations by viewModel.locations.collectAsStateWithLifecycle()
+    val tags by viewModel.tags.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
+    var showDuplicate by remember { mutableStateOf(false) }
+    var showMove by remember { mutableStateOf(false) }
+    var showTags by remember { mutableStateOf(false) }
 
     val entity = (state as? UiState.Success)?.data
     val isLocation = entity?.isLocation == true
@@ -120,6 +141,21 @@ fun EntityDetailScreen(
                         }
                         IconButton(onClick = { confirmDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                        }
+                        if (!isLocation) {
+                            var menuOpen by remember { mutableStateOf(false) }
+                            Box {
+                                IconButton(onClick = { menuOpen = true }) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                                }
+                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Duplicate") },
+                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                        onClick = { menuOpen = false; showDuplicate = true },
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -156,6 +192,13 @@ fun EntityDetailScreen(
                             currency = currency,
                             onOpenMaintenance = { s.data.id?.let(onOpenMaintenance) },
                             onOpenAttachments = { s.data.id?.let(onOpenAttachments) },
+                            onSetQuantity = { qty ->
+                                viewModel.setQuantity(qty) { ok, err ->
+                                    if (!ok) Toast.makeText(context, err ?: "Update failed", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            onMove = { viewModel.loadPickers(); showMove = true },
+                            onEditTags = { viewModel.loadPickers(); showTags = true },
                         )
                     }
                 }
@@ -191,6 +234,51 @@ fun EntityDetailScreen(
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (showDuplicate && entity?.id != null) {
+        DuplicateDialog(
+            onDismiss = { showDuplicate = false },
+            onConfirm = { options ->
+                showDuplicate = false
+                viewModel.duplicate(options) { newId, err ->
+                    if (newId != null) {
+                        Toast.makeText(context, "Duplicated", Toast.LENGTH_SHORT).show()
+                        onOpenEntity(newId)
+                    } else {
+                        Toast.makeText(context, err ?: "Duplicate failed", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+        )
+    }
+
+    if (showMove && entity != null) {
+        MoveDialog(
+            locations = locations,
+            currentParentId = entity.parent?.id,
+            onDismiss = { showMove = false },
+            onConfirm = { parentId ->
+                showMove = false
+                viewModel.move(parentId) { ok, err ->
+                    if (!ok) Toast.makeText(context, err ?: "Move failed", Toast.LENGTH_LONG).show()
+                }
+            },
+        )
+    }
+
+    if (showTags && entity != null) {
+        TagsDialog(
+            tags = tags,
+            selected = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
+            onDismiss = { showTags = false },
+            onConfirm = { tagIds ->
+                showTags = false
+                viewModel.setTags(tagIds) { ok, err ->
+                    if (!ok) Toast.makeText(context, err ?: "Update failed", Toast.LENGTH_LONG).show()
+                }
+            },
         )
     }
 }
@@ -267,6 +355,9 @@ private fun ItemDetails(
     currency: Currency?,
     onOpenMaintenance: () -> Unit,
     onOpenAttachments: () -> Unit,
+    onSetQuantity: (Double) -> Unit,
+    onMove: () -> Unit,
+    onEditTags: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -285,6 +376,13 @@ private fun ItemDetails(
                 Text("  Maintenance")
             }
         }
+
+        QuickActionsCard(
+            quantity = entity.quantity?.toInt() ?: 1,
+            onSetQuantity = onSetQuantity,
+            onMove = onMove,
+            onEditTags = onEditTags,
+        )
 
         if (entity.id != null) {
             ItemImageGallery(entityId = entity.id, imageIds = entity.imageAttachmentIds())
@@ -429,6 +527,147 @@ private fun ItemImageGallery(entityId: String, imageIds: List<String>) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun QuickActionsCard(
+    quantity: Int,
+    onSetQuantity: (Double) -> Unit,
+    onMove: () -> Unit,
+    onEditTags: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Quick actions", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Quantity", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { if (quantity > 1) onSetQuantity((quantity - 1).toDouble()) },
+                    enabled = quantity > 1,
+                ) { Icon(Icons.Filled.Remove, contentDescription = "Decrease") }
+                Text(quantity.toString(), style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = { onSetQuantity((quantity + 1).toDouble()) }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Increase")
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onMove, modifier = Modifier.weight(1f)) { Text("Move") }
+                OutlinedButton(onClick = onEditTags, modifier = Modifier.weight(1f)) { Text("Edit tags") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DuplicateDialog(onDismiss: () -> Unit, onConfirm: (DuplicateOptions) -> Unit) {
+    var prefix by remember { mutableStateOf("Copy of ") }
+    var copyAttachments by remember { mutableStateOf(true) }
+    var copyCustomFields by remember { mutableStateOf(true) }
+    var copyMaintenance by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Duplicate item") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = prefix,
+                    onValueChange = { prefix = it },
+                    label = { Text("Name prefix") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CheckRow("Copy attachments", copyAttachments) { copyAttachments = it }
+                CheckRow("Copy custom fields", copyCustomFields) { copyCustomFields = it }
+                CheckRow("Copy maintenance", copyMaintenance) { copyMaintenance = it }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(
+                    DuplicateOptions(
+                        copyMaintenance = copyMaintenance,
+                        copyAttachments = copyAttachments,
+                        copyCustomFields = copyCustomFields,
+                        copyPrefix = prefix,
+                    ),
+                )
+            }) { Text("Duplicate") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun MoveDialog(
+    locations: List<EntitySummary>,
+    currentParentId: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var selected by remember { mutableStateOf(currentParentId) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Move to location") },
+        text = {
+            OptionDropdownField(
+                label = "Location",
+                options = locations.map { Option(it.displayName, it.id) },
+                selectedValue = selected,
+                onSelect = { selected = it.value },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !selected.isNullOrBlank() && selected != currentParentId,
+                onClick = { selected?.let(onConfirm) },
+            ) { Text("Move") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagsDialog(
+    tags: List<TagSummary>,
+    selected: Set<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<String>) -> Unit,
+) {
+    val current = remember { mutableStateListOf<String>().apply { addAll(selected) } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit tags") },
+        text = {
+            if (tags.isEmpty()) {
+                Text("No tags defined yet.")
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    tags.forEach { tag ->
+                        val id = tag.id ?: return@forEach
+                        FilterChip(
+                            selected = id in current,
+                            onClick = { if (id in current) current.remove(id) else current.add(id) },
+                            label = { Text(tag.name ?: "tag") },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(current.toList()) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 

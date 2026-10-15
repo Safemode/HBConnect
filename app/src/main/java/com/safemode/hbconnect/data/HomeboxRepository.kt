@@ -3,10 +3,13 @@ package com.safemode.hbconnect.data
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.HomeboxApi
 import com.safemode.hbconnect.data.remote.models.ApiSummary
+import com.safemode.hbconnect.data.remote.models.AttachmentUpdate
 import com.safemode.hbconnect.data.remote.models.Currency
+import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityListResult
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
@@ -220,7 +223,18 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     suspend fun updateEntity(id: String, body: EntityUpdate): Result<EntityOut> =
         call { it.updateEntity(id, body) }
 
+    /** Partial update — only the non-null fields of [body] are changed. */
+    suspend fun patchEntity(id: String, body: EntityPatch): Result<EntityOut> =
+        call { it.patchEntity(id, body) }
+
+    suspend fun duplicateEntity(id: String, options: DuplicateOptions): Result<EntityOut> =
+        call { it.duplicateEntity(id, options) }
+
     suspend fun deleteEntity(id: String): Result<Unit> = callUnit { it.deleteEntity(id) }
+
+    /** Items matching an asset id (usually one); empty when nothing matches. */
+    suspend fun findByAssetId(assetId: String): Result<List<EntitySummary>> =
+        call { it.getByAssetId(assetId) }.map { it.items.orEmpty() }
 
     suspend fun getTree(withItems: Boolean = false): Result<List<TreeItem>> =
         call { it.getTree(withItems) }
@@ -273,6 +287,17 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     suspend fun deleteAttachment(entityId: String, attachmentId: String): Result<Unit> =
         callUnit { it.deleteAttachment(entityId, attachmentId) }
+
+    /** Updates an attachment's title, type, and primary flag (all required by the API). */
+    suspend fun updateAttachment(
+        entityId: String,
+        attachmentId: String,
+        type: String,
+        title: String,
+        primary: Boolean,
+    ): Result<Unit> = call {
+        it.updateAttachment(entityId, attachmentId, AttachmentUpdate(type = type, title = title, primary = primary))
+    }.map { }
 
     /** Uploads a file as an attachment on an entity. [type] is e.g. "photo" or "attachment". */
     suspend fun uploadAttachment(

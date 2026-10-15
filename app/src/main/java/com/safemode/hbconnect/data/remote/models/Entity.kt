@@ -136,6 +136,30 @@ data class EntityUpdate(
     val tagIds: List<String>? = null,
 )
 
+/** Partial update (PATCH /api/v1/entities/{id}). Null fields are left unchanged server-side. */
+data class EntityPatch(
+    val id: String,
+    val quantity: Double? = null,
+    val parentId: String? = null,
+    val entityTypeId: String? = null,
+    val tagIds: List<String>? = null,
+)
+
+/** Options for POST /api/v1/entities/{id}/duplicate. */
+data class DuplicateOptions(
+    val copyMaintenance: Boolean = false,
+    val copyAttachments: Boolean = true,
+    val copyCustomFields: Boolean = true,
+    val copyPrefix: String = "Copy of ",
+)
+
+/** Body for PUT /api/v1/entities/{id}/attachments/{attachmentId}; all fields are replaced. */
+data class AttachmentUpdate(
+    val type: String,
+    val title: String,
+    val primary: Boolean,
+)
+
 data class EntityFieldData(
     val id: String? = null,
     val name: String? = null,

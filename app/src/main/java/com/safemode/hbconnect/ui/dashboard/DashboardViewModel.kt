@@ -105,6 +105,16 @@ class DashboardViewModel : ViewModel() {
         viewModelScope.launch { runSearch(_query.value.trim(), _filters.value) }
     }
 
+    /** Looks up an item by asset id; [onResult] gets the first matching entity id, or an error. */
+    fun findByAssetId(assetId: String, onResult: (String?, String?) -> Unit) {
+        viewModelScope.launch {
+            repository.findByAssetId(assetId.trim()).fold(
+                onSuccess = { items -> onResult(items.firstOrNull()?.id, null) },
+                onFailure = { onResult(null, it.message) },
+            )
+        }
+    }
+
     // ---- Filter mutators ----
     fun toggleLocation(id: String) = _filters.update { f ->
         f.copy(locationIds = if (id in f.locationIds) f.locationIds - id else f.locationIds + id)
