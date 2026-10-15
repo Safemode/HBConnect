@@ -58,8 +58,10 @@ the cached copy instead.
 |------|:----:|:---:|:----:|:------:|
 | Dashboard (group statistics) | ✅ | — | — | — |
 | Items | ✅ | ✅ | ✅ | ✅ |
-| Locations (browse contents) | ✅ | — | — | — |
+| Locations (+ browse contents) | ✅ | ✅ | ✅ | ✅ |
 | Tags | ✅ | ✅ | ✅ | ✅ |
+| Item attachments (view/open/upload) | ✅ | ✅ | — | ✅ |
+| Item maintenance log | ✅ | ✅ | ✅ | ✅ |
 | Server info / signed-in user / version | ✅ | — | — | — |
 
 - **Dashboard** shows group statistics (items, locations, tags, with-warranty count, total value),
@@ -70,9 +72,17 @@ the cached copy instead.
   purchase, and warranty. Because Homebox's update does a full field replace, fields the form
   doesn't expose (sold info, custom fields, asset id) are carried through from the loaded item so
   editing never wipes them.
-- **Locations** lists every location; opening one lists the entities it contains, with an
-  **Add item here** shortcut that pre-selects that location on the item form.
+- **Locations** lists every location with add / edit / delete; opening one lists the entities it
+  contains, with an **Add item here** shortcut that pre-selects that location on the item form.
 - **Tags** lists tags with inline add / edit / delete.
+- **Attachments** (per item) — view a thumbnail/icon list, upload a photo or document via the
+  system file picker, open an attachment in an external viewer (downloaded through the
+  authenticated client and shared via a `FileProvider`), and delete.
+- **Maintenance** (per item) — a log of scheduled/completed upkeep with name, description, cost,
+  and dates; add / edit / delete.
+- **Session** — login tokens are refreshed on launch when within a week of expiry
+  (`/api/v1/users/refresh`); the Server screen has a **Log out** button that clears the stored
+  session.
 
 Entities are distinguished by their entity type's `isLocation` flag; the item list filters to
 `isLocation=false` and the locations list to `isLocation=true`.
@@ -84,11 +94,11 @@ Item photos load through an authenticated Coil OkHttp client (carrying the beare
 
 ## Suggested next steps
 
-- Add/edit/delete locations and entity types.
-- Attachment upload & viewing (download is already wired in the repository).
-- Token refresh on near-expiry via `/api/v1/users/refresh`.
-- Maintenance log per item (`/api/v1/entities/{id}/maintenance`).
 - Tag-filtered item lists (the `tags` query param is already supported by the API client).
+- Duplicate an item (`/api/v1/entities/{id}/duplicate`) and a breadcrumb path (`/entities/{id}/path`).
+- Currency-aware price formatting (`/api/v1/currencies` + group currency).
+- Manage entity types, and set an attachment as the item's primary photo.
+- Import / export, notifiers, QR / label maker, and barcode product lookup.
 
 ## AI Transparency
 

@@ -9,9 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +34,7 @@ import com.safemode.hbconnect.ui.items.EntityRow
 @Composable
 fun LocationsScreen(
     onOpenEntity: (String) -> Unit,
+    onAddLocation: () -> Unit,
     viewModel: LocationsViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -40,7 +45,18 @@ fun LocationsScreen(
         onPauseOrDispose { }
     }
 
-    Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        floatingActionButton = {
+            if (state is UiState.Success) {
+                ExtendedFloatingActionButton(
+                    text = { Text("Add location") },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    onClick = onAddLocation,
+                )
+            }
+        },
+    ) { padding ->
         PullToRefreshBox(
             isRefreshing = refreshing,
             onRefresh = viewModel::refresh,
@@ -58,7 +74,9 @@ fun LocationsScreen(
                     EmptyState(
                         icon = Icons.Outlined.Place,
                         title = "No locations",
-                        message = "Locations you create in Homebox will appear here.",
+                        message = "Add your first location to organize your items.",
+                        actionLabel = "Add location",
+                        onAction = onAddLocation,
                     )
                 } else {
                     LazyColumn(

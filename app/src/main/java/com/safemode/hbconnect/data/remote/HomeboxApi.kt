@@ -15,13 +15,18 @@ import com.safemode.hbconnect.data.remote.models.TagUpdate
 import com.safemode.hbconnect.data.remote.models.TokenResponse
 import com.safemode.hbconnect.data.remote.models.TreeItem
 import com.safemode.hbconnect.data.remote.models.UserSelfResponse
+import com.safemode.hbconnect.data.remote.models.MaintenanceEntry
+import com.safemode.hbconnect.data.remote.models.MaintenanceEntryRequest
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -99,9 +104,38 @@ interface HomeboxApi {
     suspend fun deleteTag(@Path("id") id: String): Response<ResponseBody>
 
     // ---- Attachments ----
+    @Multipart
+    @POST("api/v1/entities/{id}/attachments")
+    suspend fun uploadAttachment(
+        @Path("id") id: String,
+        @Part parts: List<MultipartBody.Part>,
+    ): Response<EntityOut>
+
     @DELETE("api/v1/entities/{id}/attachments/{attachmentId}")
     suspend fun deleteAttachment(
         @Path("id") id: String,
         @Path("attachmentId") attachmentId: String,
     ): Response<ResponseBody>
+
+    // ---- Maintenance ----
+    @GET("api/v1/entities/{id}/maintenance")
+    suspend fun getMaintenance(
+        @Path("id") id: String,
+        @Query("status") status: String? = null,
+    ): Response<List<MaintenanceEntry>>
+
+    @POST("api/v1/entities/{id}/maintenance")
+    suspend fun createMaintenance(
+        @Path("id") id: String,
+        @Body body: MaintenanceEntryRequest,
+    ): Response<MaintenanceEntry>
+
+    @PUT("api/v1/maintenance/{id}")
+    suspend fun updateMaintenance(
+        @Path("id") id: String,
+        @Body body: MaintenanceEntryRequest,
+    ): Response<MaintenanceEntry>
+
+    @DELETE("api/v1/maintenance/{id}")
+    suspend fun deleteMaintenance(@Path("id") id: String): Response<ResponseBody>
 }

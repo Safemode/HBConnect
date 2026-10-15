@@ -136,6 +136,21 @@ class ServerViewModel : ViewModel() {
         }
     }
 
+    /** Clears the stored session and returns to a disconnected state. */
+    fun logout() {
+        viewModelScope.launch {
+            _busy.value = true
+            repository.clearSession()
+            val cleared = settings.config.first().copy(token = "", tokenExpiresAt = "", username = "")
+            settings.save(cleared)
+            Graph.apiProvider.updateConfig(cleared)
+            Graph.serverStatus.reportChecking()
+            _form.value = _form.value.copy(password = "", apiKey = "")
+            _state.value = UiState.NotConfigured
+            _busy.value = false
+        }
+    }
+
     private suspend fun validate() {
         val reachable = withContext(Dispatchers.IO) { Graph.apiProvider.probeReachable() }
         Graph.serverStatus.report(reachable)

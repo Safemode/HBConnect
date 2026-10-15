@@ -11,6 +11,8 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.LoginForm
+import com.safemode.hbconnect.data.remote.models.MaintenanceEntry
+import com.safemode.hbconnect.data.remote.models.MaintenanceEntryRequest
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagOut
 import com.safemode.hbconnect.data.remote.models.TagSummary
@@ -21,7 +23,10 @@ import com.safemode.hbconnect.data.remote.models.UserOut
 import com.safemode.hbconnect.data.settings.ItemSortOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
 
 /**
@@ -171,6 +176,45 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     suspend fun deleteAttachment(entityId: String, attachmentId: String): Result<Unit> =
         callUnit { it.deleteAttachment(entityId, attachmentId) }
+
+    /** Uploads a file as an attachment on an entity. [type] is e.g. "photo" or "attachment". */
+    suspend fun uploadAttachment(
+        entityId: String,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        type: String = "attachment",
+        primary: Boolean = false,
+    ): Result<Unit> = callUnit { api ->
+        val media = (mimeType ?: "application/octet-stream").toMediaTypeOrNull()
+        val parts = listOf(
+            MultipartBody.Part.createFormData("file", fileName, bytes.toRequestBody(media)),
+            MultipartBody.Part.createFormData("type", type),
+            MultipartBody.Part.createFormData("name", fileName),
+            MultipartBody.Part.createFormData("primary", primary.toString()),
+        )
+        api.uploadAttachment(entityId, parts)
+    }
+
+    // ---- Maintenance ----
+    suspend fun getMaintenance(entityId: String): Result<List<MaintenanceEntry>> =
+        call { it.getMaintenance(entityId) }
+
+    suspend fun createMaintenance(entityId: String, body: MaintenanceEntryRequest): Result<Unit> =
+        callUnit { it.createMaintenance(entityId, body) }
+
+    suspend fun updateMaintenance(id: String, body: MaintenanceEntryRequest): Result<Unit> =
+        callUnit { it.updateMaintenance(id, body) }
+
+    suspend fun deleteMaintenance(id: String): Result<Unit> =
+        callUnit { it.deleteMaintenance(id) }
+
+    /** Clears the saved session so the user returns to a disconnected state. */
+    suspend fun clearSession() {
+        val cfg = apiProvider.currentConfig()
+        // Best-effort server-side logout for token sessions; ignore failures.
+        runCatching { if (cfg.token.isNotBlank()) logout() }
+    }
 
     private fun sortComparator(sort: ItemSortOrder): Comparator<EntitySummary> = when (sort) {
         ItemSortOrder.NAME_ASC -> compareBy { it.displayName.lowercase() }
