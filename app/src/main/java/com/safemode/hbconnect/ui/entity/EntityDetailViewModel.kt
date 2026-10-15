@@ -4,17 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class EntityDetailViewModel(private val entityId: String) : ViewModel() {
     private val repository = Graph.repository
-    private val settings = Graph.settingsRepository
 
     private val _state = MutableStateFlow<UiState<EntityOut>>(UiState.Loading)
     val state: StateFlow<UiState<EntityOut>> = _state.asStateFlow()
@@ -22,6 +21,10 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
     /** For locations: the entities contained directly within. */
     private val _children = MutableStateFlow<List<EntitySummary>>(emptyList())
     val children: StateFlow<List<EntitySummary>> = _children.asStateFlow()
+
+    /** Ancestor path, root-first, ending with this entity. */
+    private val _path = MutableStateFlow<List<EntityPath>>(emptyList())
+    val path: StateFlow<List<EntityPath>> = _path.asStateFlow()
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
@@ -42,9 +45,11 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
                 onFailure = { UiState.Error(it.message ?: "Failed to load.") },
             )
             val entity = result.getOrNull()
+            if (entity != null) {
+                _path.value = repository.getEntityPath(entityId).getOrDefault(emptyList())
+            }
             if (entity?.isLocation == true) {
-                val includeArchived = settings.config.first().showArchived
-                _children.value = repository.getChildren(entityId, includeArchived).getOrDefault(emptyList())
+                _children.value = repository.getChildren(entityId).getOrDefault(emptyList())
             } else {
                 _children.value = emptyList()
             }

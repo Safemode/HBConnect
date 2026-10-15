@@ -9,6 +9,7 @@ import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.NetworkMonitor
 import com.safemode.hbconnect.data.remote.ServerReachability
 import com.safemode.hbconnect.data.remote.ServerStatus
+import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.settings.AuthMode
 import com.safemode.hbconnect.data.settings.SettingsRepository
 import java.time.Duration
@@ -17,6 +18,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -41,6 +45,10 @@ object Graph {
 
     private lateinit var networkMonitor: NetworkMonitor
 
+    /** The group's configured currency (symbol/decimals), resolved for money formatting; null until loaded. */
+    private val _currency = MutableStateFlow<Currency?>(null)
+    val currency: StateFlow<Currency?> = _currency.asStateFlow()
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     fun init(context: Context) {
@@ -61,6 +69,7 @@ object Graph {
         appScope.launch {
             val cfg = settingsRepository.config.first()
             apiProvider.updateConfig(cfg)
+            if (cfg.isConfigured) loadCurrency()
             if (cfg.authMode == AuthMode.LOGIN && cfg.token.isNotBlank() && tokenNeedsRefresh(cfg.tokenExpiresAt)) {
                 repository.refresh().onSuccess { tr ->
                     val newToken = tr.token
@@ -108,6 +117,17 @@ object Graph {
      * refresh to be safe). An already-expired token also returns true — the refresh will simply
      * fail and the user re-logs in.
      */
+    /**
+     * Resolves the group's currency code against the server's currency list and caches it for
+     * money formatting. Best-effort: failures leave the previous value (prices then show unadorned).
+     */
+    suspend fun loadCurrency() {
+        val code = repository.group().getOrNull()?.currency?.ifBlank { null } ?: return
+        val match = repository.currencies().getOrNull()
+            ?.firstOrNull { it.code.equals(code, ignoreCase = true) }
+        _currency.value = match ?: Currency(code = code)
+    }
+
     private fun tokenNeedsRefresh(expiresAt: String): Boolean {
         if (expiresAt.isBlank()) return true
         val expiry = runCatching { OffsetDateTime.parse(expiresAt) }.getOrNull() ?: return true

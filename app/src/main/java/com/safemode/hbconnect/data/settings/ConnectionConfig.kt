@@ -48,8 +48,6 @@ data class ConnectionConfig(
     val cacheSize: CacheSize = CacheSize.MB_50,
     val themePreference: ThemePreference = ThemePreference.SYSTEM,
     val itemSortOrder: ItemSortOrder = ItemSortOrder.NAME_ASC,
-    /** When true, archived items/locations are shown in lists and search by default. */
-    val showArchived: Boolean = false,
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean

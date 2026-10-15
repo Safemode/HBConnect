@@ -16,11 +16,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,12 +57,6 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     options = ItemSortOrder.entries.map { it to it.label },
                     selected = config.itemSortOrder,
                     onSelect = { v -> viewModel.updateAndSave { it.copy(itemSortOrder = v) } },
-                )
-                SwitchRow(
-                    label = "Show archived items",
-                    description = "Include archived items and locations when browsing lists and search.",
-                    checked = config.showArchived,
-                    onCheckedChange = { v -> viewModel.updateAndSave { it.copy(showArchived = v) } },
                 )
             }
 
@@ -122,32 +114,6 @@ private fun <T> ChipRow(
                 label = { Text(label) },
             )
         }
-    }
-}
-
-@Composable
-private fun SwitchRow(
-    label: String,
-    description: String?,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            if (description != null) {
-                Text(
-                    description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

@@ -56,6 +56,7 @@ import com.safemode.hbconnect.ui.items.ItemFormScreen
 import com.safemode.hbconnect.ui.items.ItemsScreen
 import com.safemode.hbconnect.ui.locations.LocationFormScreen
 import com.safemode.hbconnect.ui.locations.LocationsScreen
+import com.safemode.hbconnect.ui.maintenance.AllMaintenanceScreen
 import com.safemode.hbconnect.ui.maintenance.MaintenanceScreen
 import com.safemode.hbconnect.ui.navigation.AppDrawerContent
 import com.safemode.hbconnect.ui.navigation.Routes
@@ -154,6 +155,11 @@ fun HBConnectRoot() {
                     )
                 }
                 composable(Routes.TAGS) { TagsScreen() }
+                composable(Routes.MAINTENANCE_ALL) {
+                    AllMaintenanceScreen(
+                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                    )
+                }
                 composable(
                     route = Routes.ENTITY_DETAIL,
                     arguments = listOf(navArgument("id") { type = NavType.StringType }),

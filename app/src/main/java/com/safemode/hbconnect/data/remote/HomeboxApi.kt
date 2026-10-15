@@ -1,11 +1,14 @@
 package com.safemode.hbconnect.data.remote
 
 import com.safemode.hbconnect.data.remote.models.ApiSummary
+import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityListResult
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
+import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.LoginForm
 import com.safemode.hbconnect.data.remote.models.TagCreate
@@ -56,6 +59,14 @@ interface HomeboxApi {
     @GET("api/v1/groups/statistics")
     suspend fun statistics(): Response<GroupStatistics>
 
+    /** The signed-in user's group, including its configured currency code. */
+    @GET("api/v1/groups")
+    suspend fun group(): Response<Group>
+
+    /** Supported currencies and their symbol/decimal metadata. */
+    @GET("api/v1/currencies")
+    suspend fun currencies(): Response<List<Currency>>
+
     // ---- Entities (items + locations) ----
     @GET("api/v1/entities")
     suspend fun getEntities(
@@ -100,6 +111,10 @@ interface HomeboxApi {
     @GET("api/v1/entities/tree")
     suspend fun getTree(@Query("withItems") withItems: Boolean = false): Response<List<TreeItem>>
 
+    /** Ancestor path (root-first, ending with the entity itself). */
+    @GET("api/v1/entities/{id}/path")
+    suspend fun getEntityPath(@Path("id") id: String): Response<List<EntityPath>>
+
     // ---- Entity types ----
     @GET("api/v1/entity-types")
     suspend fun getEntityTypes(): Response<List<EntityTypeSummary>>
@@ -140,6 +155,10 @@ interface HomeboxApi {
         @Path("id") id: String,
         @Query("status") status: String? = null,
     ): Response<List<MaintenanceEntry>>
+
+    /** Group-wide maintenance. [status] is required: scheduled | completed | both. */
+    @GET("api/v1/maintenance")
+    suspend fun getAllMaintenance(@Query("status") status: String): Response<List<MaintenanceEntry>>
 
     @POST("api/v1/entities/{id}/maintenance")
     suspend fun createMaintenance(
