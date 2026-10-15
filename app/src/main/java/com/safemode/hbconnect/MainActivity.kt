@@ -1,6 +1,8 @@
 package com.safemode.hbconnect
 
+import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -14,14 +16,25 @@ import com.safemode.hbconnect.data.settings.ConnectionConfig
 import com.safemode.hbconnect.data.settings.ThemePreference
 import com.safemode.hbconnect.ui.HBConnectRoot
 import com.safemode.hbconnect.ui.theme.HBConnectTheme
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Read the persisted settings synchronously once (a single small DataStore file) so the
+        // very first frame — and the window background behind it — already match the saved theme.
+        // Without this the first frame defaults to SYSTEM and the window stays the OS day/night
+        // colour, which flashes white when the in-app theme is dark but the device is not.
+        val initialConfig = runBlocking { Graph.settingsRepository.config.first() }
+
         enableEdgeToEdge()
+        applyWindowBackground(initialConfig.themePreference)
+
         setContent {
             val config by Graph.settingsRepository.config
-                .collectAsStateWithLifecycle(initialValue = ConnectionConfig())
+                .collectAsStateWithLifecycle(initialValue = initialConfig)
             val preference = config.themePreference
 
             val darkTheme = when (preference) {
@@ -44,8 +57,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Paints the activity window the theme's background colour so nothing white shows before the
+     *  first Compose frame, even when the chosen theme differs from the system day/night setting. */
+    private fun applyWindowBackground(preference: ThemePreference) {
+        val systemNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        val color = when (preference) {
+            ThemePreference.MIDNIGHT -> Color.BLACK
+            ThemePreference.DARK -> BACKGROUND_DARK
+            ThemePreference.LIGHT -> BACKGROUND_LIGHT
+            ThemePreference.SYSTEM -> if (systemNight) BACKGROUND_DARK else BACKGROUND_LIGHT
+        }
+        window.setBackgroundDrawable(ColorDrawable(color))
+    }
+
     private companion object {
         val LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
         val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+        // Match md_background_light / md_background_dark in the Compose theme.
+        val BACKGROUND_LIGHT = Color.rgb(0xFA, 0xFD, 0xFA)
+        val BACKGROUND_DARK = Color.rgb(0x19, 0x1C, 0x1B)
     }
 }
