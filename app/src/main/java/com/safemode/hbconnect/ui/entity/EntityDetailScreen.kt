@@ -626,33 +626,41 @@ private fun ServerLabelDialog(
         onDismissRequest = onDismiss,
         title = { Text("QR label") },
         text = {
-            Box(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                val data = bytes
-                when {
-                    error != null -> Text(
-                        error ?: "Failed to load label.",
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    data == null -> CircularProgressIndicator()
-                    else -> {
-                        val bmp = remember(data) {
-                            BitmapFactory.decodeByteArray(data, 0, data.size)?.asImageBitmap()
-                        }
-                        if (bmp != null) {
-                            Image(
-                                bitmap = bmp,
-                                contentDescription = "QR label for $entityName",
-                                modifier = Modifier.fillMaxWidth(),
-                                contentScale = ContentScale.FillWidth,
-                            )
-                        } else {
-                            Text("Couldn't display the label.", color = MaterialTheme.colorScheme.error)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val data = bytes
+                    when {
+                        error != null -> Text(
+                            error ?: "Failed to load label.",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        data == null -> CircularProgressIndicator()
+                        else -> {
+                            val bmp = remember(data) {
+                                BitmapFactory.decodeByteArray(data, 0, data.size)?.asImageBitmap()
+                            }
+                            if (bmp != null) {
+                                Image(
+                                    bitmap = bmp,
+                                    contentDescription = "QR label for $entityName",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentScale = ContentScale.FillWidth,
+                                )
+                            } else {
+                                Text("Couldn't display the label.", color = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                 }
+                Text(
+                    "Label not including your server URL in the QR code? Make sure your " +
+                        "HBOX_OPTIONS_HOSTNAME variable is configured.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {
