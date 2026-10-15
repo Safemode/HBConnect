@@ -1,5 +1,6 @@
 package com.safemode.hbconnect.ui.dashboard
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -82,6 +83,12 @@ fun DashboardScreen(
     val fieldValues by viewModel.fieldValues.collectAsStateWithLifecycle()
 
     var showFilters by remember { mutableStateOf(false) }
+
+    // While a search or filter is active, back clears it (returning to the stats grid) instead of
+    // falling through to the root handler's exit prompt. Composed here so it takes priority.
+    BackHandler(enabled = query.isNotBlank() || filters.isActive) {
+        viewModel.resetSearch()
+    }
 
     LifecycleResumeEffect(Unit) {
         viewModel.reloadSilently()

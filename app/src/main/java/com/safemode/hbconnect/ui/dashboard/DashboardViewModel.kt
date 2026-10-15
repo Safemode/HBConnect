@@ -95,6 +95,12 @@ class DashboardViewModel : ViewModel() {
         _query.value = ""
     }
 
+    /** Clears the query and all filters, returning the dashboard to the stats grid. */
+    fun resetSearch() {
+        _query.value = ""
+        _filters.value = EntityFilters()
+    }
+
     fun retrySearch() {
         viewModelScope.launch { runSearch(_query.value.trim(), _filters.value) }
     }
