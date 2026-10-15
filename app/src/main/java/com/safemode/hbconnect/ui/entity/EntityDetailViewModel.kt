@@ -11,8 +11,11 @@ import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class EntityDetailViewModel(private val entityId: String) : ViewModel() {
@@ -41,6 +44,11 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
 
     private val _tags = MutableStateFlow<List<TagSummary>>(emptyList())
     val tags: StateFlow<List<TagSummary>> = _tags.asStateFlow()
+
+    /** Whether the on-device QR action is enabled in Settings (off by default). */
+    val showDeviceQr: StateFlow<Boolean> = Graph.settingsRepository.config
+        .map { it.showDeviceQr }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private var pickersLoaded = false
 

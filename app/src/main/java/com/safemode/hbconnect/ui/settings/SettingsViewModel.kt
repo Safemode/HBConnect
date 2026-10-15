@@ -53,6 +53,7 @@ class SettingsViewModel : ViewModel() {
                 themePreference = updated.themePreference,
                 cacheSize = updated.cacheSize,
                 itemSortOrder = updated.itemSortOrder,
+                showDeviceQr = updated.showDeviceQr,
             )
             settings.save(merged)
             apiProvider.updateConfig(merged)

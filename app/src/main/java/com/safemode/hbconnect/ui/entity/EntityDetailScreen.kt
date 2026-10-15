@@ -133,6 +133,7 @@ fun EntityDetailScreen(
     val currency by Graph.currency.collectAsStateWithLifecycle()
     val locations by viewModel.locations.collectAsStateWithLifecycle()
     val tags by viewModel.tags.collectAsStateWithLifecycle()
+    val showDeviceQr by viewModel.showDeviceQr.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
     var showDuplicate by remember { mutableStateOf(false) }
@@ -181,11 +182,13 @@ fun EntityDetailScreen(
                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
                                     onClick = { menuOpen = false; showQrLabel = true },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("QR code (on-device)") },
-                                    leadingIcon = { Icon(Icons.Filled.QrCode2, contentDescription = null) },
-                                    onClick = { menuOpen = false; showQrCode = true },
-                                )
+                                if (showDeviceQr) {
+                                    DropdownMenuItem(
+                                        text = { Text("QR code (on-device)") },
+                                        leadingIcon = { Icon(Icons.Filled.QrCode2, contentDescription = null) },
+                                        onClick = { menuOpen = false; showQrCode = true },
+                                    )
+                                }
                             }
                         }
                     }
