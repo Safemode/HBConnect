@@ -65,6 +65,7 @@ import com.safemode.hbconnect.ui.navigation.TopDestination
 import com.safemode.hbconnect.ui.server.ServerScreen
 import com.safemode.hbconnect.ui.settings.SettingsScreen
 import com.safemode.hbconnect.ui.tags.TagsScreen
+import com.safemode.hbconnect.ui.templates.TemplatesScreen
 import kotlinx.coroutines.launch
 
 @Composable
@@ -157,6 +158,11 @@ fun HBConnectRoot() {
                 }
                 composable(Routes.TAGS) { TagsScreen() }
                 composable(Routes.ENTITY_TYPES) { EntityTypesScreen() }
+                composable(Routes.TEMPLATES) {
+                    TemplatesScreen(
+                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                    )
+                }
                 composable(Routes.MAINTENANCE_ALL) {
                     AllMaintenanceScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },

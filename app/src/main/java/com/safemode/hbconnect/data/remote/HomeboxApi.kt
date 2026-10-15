@@ -6,6 +6,11 @@ import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityListResult
+import com.safemode.hbconnect.data.remote.models.EntityTemplateCreate
+import com.safemode.hbconnect.data.remote.models.EntityTemplateCreateItem
+import com.safemode.hbconnect.data.remote.models.EntityTemplateOut
+import com.safemode.hbconnect.data.remote.models.EntityTemplateSummary
+import com.safemode.hbconnect.data.remote.models.EntityTemplateUpdate
 import com.safemode.hbconnect.data.remote.models.EntityTypeCreate
 import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityOut
@@ -164,6 +169,32 @@ interface HomeboxApi {
 
     @DELETE("api/v1/entity-types/{id}")
     suspend fun deleteEntityType(@Path("id") id: String): Response<ResponseBody>
+
+    // ---- Entity templates ----
+    @GET("api/v1/templates")
+    suspend fun getTemplates(): Response<List<EntityTemplateSummary>>
+
+    @GET("api/v1/templates/{id}")
+    suspend fun getTemplate(@Path("id") id: String): Response<EntityTemplateOut>
+
+    @POST("api/v1/templates")
+    suspend fun createTemplate(@Body body: EntityTemplateCreate): Response<EntityTemplateOut>
+
+    @PUT("api/v1/templates/{id}")
+    suspend fun updateTemplate(
+        @Path("id") id: String,
+        @Body body: EntityTemplateUpdate,
+    ): Response<EntityTemplateOut>
+
+    @DELETE("api/v1/templates/{id}")
+    suspend fun deleteTemplate(@Path("id") id: String): Response<ResponseBody>
+
+    /** Creates a new entity from a template; the template's defaults are applied server-side. */
+    @POST("api/v1/templates/{id}/create-item")
+    suspend fun createItemFromTemplate(
+        @Path("id") id: String,
+        @Body body: EntityTemplateCreateItem,
+    ): Response<EntityOut>
 
     // ---- Tags ----
     @GET("api/v1/tags")
