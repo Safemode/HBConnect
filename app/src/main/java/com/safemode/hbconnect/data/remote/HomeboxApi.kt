@@ -6,6 +6,8 @@ import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityListResult
+import com.safemode.hbconnect.data.remote.models.EntityTypeCreate
+import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntityPath
@@ -150,6 +152,18 @@ interface HomeboxApi {
     // ---- Entity types ----
     @GET("api/v1/entity-types")
     suspend fun getEntityTypes(): Response<List<EntityTypeSummary>>
+
+    @POST("api/v1/entity-types")
+    suspend fun createEntityType(@Body body: EntityTypeCreate): Response<EntityTypeSummary>
+
+    @PUT("api/v1/entity-types/{id}")
+    suspend fun updateEntityType(
+        @Path("id") id: String,
+        @Body body: EntityTypeUpdate,
+    ): Response<EntityTypeSummary>
+
+    @DELETE("api/v1/entity-types/{id}")
+    suspend fun deleteEntityType(@Path("id") id: String): Response<ResponseBody>
 
     // ---- Tags ----
     @GET("api/v1/tags")

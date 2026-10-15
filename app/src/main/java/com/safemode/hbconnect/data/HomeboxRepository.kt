@@ -12,7 +12,9 @@ import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
+import com.safemode.hbconnect.data.remote.models.EntityTypeCreate
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
+import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
@@ -261,6 +263,14 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     /** The item entity types (isLocation != true). */
     suspend fun getItemTypes(): Result<List<EntityTypeSummary>> =
         getEntityTypes().map { types -> types.filter { it.isLocation != true } }
+
+    suspend fun createEntityType(body: EntityTypeCreate): Result<EntityTypeSummary> =
+        call { it.createEntityType(body) }
+
+    suspend fun updateEntityType(id: String, body: EntityTypeUpdate): Result<EntityTypeSummary> =
+        call { it.updateEntityType(id, body) }
+
+    suspend fun deleteEntityType(id: String): Result<Unit> = callUnit { it.deleteEntityType(id) }
 
     // ---- Tags ----
     suspend fun getTags(): Result<List<TagSummary>> =

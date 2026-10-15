@@ -23,6 +23,14 @@ data class EntityTypeCreate(
     val defaultTemplateId: String? = null,
 )
 
+/** Body for PUT /api/v1/entity-types/{id}. The path id is authoritative server-side. */
+data class EntityTypeUpdate(
+    val name: String,
+    val icon: String? = null,
+    val isLocation: Boolean = false,
+    val defaultTemplateId: String? = null,
+)
+
 /** A row in the entity list (GET /api/v1/entities) and in nested children. */
 data class EntitySummary(
     val id: String? = null,
