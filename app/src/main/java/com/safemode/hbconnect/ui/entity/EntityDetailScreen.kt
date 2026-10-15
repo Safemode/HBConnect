@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
@@ -28,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,8 +72,11 @@ fun EntityDetailScreen(
     entityId: String,
     onBack: () -> Unit,
     onEditItem: (String) -> Unit,
+    onEditLocation: (String) -> Unit,
     onOpenEntity: (String) -> Unit,
     onAddItemHere: (String) -> Unit,
+    onOpenMaintenance: (String) -> Unit,
+    onOpenAttachments: (String) -> Unit,
     viewModel: EntityDetailViewModel = viewModel(key = entityId, factory = detailFactory(entityId)),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -91,8 +98,10 @@ fun EntityDetailScreen(
                     }
                 },
                 actions = {
-                    if (entity != null && !isLocation) {
-                        IconButton(onClick = { entity.id?.let(onEditItem) }) {
+                    if (entity?.id != null) {
+                        IconButton(onClick = {
+                            if (isLocation) onEditLocation(entity.id) else onEditItem(entity.id)
+                        }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Edit")
                         }
                         IconButton(onClick = { confirmDelete = true }) {
@@ -124,23 +133,36 @@ fun EntityDetailScreen(
                 is UiState.Success -> if (isLocation) {
                     LocationContents(children = children, onOpenEntity = onOpenEntity)
                 } else {
-                    ItemDetails(entity = s.data)
+                    ItemDetails(
+                        entity = s.data,
+                        onOpenMaintenance = { s.data.id?.let(onOpenMaintenance) },
+                        onOpenAttachments = { s.data.id?.let(onOpenAttachments) },
+                    )
                 }
             }
         }
     }
 
     if (confirmDelete && entity != null) {
+        val noun = if (isLocation) "location" else "item"
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete item?") },
-            text = { Text("\"${entity.displayName}\" will be permanently removed from Homebox.") },
+            title = { Text("Delete $noun?") },
+            text = {
+                Text(
+                    if (isLocation) {
+                        "\"${entity.displayName}\" will be removed. Items inside it are not deleted."
+                    } else {
+                        "\"${entity.displayName}\" will be permanently removed from Homebox."
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
                     viewModel.delete { ok, err ->
                         if (ok) {
-                            Toast.makeText(context, "Item deleted", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
                             onBack()
                         } else {
                             Toast.makeText(context, err ?: "Delete failed", Toast.LENGTH_LONG).show()
@@ -189,7 +211,11 @@ private fun LocationContents(
 }
 
 @Composable
-private fun ItemDetails(entity: EntityOut) {
+private fun ItemDetails(
+    entity: EntityOut,
+    onOpenMaintenance: () -> Unit,
+    onOpenAttachments: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -197,6 +223,17 @@ private fun ItemDetails(entity: EntityOut) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onOpenAttachments, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("  Attachments")
+            }
+            OutlinedButton(onClick = onOpenMaintenance, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Filled.Build, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("  Maintenance")
+            }
+        }
+
         val imageAttachmentId = entity.imageId?.ifBlank { null } ?: entity.thumbnailId?.ifBlank { null }
         if (imageAttachmentId != null && entity.id != null) {
             AsyncImage(

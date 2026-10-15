@@ -27,6 +27,19 @@ object Routes {
     fun itemForm(itemId: String? = null, parentId: String? = null) =
         "itemForm?itemId=${itemId ?: ""}&parentId=${parentId ?: ""}"
     const val ITEM_FORM = "itemForm?itemId={itemId}&parentId={parentId}"
+
+    /** Location add/edit form. Pass [locationId] to edit; pass [parentId] to preselect a parent. */
+    fun locationForm(locationId: String? = null, parentId: String? = null) =
+        "locationForm?locationId=${locationId ?: ""}&parentId=${parentId ?: ""}"
+    const val LOCATION_FORM = "locationForm?locationId={locationId}&parentId={parentId}"
+
+    /** Maintenance log for an item. */
+    fun maintenance(entityId: String) = "maintenance/$entityId"
+    const val MAINTENANCE = "maintenance/{entityId}"
+
+    /** Attachment manager for an item. */
+    fun attachments(entityId: String) = "attachments/$entityId"
+    const val ATTACHMENTS = "attachments/{entityId}"
 }
 
 /** Top-level destinations shown in the navigation drawer. */

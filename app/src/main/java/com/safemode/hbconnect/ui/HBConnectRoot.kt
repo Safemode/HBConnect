@@ -49,11 +49,14 @@ import androidx.navigation.navArgument
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.ServerReachability
 import com.safemode.hbconnect.ui.about.AboutScreen
+import com.safemode.hbconnect.ui.attachments.AttachmentsScreen
 import com.safemode.hbconnect.ui.dashboard.DashboardScreen
 import com.safemode.hbconnect.ui.entity.EntityDetailScreen
 import com.safemode.hbconnect.ui.items.ItemFormScreen
 import com.safemode.hbconnect.ui.items.ItemsScreen
+import com.safemode.hbconnect.ui.locations.LocationFormScreen
 import com.safemode.hbconnect.ui.locations.LocationsScreen
+import com.safemode.hbconnect.ui.maintenance.MaintenanceScreen
 import com.safemode.hbconnect.ui.navigation.AppDrawerContent
 import com.safemode.hbconnect.ui.navigation.Routes
 import com.safemode.hbconnect.ui.navigation.TopDestination
@@ -141,6 +144,7 @@ fun HBConnectRoot() {
                 composable(Routes.LOCATIONS) {
                     LocationsScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                        onAddLocation = { navController.navigate(Routes.locationForm()) },
                     )
                 }
                 composable(Routes.TAGS) { TagsScreen() }
@@ -153,8 +157,44 @@ fun HBConnectRoot() {
                         entityId = id,
                         onBack = { navController.popBackStack() },
                         onEditItem = { itemId -> navController.navigate(Routes.itemForm(itemId = itemId)) },
+                        onEditLocation = { locId -> navController.navigate(Routes.locationForm(locationId = locId)) },
                         onOpenEntity = { childId -> navController.navigate(Routes.entityDetail(childId)) },
                         onAddItemHere = { parentId -> navController.navigate(Routes.itemForm(parentId = parentId)) },
+                        onOpenMaintenance = { itemId -> navController.navigate(Routes.maintenance(itemId)) },
+                        onOpenAttachments = { itemId -> navController.navigate(Routes.attachments(itemId)) },
+                    )
+                }
+                composable(
+                    route = Routes.LOCATION_FORM,
+                    arguments = listOf(
+                        navArgument("locationId") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("parentId") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) { entry ->
+                    val locationId = entry.arguments?.getString("locationId").orEmpty().ifBlank { null }
+                    val parentId = entry.arguments?.getString("parentId").orEmpty().ifBlank { null }
+                    LocationFormScreen(
+                        locationId = locationId,
+                        parentId = parentId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = Routes.MAINTENANCE,
+                    arguments = listOf(navArgument("entityId") { type = NavType.StringType }),
+                ) { entry ->
+                    MaintenanceScreen(
+                        entityId = entry.arguments?.getString("entityId").orEmpty(),
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = Routes.ATTACHMENTS,
+                    arguments = listOf(navArgument("entityId") { type = NavType.StringType }),
+                ) { entry ->
+                    AttachmentsScreen(
+                        entityId = entry.arguments?.getString("entityId").orEmpty(),
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(
