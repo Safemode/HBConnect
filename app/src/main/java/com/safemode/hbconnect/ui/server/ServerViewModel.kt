@@ -58,6 +58,8 @@ class ServerViewModel : ViewModel() {
                 port = config.port,
                 authMode = config.authMode,
                 username = config.username,
+                // Prefill the saved API key so it's visible (masked) when connected via a key.
+                apiKey = if (config.authMode == AuthMode.API_KEY) config.token else "",
             )
             if (config.isConfigured) reloadFromSaved()
         }
