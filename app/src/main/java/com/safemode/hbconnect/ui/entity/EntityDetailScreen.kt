@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -62,6 +63,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -604,6 +606,34 @@ private fun QuickActionsCard(
     }
 }
 
+/** A tonal info callout — a rounded container with a leading info icon and supporting text. */
+@Composable
+private fun InfoCallout(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                Icons.Outlined.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+    }
+}
+
 /** Shows Homebox's server-generated PNG label (QR + title) and offers to share it. */
 @Composable
 private fun ServerLabelDialog(
@@ -655,11 +685,9 @@ private fun ServerLabelDialog(
                         }
                     }
                 }
-                Text(
+                InfoCallout(
                     "Label not including your server URL in the QR code? Make sure your " +
                         "HBOX_OPTIONS_HOSTNAME variable is configured.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
