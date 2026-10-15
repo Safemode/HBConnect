@@ -66,7 +66,24 @@ interface HomeboxApi {
         @Query("parentIds") parentIds: List<String>? = null,
         // "true" = locations only, "false" = items only, null = server default (items only).
         @Query("isLocation") isLocation: Boolean? = null,
+        @Query("includeArchived") includeArchived: Boolean? = null,
+        @Query("negateTags") negateTags: Boolean? = null,
+        @Query("onlyWithPhoto") onlyWithPhoto: Boolean? = null,
+        @Query("onlyWithoutPhoto") onlyWithoutPhoto: Boolean? = null,
+        // Each entry is a "Name=Value" custom-field match; repeated for multiple fields.
+        @Query("fields") fields: List<String>? = null,
+        // orderBy: name | createdAt | updatedAt | assetId. orderDirection: asc | desc.
+        @Query("orderBy") orderBy: String? = null,
+        @Query("orderDirection") orderDirection: String? = null,
     ): Response<EntityListResult>
+
+    /** Distinct custom-field names defined across the group's entities. */
+    @GET("api/v1/entities/fields")
+    suspend fun getCustomFieldNames(): Response<List<String>>
+
+    /** Distinct values recorded for a given custom-field name. */
+    @GET("api/v1/entities/fields/values")
+    suspend fun getCustomFieldValues(@Query("field") field: String): Response<List<String>>
 
     @GET("api/v1/entities/{id}")
     suspend fun getEntity(@Path("id") id: String): Response<EntityOut>

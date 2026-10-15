@@ -53,6 +53,7 @@ class SettingsViewModel : ViewModel() {
                 themePreference = updated.themePreference,
                 cacheSize = updated.cacheSize,
                 itemSortOrder = updated.itemSortOrder,
+                showArchived = updated.showArchived,
             )
             settings.save(merged)
             apiProvider.updateConfig(merged)

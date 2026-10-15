@@ -22,6 +22,8 @@ import com.safemode.hbconnect.data.remote.models.TreeItem
 import com.safemode.hbconnect.data.remote.models.UserOut
 import com.safemode.hbconnect.data.settings.ItemSortOrder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -99,6 +101,7 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     suspend fun getItems(
         query: String? = null,
         sort: ItemSortOrder = ItemSortOrder.NAME_ASC,
+        includeArchived: Boolean = false,
         page: Int = 1,
         pageSize: Int = 200,
     ): Result<List<EntitySummary>> = call {
@@ -107,17 +110,100 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
             page = page,
             pageSize = pageSize,
             isLocation = false,
+            includeArchived = includeArchived.takeIf { v -> v },
         )
     }.map { it.items.orEmpty().sortedWith(sortComparator(sort)) }
 
     /** All locations (location entities), sorted by name. */
-    suspend fun getLocations(): Result<List<EntitySummary>> = call {
-        it.getEntities(pageSize = 500, isLocation = true)
+    suspend fun getLocations(includeArchived: Boolean = false): Result<List<EntitySummary>> = call {
+        it.getEntities(
+            pageSize = 500,
+            isLocation = true,
+            includeArchived = includeArchived.takeIf { v -> v },
+        )
     }.map { it.items.orEmpty().sortedBy { l -> l.displayName.lowercase() } }
 
+    /**
+     * Server-wide search across items and (when sensible) locations for the dashboard search. The
+     * entities endpoint returns one kind per call, so items and locations are queried in parallel
+     * and merged — items first, then locations, each by name.
+     *
+     * Locations are only queried for plain text/tag searches: when an item-centric filter is set
+     * (a photo filter, a custom-field match, or a location filter) they're skipped, since those
+     * facets don't meaningfully apply to locations.
+     */
+    suspend fun searchEntities(
+        query: String,
+        filters: EntityFilters = EntityFilters(),
+        limit: Int = 50,
+    ): Result<List<EntitySummary>> {
+        val q = query.trim().ifBlank { null }
+        if (q == null && !filters.isActive) return Result.success(emptyList())
+
+        val tagIds = filters.tagIds.ifEmpty { null }
+        val parentIds = filters.locationIds.ifEmpty { null }
+        val fieldParams = filters.fields.map { it.toParam() }.ifEmpty { null }
+        val archived = filters.includeArchived.takeIf { it }
+        val negate = filters.negateTags.takeIf { it }
+        val onlyWithPhoto = (filters.photo == PhotoFilter.WITH).takeIf { it }
+        val onlyWithoutPhoto = (filters.photo == PhotoFilter.WITHOUT).takeIf { it }
+        val includeLocations = filters.photo == PhotoFilter.ANY &&
+            filters.fields.isEmpty() && filters.locationIds.isEmpty()
+        val orderBy = filters.sort.orderBy
+        val orderDirection = filters.sort.orderDirection
+
+        return runCatching {
+            coroutineScope {
+                val items = async {
+                    call {
+                        it.getEntities(
+                            q = q, pageSize = limit, isLocation = false,
+                            tags = tagIds, parentIds = parentIds,
+                            includeArchived = archived, negateTags = negate,
+                            onlyWithPhoto = onlyWithPhoto, onlyWithoutPhoto = onlyWithoutPhoto,
+                            fields = fieldParams, orderBy = orderBy, orderDirection = orderDirection,
+                        )
+                    }.getOrThrow().items.orEmpty()
+                }
+                val locations = async {
+                    if (!includeLocations) emptyList()
+                    else call {
+                        it.getEntities(
+                            q = q, pageSize = limit, isLocation = true,
+                            tags = tagIds, includeArchived = archived, negateTags = negate,
+                            orderBy = orderBy, orderDirection = orderDirection,
+                        )
+                    }.getOrThrow().items.orEmpty()
+                }
+                // Re-sort the merged list client-side so the two result sets interleave correctly.
+                val comparator = when (filters.sort) {
+                    SearchSort.NAME -> compareBy<EntitySummary> { it.displayName.lowercase() }
+                    SearchSort.CREATED -> compareByDescending<EntitySummary> { it.createdAt.orEmpty() }
+                    SearchSort.UPDATED -> compareByDescending<EntitySummary> { it.updatedAt.orEmpty() }
+                }
+                (items.await() + locations.await()).distinctBy { it.id }.sortedWith(comparator)
+            }
+        }
+    }
+
+    /** Distinct custom-field names across the group's entities (for the search field selector). */
+    suspend fun getCustomFieldNames(): Result<List<String>> =
+        call { it.getCustomFieldNames() }.map { names -> names.filter { it.isNotBlank() }.sorted() }
+
+    /** Distinct values recorded for a given custom-field [name]. */
+    suspend fun getCustomFieldValues(name: String): Result<List<String>> =
+        call { it.getCustomFieldValues(name) }.map { values -> values.filter { it.isNotBlank() }.sorted() }
+
     /** Direct children (items and sub-entities) of a given parent entity. */
-    suspend fun getChildren(parentId: String): Result<List<EntitySummary>> = call {
-        it.getEntities(parentIds = listOf(parentId), pageSize = 500)
+    suspend fun getChildren(
+        parentId: String,
+        includeArchived: Boolean = false,
+    ): Result<List<EntitySummary>> = call {
+        it.getEntities(
+            parentIds = listOf(parentId),
+            pageSize = 500,
+            includeArchived = includeArchived.takeIf { v -> v },
+        )
     }.map { it.items.orEmpty().sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
 
     suspend fun getEntity(id: String): Result<EntityOut> = call { it.getEntity(id) }
