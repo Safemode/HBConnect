@@ -3,12 +3,15 @@ package com.safemode.hbconnect.data
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.HomeboxApi
 import com.safemode.hbconnect.data.remote.models.ApiSummary
+import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityListResult
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
+import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.LoginForm
 import com.safemode.hbconnect.data.remote.models.MaintenanceEntry
@@ -88,6 +91,10 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         }
 
     suspend fun statistics(): Result<GroupStatistics> = call { it.statistics() }
+
+    suspend fun group(): Result<Group> = call { it.group() }
+
+    suspend fun currencies(): Result<List<Currency>> = call { it.currencies() }
 
     suspend fun serverVersion(): Result<String> = status().map { s ->
         s.build?.version?.ifBlank { null }
@@ -218,6 +225,10 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     suspend fun getTree(withItems: Boolean = false): Result<List<TreeItem>> =
         call { it.getTree(withItems) }
 
+    /** Ancestor path for an entity, root-first (the last element is the entity itself). */
+    suspend fun getEntityPath(id: String): Result<List<EntityPath>> =
+        call { it.getEntityPath(id) }
+
     suspend fun getEntityTypes(): Result<List<EntityTypeSummary>> = call { it.getEntityTypes() }
 
     /** The location entity types (isLocation == true). */
@@ -285,6 +296,10 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     // ---- Maintenance ----
     suspend fun getMaintenance(entityId: String): Result<List<MaintenanceEntry>> =
         call { it.getMaintenance(entityId) }
+
+    /** Group-wide maintenance entries. [status] is scheduled, completed, or both. */
+    suspend fun getAllMaintenance(status: String): Result<List<MaintenanceEntry>> =
+        call { it.getAllMaintenance(status) }
 
     suspend fun createMaintenance(entityId: String, body: MaintenanceEntryRequest): Result<Unit> =
         callUnit { it.createMaintenance(entityId, body) }

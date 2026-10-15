@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -21,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
@@ -60,10 +63,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
 
 @Suppress("UNCHECKED_CAST")
@@ -87,7 +93,9 @@ fun EntityDetailScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val children by viewModel.children.collectAsStateWithLifecycle()
+    val path by viewModel.path.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val currency by Graph.currency.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -127,23 +135,29 @@ fun EntityDetailScreen(
             }
         },
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = viewModel::refresh,
-            modifier = Modifier.padding(padding),
-        ) {
-            when (val s = state) {
-                UiState.Loading -> LoadingState()
-                UiState.NotConfigured -> ErrorState(message = "Not connected.")
-                is UiState.Error -> ErrorState(message = s.message, onRetry = { viewModel.load(showLoading = true) })
-                is UiState.Success -> if (isLocation) {
-                    LocationContents(children = children, onOpenEntity = onOpenEntity)
-                } else {
-                    ItemDetails(
-                        entity = s.data,
-                        onOpenMaintenance = { s.data.id?.let(onOpenMaintenance) },
-                        onOpenAttachments = { s.data.id?.let(onOpenAttachments) },
-                    )
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            if (entity != null) {
+                Breadcrumb(path = path, onOpenEntity = onOpenEntity)
+            }
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = viewModel::refresh,
+                modifier = Modifier.weight(1f).fillMaxSize(),
+            ) {
+                when (val s = state) {
+                    UiState.Loading -> LoadingState()
+                    UiState.NotConfigured -> ErrorState(message = "Not connected.")
+                    is UiState.Error -> ErrorState(message = s.message, onRetry = { viewModel.load(showLoading = true) })
+                    is UiState.Success -> if (isLocation) {
+                        LocationContents(children = children, onOpenEntity = onOpenEntity)
+                    } else {
+                        ItemDetails(
+                            entity = s.data,
+                            currency = currency,
+                            onOpenMaintenance = { s.data.id?.let(onOpenMaintenance) },
+                            onOpenAttachments = { s.data.id?.let(onOpenAttachments) },
+                        )
+                    }
                 }
             }
         }
@@ -217,8 +231,40 @@ private fun LocationContents(
 }
 
 @Composable
+private fun Breadcrumb(path: List<EntityPath>, onOpenEntity: (String) -> Unit) {
+    // The path ends with the entity itself; show only its clickable ancestors.
+    val ancestors = path.dropLast(1).filter { !it.id.isNullOrBlank() }
+    if (ancestors.isEmpty()) return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ancestors.forEachIndexed { index, node ->
+            Text(
+                text = node.name ?: "—",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { node.id?.let(onOpenEntity) },
+            )
+            if (index < ancestors.lastIndex) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ItemDetails(
     entity: EntityOut,
+    currency: Currency?,
     onOpenMaintenance: () -> Unit,
     onOpenAttachments: () -> Unit,
 ) {
@@ -280,7 +326,7 @@ private fun ItemDetails(
             DetailCard("Purchase") {
                 DetailRow("Bought from", entity.purchaseFrom)
                 DetailRow("Purchase date", entity.purchaseDate?.substringBefore('T'))
-                DetailRow("Price", entity.purchasePrice?.let { formatMoney(it) })
+                DetailRow("Price", entity.purchasePrice?.let { formatMoney(it, currency) })
             }
         }
 
@@ -296,7 +342,7 @@ private fun ItemDetails(
             DetailCard("Sold") {
                 DetailRow("Sold to", entity.soldTo)
                 DetailRow("Sold date", entity.soldDate?.substringBefore('T'))
-                DetailRow("Sold price", entity.soldPrice?.let { formatMoney(it) })
+                DetailRow("Sold price", entity.soldPrice?.let { formatMoney(it, currency) })
                 DetailRow("Notes", entity.soldNotes)
             }
         }
@@ -411,6 +457,3 @@ private fun DetailRow(label: String, value: String?) {
 }
 
 private fun hasAny(vararg values: String?): Boolean = values.any { !it.isNullOrBlank() }
-
-private fun formatMoney(value: Double): String =
-    if (value % 1.0 == 0.0) value.toLong().toString() else "%.2f".format(value)

@@ -163,3 +163,10 @@ data class TreeItem(
     val type: String? = null,
     val children: List<TreeItem>? = null,
 )
+
+/** One hop in an entity's ancestor path (GET /api/v1/entities/{id}/path), root-first. */
+data class EntityPath(
+    val id: String? = null,
+    val name: String? = null,
+    val type: String? = null,
+)

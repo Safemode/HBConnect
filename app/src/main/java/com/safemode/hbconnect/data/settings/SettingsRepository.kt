@@ -3,7 +3,6 @@ package com.safemode.hbconnect.data.settings
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -30,7 +29,6 @@ class SettingsRepository(private val context: Context) {
         val CACHE_SIZE = stringPreferencesKey("cache_size")
         val THEME = stringPreferencesKey("theme_preference")
         val SORT_ORDER = stringPreferencesKey("item_sort_order")
-        val SHOW_ARCHIVED = booleanPreferencesKey("show_archived")
     }
 
     val config: Flow<ConnectionConfig> = context.dataStore.data.map { prefs ->
@@ -52,7 +50,6 @@ class SettingsRepository(private val context: Context) {
             itemSortOrder = runCatching {
                 ItemSortOrder.valueOf(prefs[Keys.SORT_ORDER] ?: "NAME_ASC")
             }.getOrDefault(ItemSortOrder.NAME_ASC),
-            showArchived = prefs[Keys.SHOW_ARCHIVED] ?: false,
         )
     }
 
@@ -68,7 +65,6 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.CACHE_SIZE] = config.cacheSize.name
             prefs[Keys.THEME] = config.themePreference.name
             prefs[Keys.SORT_ORDER] = config.itemSortOrder.name
-            prefs[Keys.SHOW_ARCHIVED] = config.showArchived
         }
     }
 }

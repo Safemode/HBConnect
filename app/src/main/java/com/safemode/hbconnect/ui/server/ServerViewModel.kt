@@ -160,6 +160,7 @@ class ServerViewModel : ViewModel() {
             return
         }
         val version = repository.serverVersion().getOrNull()
+        Graph.loadCurrency()
         _state.value = UiState.Success(ServerInfo(user = who.getOrNull(), version = version))
     }
 }

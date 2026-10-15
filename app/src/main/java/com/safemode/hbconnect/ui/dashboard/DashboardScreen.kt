@@ -52,12 +52,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.ui.common.EmptyState
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
 
 private data class StatTile(val label: String, val value: String, val icon: ImageVector, val route: String?)
@@ -81,6 +84,7 @@ fun DashboardScreen(
     val filterTags by viewModel.filterTags.collectAsStateWithLifecycle()
     val fieldNames by viewModel.fieldNames.collectAsStateWithLifecycle()
     val fieldValues by viewModel.fieldValues.collectAsStateWithLifecycle()
+    val currency by Graph.currency.collectAsStateWithLifecycle()
 
     var showFilters by remember { mutableStateOf(false) }
 
@@ -163,6 +167,7 @@ fun DashboardScreen(
                         is UiState.Error -> ErrorState(message = s.message, onRetry = viewModel::load)
                         is UiState.Success -> StatsGrid(
                             stats = s.data,
+                            currency = currency,
                             onOpenItems = onOpenItems,
                             onOpenLocations = onOpenLocations,
                             onOpenTags = onOpenTags,
@@ -252,6 +257,7 @@ private fun SearchResults(
 @Composable
 private fun StatsGrid(
     stats: GroupStatistics,
+    currency: Currency?,
     onOpenItems: () -> Unit,
     onOpenLocations: () -> Unit,
     onOpenTags: () -> Unit,
@@ -261,7 +267,7 @@ private fun StatsGrid(
         StatTile("Locations", (stats.totalLocations ?: 0).toString(), Icons.Outlined.Place, "locations"),
         StatTile("Tags", (stats.totalTags ?: 0).toString(), Icons.Filled.Sell, "tags"),
         StatTile("With warranty", (stats.totalWithWarranty ?: 0).toString(), Icons.Filled.VerifiedUser, null),
-        StatTile("Total value", formatCurrency(stats.totalItemPrice), Icons.Filled.AttachMoney, null),
+        StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, null),
     )
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -318,7 +324,3 @@ private fun StatCard(tile: StatTile, onClick: (() -> Unit)?) {
     }
 }
 
-private fun formatCurrency(value: Double?): String {
-    val v = value ?: 0.0
-    return if (v % 1.0 == 0.0) v.toLong().toString() else "%.2f".format(v)
-}
