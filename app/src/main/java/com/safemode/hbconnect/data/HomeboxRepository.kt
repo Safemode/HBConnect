@@ -4,6 +4,7 @@ import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.HomeboxApi
 import com.safemode.hbconnect.data.remote.models.ApiSummary
 import com.safemode.hbconnect.data.remote.models.AttachmentUpdate
+import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityCreate
@@ -301,6 +302,10 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     /** Items matching an asset id (usually one); empty when nothing matches. */
     suspend fun findByAssetId(assetId: String): Result<List<EntitySummary>> =
         call { it.getByAssetId(assetId) }.map { it.items.orEmpty() }
+
+    /** Product lookup for a scanned UPC/EAN barcode; may return several candidates (or none). */
+    suspend fun searchFromBarcode(ean: String): Result<List<BarcodeProduct>> =
+        call { it.searchFromBarcode(ean.trim()) }
 
     suspend fun getTree(withItems: Boolean = false): Result<List<TreeItem>> =
         call { it.getTree(withItems) }

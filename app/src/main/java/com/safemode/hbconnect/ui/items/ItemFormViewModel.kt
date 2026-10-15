@@ -3,6 +3,7 @@ package com.safemode.hbconnect.ui.items
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
@@ -112,6 +113,26 @@ class ItemFormViewModel(
 
     fun update(transform: (ItemForm) -> ItemForm) {
         _form.value = transform(_form.value)
+    }
+
+    /** Looks up a scanned barcode; [onResult] gets the candidate products, or an error message. */
+    fun lookupBarcode(code: String, onResult: (List<BarcodeProduct>?, String?) -> Unit) {
+        viewModelScope.launch {
+            repository.searchFromBarcode(code).fold(
+                onSuccess = { onResult(it, null) },
+                onFailure = { onResult(null, it.message) },
+            )
+        }
+    }
+
+    /** Fills blank form fields from a looked-up product (keeps anything already typed). */
+    fun applyBarcodeProduct(p: BarcodeProduct) {
+        _form.value = _form.value.copy(
+            name = _form.value.name.ifBlank { p.item?.name?.trim().orEmpty() },
+            description = _form.value.description.ifBlank { p.item?.description?.trim().orEmpty() },
+            manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim().orEmpty() },
+            modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim().orEmpty() },
+        )
     }
 
     fun toggleTag(tagId: String) {

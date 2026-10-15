@@ -1,6 +1,7 @@
 package com.safemode.hbconnect.ui.items
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -8,18 +9,22 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -28,11 +33,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.safemode.hbconnect.data.remote.models.BarcodeProduct
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,6 +77,28 @@ fun ItemFormScreen(
     val loadState by viewModel.load.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    var scanning by remember { mutableStateOf(false) }
+    var candidates by remember { mutableStateOf<List<BarcodeProduct>?>(null) }
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val code = result.contents
+        if (!code.isNullOrBlank()) {
+            scanning = true
+            viewModel.lookupBarcode(code) { products, err ->
+                scanning = false
+                when {
+                    err != null -> Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                    products.isNullOrEmpty() ->
+                        Toast.makeText(context, "No product found for $code", Toast.LENGTH_LONG).show()
+                    products.size == 1 -> {
+                        viewModel.applyBarcodeProduct(products[0])
+                        Toast.makeText(context, "Filled from barcode", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> candidates = products
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -110,6 +143,26 @@ fun ItemFormScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                OutlinedButton(
+                    onClick = {
+                        scanLauncher.launch(
+                            ScanOptions()
+                                .setDesiredBarcodeFormats(ScanOptions.PRODUCT_CODE_TYPES)
+                                .setPrompt("Scan a product barcode")
+                                .setBeepEnabled(false)
+                                .setOrientationLocked(false),
+                        )
+                    },
+                    enabled = !scanning,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        Icons.Filled.QrCodeScanner,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    Text(if (scanning) "Looking up…" else "Scan barcode")
+                }
                 OutlinedTextField(
                     value = form.name,
                     onValueChange = { v -> viewModel.update { it.copy(name = v) } },
@@ -234,6 +287,36 @@ fun ItemFormScreen(
                 verticalArrangement = Arrangement.Center,
             ) { CircularProgressIndicator() }
         }
+    }
+
+    candidates?.let { list ->
+        AlertDialog(
+            onDismissRequest = { candidates = null },
+            title = { Text("Select product") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    list.forEach { product ->
+                        TextButton(
+                            onClick = {
+                                viewModel.applyBarcodeProduct(product)
+                                candidates = null
+                                Toast.makeText(context, "Filled from barcode", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(product.label, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { candidates = null }) { Text("Cancel") } },
+        )
     }
 }
 

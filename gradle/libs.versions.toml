@@ -26,8 +26,9 @@ datastore = "1.2.1"
 # Images
 coil = "2.7.0"
 
-# QR code generation
+# QR code generation + barcode scanning
 zxing = "3.5.3"
+zxingEmbedded = "4.3.0"
 
 # Desugaring (java.time on minSdk 24)
 desugar = "2.1.5"
@@ -68,8 +69,9 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 # Images
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
-# QR code generation
+# QR code generation + barcode scanning
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
 
 # Desugaring
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
