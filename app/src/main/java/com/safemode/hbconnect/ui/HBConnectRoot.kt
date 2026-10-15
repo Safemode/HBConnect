@@ -109,9 +109,14 @@ fun HBConnectRoot() {
         },
     ) {
         val contentModifier = if (showBanner) {
-            Modifier.fillMaxSize().statusBarsPadding()
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding()
         } else {
-            Modifier.fillMaxSize()
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
         }
         Column(modifier = contentModifier) {
             ConnectivityBanner(state = serverState)
