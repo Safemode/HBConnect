@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,7 +62,6 @@ import com.safemode.hbconnect.ui.maintenance.AllMaintenanceScreen
 import com.safemode.hbconnect.ui.maintenance.MaintenanceScreen
 import com.safemode.hbconnect.ui.navigation.AppDrawerContent
 import com.safemode.hbconnect.ui.navigation.Routes
-import com.safemode.hbconnect.ui.navigation.TopDestination
 import com.safemode.hbconnect.ui.server.ServerScreen
 import com.safemode.hbconnect.ui.settings.SettingsScreen
 import com.safemode.hbconnect.ui.tags.TagsScreen
@@ -123,50 +123,57 @@ fun HBConnectRoot() {
         }
         Column(modifier = contentModifier) {
             ConnectivityBanner(state = serverState)
-            val topDest = TopDestination.entries.firstOrNull { it.route == currentRoute }
-            if (topDest != null) {
-                TopBar(
-                    title = if (topDest == TopDestination.DASHBOARD) "HBConnect" else topDest.label,
-                    onOpenDrawer = openDrawer,
-                )
-            }
             NavHost(
                 navController = navController,
                 startDestination = Routes.DASHBOARD,
                 modifier = Modifier.weight(1f),
             ) {
                 composable(Routes.DASHBOARD) {
-                    DashboardScreen(
-                        onOpenItems = { navController.navigate(Routes.ITEMS) },
-                        onOpenLocations = { navController.navigate(Routes.LOCATIONS) },
-                        onOpenTags = { navController.navigate(Routes.TAGS) },
-                        onOpenServer = { navController.navigate(Routes.SERVER) },
-                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
-                    )
+                    TopLevelScaffold("HBConnect", openDrawer) {
+                        DashboardScreen(
+                            onOpenItems = { navController.navigate(Routes.ITEMS) },
+                            onOpenLocations = { navController.navigate(Routes.LOCATIONS) },
+                            onOpenTags = { navController.navigate(Routes.TAGS) },
+                            onOpenServer = { navController.navigate(Routes.SERVER) },
+                            onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                        )
+                    }
                 }
                 composable(Routes.ITEMS) {
-                    ItemsScreen(
-                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
-                        onAddItem = { navController.navigate(Routes.itemForm()) },
-                    )
+                    TopLevelScaffold("Items", openDrawer) {
+                        ItemsScreen(
+                            onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                            onAddItem = { navController.navigate(Routes.itemForm()) },
+                        )
+                    }
                 }
                 composable(Routes.LOCATIONS) {
-                    LocationsScreen(
-                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
-                        onAddLocation = { navController.navigate(Routes.locationForm()) },
-                    )
+                    TopLevelScaffold("Locations", openDrawer) {
+                        LocationsScreen(
+                            onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                            onAddLocation = { navController.navigate(Routes.locationForm()) },
+                        )
+                    }
                 }
-                composable(Routes.TAGS) { TagsScreen() }
-                composable(Routes.ENTITY_TYPES) { EntityTypesScreen() }
+                composable(Routes.TAGS) {
+                    TopLevelScaffold("Tags", openDrawer) { TagsScreen() }
+                }
+                composable(Routes.ENTITY_TYPES) {
+                    TopLevelScaffold("Entity types", openDrawer) { EntityTypesScreen() }
+                }
                 composable(Routes.TEMPLATES) {
-                    TemplatesScreen(
-                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
-                    )
+                    TopLevelScaffold("Templates", openDrawer) {
+                        TemplatesScreen(
+                            onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                        )
+                    }
                 }
                 composable(Routes.MAINTENANCE_ALL) {
-                    AllMaintenanceScreen(
-                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
-                    )
+                    TopLevelScaffold("Maintenance", openDrawer) {
+                        AllMaintenanceScreen(
+                            onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                        )
+                    }
                 }
                 composable(
                     route = Routes.ENTITY_DETAIL,
@@ -232,9 +239,15 @@ fun HBConnectRoot() {
                         onBack = { navController.popBackStack() },
                     )
                 }
-                composable(Routes.SERVER) { ServerScreen() }
-                composable(Routes.ABOUT) { AboutScreen() }
-                composable(Routes.SETTINGS) { SettingsScreen() }
+                composable(Routes.SERVER) {
+                    TopLevelScaffold("Server", openDrawer) { ServerScreen() }
+                }
+                composable(Routes.ABOUT) {
+                    TopLevelScaffold("About", openDrawer) { AboutScreen() }
+                }
+                composable(Routes.SETTINGS) {
+                    TopLevelScaffold("Settings", openDrawer) { SettingsScreen() }
+                }
             }
             BackHandler(enabled = drawerState.isOpen) {
                 scope.launch { drawerState.close() }
@@ -290,6 +303,23 @@ private fun ConnectivityBar(
         leading()
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = text, color = foreground, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+/**
+ * Chrome for a top-level destination: the app bar (with the drawer button) above the screen.
+ * Rendered inside the NavHost so the bar animates together with its screen — keeping the bar out
+ * of the NavHost makes it pop in/out a frame apart from the content during transitions.
+ */
+@Composable
+private fun TopLevelScaffold(
+    title: String,
+    onOpenDrawer: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        TopBar(title = title, onOpenDrawer = onOpenDrawer)
+        Box(modifier = Modifier.weight(1f)) { content() }
     }
 }
 

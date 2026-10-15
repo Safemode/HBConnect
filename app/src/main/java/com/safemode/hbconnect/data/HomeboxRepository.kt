@@ -33,6 +33,7 @@ import com.safemode.hbconnect.data.remote.models.TagUpdate
 import com.safemode.hbconnect.data.remote.models.TokenResponse
 import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
 import com.safemode.hbconnect.data.remote.models.TreeItem
+import com.safemode.hbconnect.data.remote.models.ValueBreakdowns
 import com.safemode.hbconnect.data.remote.models.UserOut
 import com.safemode.hbconnect.data.remote.models.ValueOverTime
 import com.safemode.hbconnect.data.settings.ItemSortOrder
@@ -104,12 +105,61 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     suspend fun statistics(): Result<GroupStatistics> = call { it.statistics() }
 
-    suspend fun statsByLocation(): Result<List<TotalsByOrganizer>> = call { it.statsByLocation() }
-
-    suspend fun statsByTag(): Result<List<TotalsByOrganizer>> = call { it.statsByTag() }
-
     suspend fun statsValueOverTime(start: String? = null, end: String? = null): Result<ValueOverTime> =
         call { it.statsValueOverTime(start, end) }
+
+    /**
+     * Value grouped by location and by tag, computed from the group's non-archived items. The
+     * server's /statistics/locations and /statistics/tags endpoints sum archived items too, which
+     * contradicts the archived-excluded totals shown elsewhere, so they are computed here instead.
+     */
+    suspend fun valueBreakdowns(): Result<ValueBreakdowns> = runCatching {
+        val items = allItems(includeArchived = false).getOrThrow()
+        val locTotal = LinkedHashMap<String, Double>()
+        val locName = HashMap<String, String>()
+        val tagTotal = LinkedHashMap<String, Double>()
+        val tagName = HashMap<String, String>()
+        items.forEach { item ->
+            val price = item.purchasePrice ?: 0.0
+            item.parent?.id?.let { id ->
+                locName[id] = item.parent.displayName
+                locTotal[id] = (locTotal[id] ?: 0.0) + price
+            }
+            item.tags.orEmpty().forEach { tag ->
+                tag.id?.let { id ->
+                    tagName[id] = tag.name ?: "tag"
+                    tagTotal[id] = (tagTotal[id] ?: 0.0) + price
+                }
+            }
+        }
+        ValueBreakdowns(
+            byLocation = locTotal.map { (id, total) -> TotalsByOrganizer(id, locName[id], total) },
+            byTag = tagTotal.map { (id, total) -> TotalsByOrganizer(id, tagName[id], total) },
+        )
+    }
+
+    /** Fetches every item (optionally including archived), paging until the full set is retrieved. */
+    private suspend fun allItems(includeArchived: Boolean): Result<List<EntitySummary>> = runCatching {
+        val acc = ArrayList<EntitySummary>()
+        val pageSize = 200
+        var page = 1
+        while (page <= 100) {
+            val result = call {
+                it.getEntities(
+                    page = page,
+                    pageSize = pageSize,
+                    isLocation = false,
+                    includeArchived = includeArchived.takeIf { v -> v },
+                )
+            }.getOrThrow()
+            val batch = result.items.orEmpty()
+            acc += batch
+            val total = result.total ?: acc.size
+            if (batch.size < pageSize || acc.size >= total) break
+            page++
+        }
+        acc
+    }
 
     suspend fun group(): Result<Group> = call { it.group() }
 
