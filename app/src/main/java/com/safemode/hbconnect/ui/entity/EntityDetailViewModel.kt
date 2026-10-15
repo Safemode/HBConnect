@@ -76,15 +76,8 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
         }
     }
 
-    /** Fetches the server-rendered QR label PNG for this entity; [onResult] gets the bytes or an error. */
-    fun fetchLabel(isLocation: Boolean, onResult: (ByteArray?, String?) -> Unit) {
-        viewModelScope.launch {
-            repository.downloadLabel(entityId, isLocation).fold(
-                onSuccess = { onResult(it, null) },
-                onFailure = { onResult(null, it.message) },
-            )
-        }
-    }
+    /** The Homebox web URL for this entity, encoded into its QR label. */
+    fun entityWebUrl(isLocation: Boolean): String = repository.entityWebUrl(entityId, isLocation)
 
     /** Duplicates this entity; [onResult] receives the new entity id on success. */
     fun duplicate(options: DuplicateOptions, onResult: (String?, String?) -> Unit) {

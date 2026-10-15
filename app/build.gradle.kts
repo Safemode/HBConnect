@@ -82,6 +82,9 @@ dependencies {
     // Images
     implementation(libs.coil.compose)
 
+    // QR code generation
+    implementation(libs.zxing.core)
+
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     testImplementation(libs.junit)
