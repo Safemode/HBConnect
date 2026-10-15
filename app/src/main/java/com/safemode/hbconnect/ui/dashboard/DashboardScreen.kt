@@ -4,9 +4,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,9 +16,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
@@ -85,6 +84,7 @@ fun DashboardScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val charts by viewModel.charts.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val filters by viewModel.filters.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
@@ -198,6 +198,7 @@ fun DashboardScreen(
                         is UiState.Error -> ErrorState(message = s.message, onRetry = viewModel::load)
                         is UiState.Success -> StatsGrid(
                             stats = s.data,
+                            charts = charts,
                             currency = currency,
                             onOpenItems = onOpenItems,
                             onOpenLocations = onOpenLocations,
@@ -317,6 +318,7 @@ private fun SearchResults(
 @Composable
 private fun StatsGrid(
     stats: GroupStatistics,
+    charts: DashboardCharts,
     currency: Currency?,
     onOpenItems: () -> Unit,
     onOpenLocations: () -> Unit,
@@ -329,21 +331,36 @@ private fun StatsGrid(
         StatTile("With warranty", (stats.totalWithWarranty ?: 0).toString(), Icons.Filled.VerifiedUser, null),
         StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, null),
     )
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+    LazyColumn(
         contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        items(tiles) { tile ->
-            val onClick: (() -> Unit)? = when (tile.route) {
-                "items" -> onOpenItems
-                "locations" -> onOpenLocations
-                "tags" -> onOpenTags
-                else -> null
+        items(tiles.chunked(2)) { row ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                row.forEach { tile ->
+                    val onClick: (() -> Unit)? = when (tile.route) {
+                        "items" -> onOpenItems
+                        "locations" -> onOpenLocations
+                        "tags" -> onOpenTags
+                        else -> null
+                    }
+                    Box(modifier = Modifier.weight(1f)) { StatCard(tile, onClick) }
+                }
+                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
             }
-            StatCard(tile, onClick)
+        }
+        charts.valueOverTime?.takeIf { it.hasData() }?.let { overTime ->
+            item { ValueTrendCard(overTime, currency) }
+        }
+        if (charts.byLocation.any { it.total > 0.0 }) {
+            item { BreakdownCard("Value by location", charts.byLocation, currency) }
+        }
+        if (charts.byTag.any { it.total > 0.0 }) {
+            item { BreakdownCard("Value by tag", charts.byTag, currency) }
         }
     }
 }

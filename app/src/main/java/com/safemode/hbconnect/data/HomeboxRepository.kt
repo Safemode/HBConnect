@@ -24,8 +24,10 @@ import com.safemode.hbconnect.data.remote.models.TagOut
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.data.remote.models.TagUpdate
 import com.safemode.hbconnect.data.remote.models.TokenResponse
+import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
 import com.safemode.hbconnect.data.remote.models.TreeItem
 import com.safemode.hbconnect.data.remote.models.UserOut
+import com.safemode.hbconnect.data.remote.models.ValueOverTime
 import com.safemode.hbconnect.data.settings.ItemSortOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -94,6 +96,13 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         }
 
     suspend fun statistics(): Result<GroupStatistics> = call { it.statistics() }
+
+    suspend fun statsByLocation(): Result<List<TotalsByOrganizer>> = call { it.statsByLocation() }
+
+    suspend fun statsByTag(): Result<List<TotalsByOrganizer>> = call { it.statsByTag() }
+
+    suspend fun statsValueOverTime(start: String? = null, end: String? = null): Result<ValueOverTime> =
+        call { it.statsValueOverTime(start, end) }
 
     suspend fun group(): Result<Group> = call { it.group() }
 
