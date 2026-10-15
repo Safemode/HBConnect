@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
@@ -18,6 +19,7 @@ object Routes {
     const val LOCATIONS = "locations"
     const val TAGS = "tags"
     const val ENTITY_TYPES = "entity-types"
+    const val TEMPLATES = "templates"
     const val MAINTENANCE_ALL = "maintenance"
     const val SERVER = "server"
     const val SETTINGS = "settings"
@@ -53,6 +55,7 @@ enum class TopDestination(val route: String, val label: String, val icon: ImageV
     LOCATIONS(Routes.LOCATIONS, "Locations", Icons.Outlined.Place),
     TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
     ENTITY_TYPES(Routes.ENTITY_TYPES, "Entity types", Icons.Filled.Category),
+    TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),
     MAINTENANCE(Routes.MAINTENANCE_ALL, "Maintenance", Icons.Filled.Build),
     SERVER(Routes.SERVER, "Server", Icons.Filled.Dns),
     ABOUT(Routes.ABOUT, "About", Icons.Filled.Info),

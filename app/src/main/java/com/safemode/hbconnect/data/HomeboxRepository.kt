@@ -12,6 +12,11 @@ import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
+import com.safemode.hbconnect.data.remote.models.EntityTemplateCreate
+import com.safemode.hbconnect.data.remote.models.EntityTemplateCreateItem
+import com.safemode.hbconnect.data.remote.models.EntityTemplateOut
+import com.safemode.hbconnect.data.remote.models.EntityTemplateSummary
+import com.safemode.hbconnect.data.remote.models.EntityTemplateUpdate
 import com.safemode.hbconnect.data.remote.models.EntityTypeCreate
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
@@ -271,6 +276,23 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         call { it.updateEntityType(id, body) }
 
     suspend fun deleteEntityType(id: String): Result<Unit> = callUnit { it.deleteEntityType(id) }
+
+    // ---- Entity templates ----
+    suspend fun getTemplates(): Result<List<EntityTemplateSummary>> =
+        call { it.getTemplates() }.map { list -> list.sortedBy { t -> t.name?.lowercase().orEmpty() } }
+
+    suspend fun getTemplate(id: String): Result<EntityTemplateOut> = call { it.getTemplate(id) }
+
+    suspend fun createTemplate(body: EntityTemplateCreate): Result<EntityTemplateOut> =
+        call { it.createTemplate(body) }
+
+    suspend fun updateTemplate(id: String, body: EntityTemplateUpdate): Result<EntityTemplateOut> =
+        call { it.updateTemplate(id, body) }
+
+    suspend fun deleteTemplate(id: String): Result<Unit> = callUnit { it.deleteTemplate(id) }
+
+    suspend fun createItemFromTemplate(id: String, body: EntityTemplateCreateItem): Result<EntityOut> =
+        call { it.createItemFromTemplate(id, body) }
 
     // ---- Tags ----
     suspend fun getTags(): Result<List<TagSummary>> =
