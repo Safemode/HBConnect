@@ -10,9 +10,13 @@ import com.safemode.hbconnect.data.SearchSort
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.TagSummary
+import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
+import com.safemode.hbconnect.data.remote.models.ValueOverTime
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +27,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
+/** Dashboard breakdown data backing the charts; any piece may be absent if its request fails. */
+data class DashboardCharts(
+    val valueOverTime: ValueOverTime? = null,
+    val byLocation: List<TotalsByOrganizer> = emptyList(),
+    val byTag: List<TotalsByOrganizer> = emptyList(),
+)
 
 @OptIn(FlowPreview::class)
 class DashboardViewModel : ViewModel() {
@@ -34,6 +47,9 @@ class DashboardViewModel : ViewModel() {
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
+    private val _charts = MutableStateFlow(DashboardCharts())
+    val charts: StateFlow<DashboardCharts> = _charts.asStateFlow()
 
     // ---- Server-wide search ----
     private val _query = MutableStateFlow("")
@@ -189,5 +205,23 @@ class DashboardViewModel : ViewModel() {
             onSuccess = { UiState.Success(it) },
             onFailure = { UiState.Error(it.message ?: "Failed to load statistics.") },
         )
+        if (_state.value is UiState.Success) loadCharts()
+    }
+
+    /** Fetches the breakdown stats in parallel; each piece degrades to empty if its call fails. */
+    private suspend fun loadCharts() {
+        val today = LocalDate.now()
+        val start = today.minusMonths(12).format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val end = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        coroutineScope {
+            val overTime = async { repository.statsValueOverTime(start, end).getOrNull() }
+            val byLocation = async { repository.statsByLocation().getOrDefault(emptyList()) }
+            val byTag = async { repository.statsByTag().getOrDefault(emptyList()) }
+            _charts.value = DashboardCharts(
+                valueOverTime = overTime.await(),
+                byLocation = byLocation.await(),
+                byTag = byTag.await(),
+            )
+        }
     }
 }
