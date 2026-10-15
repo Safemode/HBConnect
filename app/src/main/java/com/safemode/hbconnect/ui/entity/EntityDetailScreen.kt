@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -144,6 +145,15 @@ fun EntityDetailScreen(
 
     val entity = (state as? UiState.Success)?.data
     val isLocation = entity?.isLocation == true
+
+    // Reload when returning to this screen (e.g. after adding attachments) so the image and
+    // attachment list reflect changes made elsewhere, without a manual pull-to-refresh. The first
+    // resume is skipped because init already loaded.
+    var firstResume by remember { mutableStateOf(true) }
+    LifecycleResumeEffect(Unit) {
+        if (firstResume) firstResume = false else viewModel.load(showLoading = false)
+        onPauseOrDispose { }
+    }
 
     Scaffold(
         topBar = {
