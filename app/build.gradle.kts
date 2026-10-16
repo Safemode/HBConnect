@@ -13,8 +13,8 @@ android {
         applicationId = "com.safemode.hbconnect"
         minSdk = 24
         targetSdk = 37
-        versionCode = 14
-        versionName = "0.11"
+        versionCode = 15
+        versionName = "0.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -82,9 +82,14 @@ dependencies {
     // Images
     implementation(libs.coil.compose)
 
-    // QR code generation + barcode scanning
+    // QR code generation + barcode decoding (ZXing core, no Google Play Services)
     implementation(libs.zxing.core)
-    implementation(libs.zxing.android.embedded)
+
+    // Camera (CameraX) for the in-app barcode/QR scanner
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
