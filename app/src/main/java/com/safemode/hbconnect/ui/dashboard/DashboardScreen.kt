@@ -132,6 +132,7 @@ fun DashboardScreen(
     val filterTags by viewModel.filterTags.collectAsStateWithLifecycle()
     val fieldNames by viewModel.fieldNames.collectAsStateWithLifecycle()
     val fieldValues by viewModel.fieldValues.collectAsStateWithLifecycle()
+    val swapScanFilter by viewModel.swapScanFilter.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -225,6 +226,7 @@ fun DashboardScreen(
                         showFilters = true
                     },
                     onScan = { launchScan() },
+                    swapScanFilter = swapScanFilter,
                 )
             }
 
@@ -275,6 +277,7 @@ private fun SearchField(
     activeFilterCount: Int,
     onOpenFilters: () -> Unit,
     onScan: () -> Unit,
+    swapScanFilter: Boolean,
 ) {
     // When the keyboard is dismissed, drop focus from the field so its cursor stops blinking.
     val focusManager = LocalFocusManager.current
@@ -305,15 +308,27 @@ private fun SearchField(
             },
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onScan) {
-            Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
-        }
-        BadgedBox(
-            badge = { if (activeFilterCount > 0) Badge { Text(activeFilterCount.toString()) } },
-        ) {
-            IconButton(onClick = onOpenFilters) {
-                Icon(Icons.Filled.FilterList, contentDescription = "Filters")
+        val scanButton: @Composable () -> Unit = {
+            IconButton(onClick = onScan) {
+                Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
             }
+        }
+        val filterButton: @Composable () -> Unit = {
+            BadgedBox(
+                badge = { if (activeFilterCount > 0) Badge { Text(activeFilterCount.toString()) } },
+            ) {
+                IconButton(onClick = onOpenFilters) {
+                    Icon(Icons.Filled.FilterList, contentDescription = "Filters")
+                }
+            }
+        }
+        // Default order is scan then filter; the Settings toggle swaps them.
+        if (swapScanFilter) {
+            filterButton()
+            scanButton()
+        } else {
+            scanButton()
+            filterButton()
         }
     }
 }

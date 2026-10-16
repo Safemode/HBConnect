@@ -18,6 +18,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -73,6 +75,11 @@ class DashboardViewModel : ViewModel() {
 
     private val _fieldValues = MutableStateFlow<List<String>>(emptyList())
     val fieldValues: StateFlow<List<String>> = _fieldValues.asStateFlow()
+
+    /** Whether the search row shows the filter button before the scan button (Settings toggle). */
+    val swapScanFilter: StateFlow<Boolean> = settings.config
+        .map { it.swapScanFilter }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private var optionsLoaded = false
 
