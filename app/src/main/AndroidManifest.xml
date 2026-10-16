@@ -31,6 +31,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Portrait-locked scanner (overrides the library's sensor-oriented default). -->
+        <activity
+            android:name=".ui.scan.PortraitCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:stateNotNeeded="true"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import com.safemode.hbconnect.ui.scan.PortraitCaptureActivity
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
@@ -159,7 +160,8 @@ fun DashboardScreen(
                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                 .setPrompt("Scan a Homebox QR label")
                 .setBeepEnabled(false)
-                .setOrientationLocked(false),
+                .setOrientationLocked(false)
+                .setCaptureActivity(PortraitCaptureActivity::class.java),
         )
     }
 
