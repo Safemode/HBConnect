@@ -86,13 +86,36 @@ private data class StatTile(val label: String, val value: String, val icon: Imag
 private val UUID_REGEX =
     Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
+/** The `.../a/{assetId}` segment of an asset label's URL; the id is digits, often grouped (000-001). */
+private val ASSET_PATH_REGEX = Regex("/a/([0-9][0-9-]*)")
+
+/** A bare asset tag typed/encoded on its own, e.g. "000-001" or "42". */
+private val ASSET_BARE_REGEX = Regex("[0-9][0-9-]*")
+
+/** What a scanned Homebox label resolves to. */
+private sealed interface ScanTarget {
+    /** An item or location, opened directly by its UUID. */
+    data class Entity(val id: String) : ScanTarget
+
+    /** An asset tag, resolved to its item via a lookup. */
+    data class Asset(val assetId: String) : ScanTarget
+}
+
 /**
- * The entity id encoded in a scanned Homebox label, or null if the code isn't one. A printed label's
- * QR holds the entity's web URL (e.g. `https://host/item/{uuid}`), so we pull the first UUID out of
- * it; the host is ignored on purpose, so a label pointing at a public hostname still resolves when
- * the app connects over a LAN address. A bare UUID is accepted too.
+ * Resolves a scanned Homebox label, or null if it isn't one. Printed labels encode the entity's web
+ * URL: item/location labels use `.../item/{uuid}` or `.../location/{uuid}` (we take the UUID), while
+ * an asset label uses `.../a/{assetId}` (e.g. 000-001) which we resolve by asset tag. The host is
+ * ignored on purpose, so a label pointing at a public hostname still resolves on a LAN connection. A
+ * bare UUID or asset tag is accepted too. The UUID is checked first so an item/location URL never
+ * falls through to the asset branch.
  */
-private fun entityIdFromScan(raw: String): String? = UUID_REGEX.find(raw.trim())?.value
+private fun parseScan(raw: String): ScanTarget? {
+    val s = raw.trim()
+    UUID_REGEX.find(s)?.let { return ScanTarget.Entity(it.value) }
+    ASSET_PATH_REGEX.find(s)?.let { return ScanTarget.Asset(it.groupValues[1]) }
+    if (s.matches(ASSET_BARE_REGEX)) return ScanTarget.Asset(s)
+    return null
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,14 +149,13 @@ fun DashboardScreen(
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         val raw = result.contents
         if (raw.isNullOrBlank()) return@rememberLauncherForActivityResult
-        val id = entityIdFromScan(raw)
-        when {
-            id != null -> onOpenEntity(id)
-            raw.trim().matches(Regex("\\d+")) -> viewModel.findByAssetId(raw.trim()) { eid, err ->
-                if (eid != null) onOpenEntity(eid)
-                else Toast.makeText(context, err ?: "No item with asset tag ${raw.trim()}", Toast.LENGTH_LONG).show()
+        when (val target = parseScan(raw)) {
+            is ScanTarget.Entity -> onOpenEntity(target.id)
+            is ScanTarget.Asset -> viewModel.findByAssetId(target.assetId) { id, err ->
+                if (id != null) onOpenEntity(id)
+                else Toast.makeText(context, err ?: "No item with asset tag ${target.assetId}", Toast.LENGTH_LONG).show()
             }
-            else -> Toast.makeText(context, "That code isn't a Homebox item label.", Toast.LENGTH_LONG).show()
+            null -> Toast.makeText(context, "That code isn't a Homebox label.", Toast.LENGTH_LONG).show()
         }
     }
 
