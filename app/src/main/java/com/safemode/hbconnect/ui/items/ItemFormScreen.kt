@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import com.safemode.hbconnect.ui.scan.PortraitCaptureActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -150,7 +151,8 @@ fun ItemFormScreen(
                                 .setDesiredBarcodeFormats(ScanOptions.PRODUCT_CODE_TYPES)
                                 .setPrompt("Scan a product barcode")
                                 .setBeepEnabled(false)
-                                .setOrientationLocked(false),
+                                .setOrientationLocked(false)
+                                .setCaptureActivity(PortraitCaptureActivity::class.java),
                         )
                     },
                     enabled = !scanning,

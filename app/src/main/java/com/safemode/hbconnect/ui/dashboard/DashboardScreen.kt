@@ -2,6 +2,7 @@ package com.safemode.hbconnect.ui.dashboard
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,14 +26,12 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.outlined.Place
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -44,7 +43,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,7 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
+import com.safemode.hbconnect.ui.scan.PortraitCaptureActivity
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
@@ -77,6 +77,40 @@ import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
 
 private data class StatTile(val label: String, val value: String, val icon: ImageVector, val route: String?)
+
+private val UUID_REGEX =
+    Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+/** The `.../a/{assetId}` segment of an asset label's URL; the id is digits, often grouped (000-001). */
+private val ASSET_PATH_REGEX = Regex("/a/([0-9][0-9-]*)")
+
+/** A bare asset tag typed/encoded on its own, e.g. "000-001" or "42". */
+private val ASSET_BARE_REGEX = Regex("[0-9][0-9-]*")
+
+/** What a scanned Homebox label resolves to. */
+private sealed interface ScanTarget {
+    /** An item or location, opened directly by its UUID. */
+    data class Entity(val id: String) : ScanTarget
+
+    /** An asset tag, resolved to its item via a lookup. */
+    data class Asset(val assetId: String) : ScanTarget
+}
+
+/**
+ * Resolves a scanned Homebox label, or null if it isn't one. Printed labels encode the entity's web
+ * URL: item/location labels use `.../item/{uuid}` or `.../location/{uuid}` (we take the UUID), while
+ * an asset label uses `.../a/{assetId}` (e.g. 000-001) which we resolve by asset tag. The host is
+ * ignored on purpose, so a label pointing at a public hostname still resolves on a LAN connection. A
+ * bare UUID or asset tag is accepted too. The UUID is checked first so an item/location URL never
+ * falls through to the asset branch.
+ */
+private fun parseScan(raw: String): ScanTarget? {
+    val s = raw.trim()
+    UUID_REGEX.find(s)?.let { return ScanTarget.Entity(it.value) }
+    ASSET_PATH_REGEX.find(s)?.let { return ScanTarget.Asset(it.groupValues[1]) }
+    if (s.matches(ASSET_BARE_REGEX)) return ScanTarget.Asset(s)
+    return null
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,29 +133,35 @@ fun DashboardScreen(
     val filterTags by viewModel.filterTags.collectAsStateWithLifecycle()
     val fieldNames by viewModel.fieldNames.collectAsStateWithLifecycle()
     val fieldValues by viewModel.fieldValues.collectAsStateWithLifecycle()
+    val swapScanFilter by viewModel.swapScanFilter.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var showFilters by remember { mutableStateOf(false) }
-    var showAssetLookup by remember { mutableStateOf(false) }
 
-    if (showAssetLookup) {
-        AssetLookupDialog(
-            onDismiss = { showAssetLookup = false },
-            onFind = { assetId ->
-                viewModel.findByAssetId(assetId) { id, err ->
-                    if (id != null) {
-                        showAssetLookup = false
-                        onOpenEntity(id)
-                    } else {
-                        Toast.makeText(
-                            context,
-                            err ?: "No item with asset tag $assetId",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                }
-            },
+    // Scanning a Homebox-printed QR label opens the item in-app: we parse the entity id out of the
+    // scanned URL ourselves and navigate, so it never hands off to a browser.
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val raw = result.contents
+        if (raw.isNullOrBlank()) return@rememberLauncherForActivityResult
+        when (val target = parseScan(raw)) {
+            is ScanTarget.Entity -> onOpenEntity(target.id)
+            is ScanTarget.Asset -> viewModel.findByAssetId(target.assetId) { id, err ->
+                if (id != null) onOpenEntity(id)
+                else Toast.makeText(context, err ?: "No item with asset tag ${target.assetId}", Toast.LENGTH_LONG).show()
+            }
+            null -> Toast.makeText(context, "That code isn't a Homebox label.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun launchScan() {
+        scanLauncher.launch(
+            ScanOptions()
+                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt("Scan a Homebox QR label")
+                .setBeepEnabled(false)
+                .setOrientationLocked(false)
+                .setCaptureActivity(PortraitCaptureActivity::class.java),
         )
     }
 
@@ -187,7 +227,8 @@ fun DashboardScreen(
                         viewModel.loadFilterOptions()
                         showFilters = true
                     },
-                    onOpenAssetLookup = { showAssetLookup = true },
+                    onScan = { launchScan() },
+                    swapScanFilter = swapScanFilter,
                 )
             }
 
@@ -237,7 +278,8 @@ private fun SearchField(
     onClear: () -> Unit,
     activeFilterCount: Int,
     onOpenFilters: () -> Unit,
-    onOpenAssetLookup: () -> Unit,
+    onScan: () -> Unit,
+    swapScanFilter: Boolean,
 ) {
     // When the keyboard is dismissed, drop focus from the field so its cursor stops blinking.
     val focusManager = LocalFocusManager.current
@@ -256,7 +298,7 @@ private fun SearchField(
             value = query,
             onValueChange = onQueryChange,
             label = { Text("Search", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            placeholder = { Text("Items & locations", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            placeholder = { Text("Items, locations, or #asset tag", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
@@ -268,41 +310,29 @@ private fun SearchField(
             },
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onOpenAssetLookup) {
-            Icon(Icons.Filled.Numbers, contentDescription = "Find by asset tag")
-        }
-        BadgedBox(
-            badge = { if (activeFilterCount > 0) Badge { Text(activeFilterCount.toString()) } },
-        ) {
-            IconButton(onClick = onOpenFilters) {
-                Icon(Icons.Filled.FilterList, contentDescription = "Filters")
+        val scanButton: @Composable () -> Unit = {
+            IconButton(onClick = onScan) {
+                Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
             }
         }
+        val filterButton: @Composable () -> Unit = {
+            BadgedBox(
+                badge = { if (activeFilterCount > 0) Badge { Text(activeFilterCount.toString()) } },
+            ) {
+                IconButton(onClick = onOpenFilters) {
+                    Icon(Icons.Filled.FilterList, contentDescription = "Filters")
+                }
+            }
+        }
+        // Default order is scan then filter; the Settings toggle swaps them.
+        if (swapScanFilter) {
+            filterButton()
+            scanButton()
+        } else {
+            scanButton()
+            filterButton()
+        }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AssetLookupDialog(onDismiss: () -> Unit, onFind: (String) -> Unit) {
-    var assetId by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Find by asset tag") },
-        text = {
-            OutlinedTextField(
-                value = assetId,
-                onValueChange = { v -> assetId = v.filter { it.isDigit() } },
-                label = { Text("Asset tag number") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(enabled = assetId.isNotBlank(), onClick = { onFind(assetId) }) { Text("Find") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 @Composable
@@ -356,7 +386,8 @@ private fun StatsGrid(
         StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, null),
     )
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        // Bottom padding keeps the last tile/result clear of the Add-item FAB.
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize(),
     ) {

@@ -31,6 +31,7 @@ class SettingsRepository(private val context: Context) {
         val THEME = stringPreferencesKey("theme_preference")
         val SORT_ORDER = stringPreferencesKey("item_sort_order")
         val SHOW_DEVICE_QR = booleanPreferencesKey("show_device_qr")
+        val SWAP_SCAN_FILTER = booleanPreferencesKey("swap_scan_filter")
     }
 
     val config: Flow<ConnectionConfig> = context.dataStore.data.map { prefs ->
@@ -53,6 +54,7 @@ class SettingsRepository(private val context: Context) {
                 ItemSortOrder.valueOf(prefs[Keys.SORT_ORDER] ?: "NAME_ASC")
             }.getOrDefault(ItemSortOrder.NAME_ASC),
             showDeviceQr = prefs[Keys.SHOW_DEVICE_QR] ?: false,
+            swapScanFilter = prefs[Keys.SWAP_SCAN_FILTER] ?: false,
         )
     }
 
@@ -69,6 +71,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.THEME] = config.themePreference.name
             prefs[Keys.SORT_ORDER] = config.itemSortOrder.name
             prefs[Keys.SHOW_DEVICE_QR] = config.showDeviceQr
+            prefs[Keys.SWAP_SCAN_FILTER] = config.swapScanFilter
         }
     }
 }

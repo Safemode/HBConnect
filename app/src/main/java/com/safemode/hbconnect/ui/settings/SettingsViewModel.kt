@@ -54,6 +54,7 @@ class SettingsViewModel : ViewModel() {
                 cacheSize = updated.cacheSize,
                 itemSortOrder = updated.itemSortOrder,
                 showDeviceQr = updated.showDeviceQr,
+                swapScanFilter = updated.swapScanFilter,
             )
             settings.save(merged)
             apiProvider.updateConfig(merged)

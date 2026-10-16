@@ -61,6 +61,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 )
             }
 
+            SettingCard("Dashboard") {
+                SwitchRow(
+                    title = "Swap scan & filter buttons",
+                    subtitle = "Puts the filter button before the scan button in the dashboard " +
+                        "search bar.",
+                    checked = config.swapScanFilter,
+                    onCheckedChange = { v -> viewModel.updateAndSave { it.copy(swapScanFilter = v) } },
+                )
+            }
+
             SettingCard("Labels") {
                 SwitchRow(
                     title = "On-device QR code",

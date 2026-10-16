@@ -50,6 +50,8 @@ data class ConnectionConfig(
     val itemSortOrder: ItemSortOrder = ItemSortOrder.NAME_ASC,
     /** Whether the detail screen offers the on-device QR code action. Off by default. */
     val showDeviceQr: Boolean = false,
+    /** When true, the dashboard search row shows the filter button before the scan button. */
+    val swapScanFilter: Boolean = false,
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean
