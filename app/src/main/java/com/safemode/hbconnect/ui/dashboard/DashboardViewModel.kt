@@ -182,6 +182,21 @@ class DashboardViewModel : ViewModel() {
     }
 
     private suspend fun runSearch(query: String, filters: EntityFilters) {
+        // A leading '#' switches to an exact asset-tag lookup, e.g. "#11" finds asset 000-011
+        // (the server normalizes the number and ignores dashes), instead of a text search.
+        if (query.startsWith('#')) {
+            val tag = query.drop(1).trim()
+            if (tag.isBlank()) {
+                _searchResults.value = UiState.Success(emptyList())
+                return
+            }
+            _searchResults.value = UiState.Loading
+            _searchResults.value = repository.findByAssetId(tag).fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it.message ?: "Asset lookup failed.") },
+            )
+            return
+        }
         if (query.isBlank() && !filters.isActive) {
             _searchResults.value = UiState.Success(emptyList())
             return

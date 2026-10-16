@@ -26,28 +26,23 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.outlined.Place
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,7 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -142,7 +136,6 @@ fun DashboardScreen(
     val context = LocalContext.current
 
     var showFilters by remember { mutableStateOf(false) }
-    var showAssetLookup by remember { mutableStateOf(false) }
 
     // Scanning a Homebox-printed QR label opens the item in-app: we parse the entity id out of the
     // scanned URL ourselves and navigate, so it never hands off to a browser.
@@ -166,26 +159,6 @@ fun DashboardScreen(
                 .setPrompt("Scan a Homebox QR label")
                 .setBeepEnabled(false)
                 .setOrientationLocked(false),
-        )
-    }
-
-    if (showAssetLookup) {
-        AssetLookupDialog(
-            onDismiss = { showAssetLookup = false },
-            onFind = { assetId ->
-                viewModel.findByAssetId(assetId) { id, err ->
-                    if (id != null) {
-                        showAssetLookup = false
-                        onOpenEntity(id)
-                    } else {
-                        Toast.makeText(
-                            context,
-                            err ?: "No item with asset tag $assetId",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                }
-            },
         )
     }
 
@@ -227,19 +200,11 @@ fun DashboardScreen(
         contentWindowInsets = WindowInsets.navigationBars,
         floatingActionButton = {
             if (state is UiState.Success) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    FloatingActionButton(onClick = { launchScan() }) {
-                        Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
-                    }
-                    ExtendedFloatingActionButton(
-                        text = { Text("Add item") },
-                        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                        onClick = onAddItem,
-                    )
-                }
+                ExtendedFloatingActionButton(
+                    text = { Text("Add item") },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    onClick = onAddItem,
+                )
             }
         },
     ) { padding ->
@@ -259,7 +224,7 @@ fun DashboardScreen(
                         viewModel.loadFilterOptions()
                         showFilters = true
                     },
-                    onOpenAssetLookup = { showAssetLookup = true },
+                    onScan = { launchScan() },
                 )
             }
 
@@ -309,7 +274,7 @@ private fun SearchField(
     onClear: () -> Unit,
     activeFilterCount: Int,
     onOpenFilters: () -> Unit,
-    onOpenAssetLookup: () -> Unit,
+    onScan: () -> Unit,
 ) {
     // When the keyboard is dismissed, drop focus from the field so its cursor stops blinking.
     val focusManager = LocalFocusManager.current
@@ -328,7 +293,7 @@ private fun SearchField(
             value = query,
             onValueChange = onQueryChange,
             label = { Text("Search", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            placeholder = { Text("Items & locations", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            placeholder = { Text("Items, locations, or #asset tag", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
@@ -340,8 +305,8 @@ private fun SearchField(
             },
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onOpenAssetLookup) {
-            Icon(Icons.Filled.Numbers, contentDescription = "Find by asset tag")
+        IconButton(onClick = onScan) {
+            Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
         }
         BadgedBox(
             badge = { if (activeFilterCount > 0) Badge { Text(activeFilterCount.toString()) } },
@@ -351,30 +316,6 @@ private fun SearchField(
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AssetLookupDialog(onDismiss: () -> Unit, onFind: (String) -> Unit) {
-    var assetId by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Find by asset tag") },
-        text = {
-            OutlinedTextField(
-                value = assetId,
-                onValueChange = { v -> assetId = v.filter { it.isDigit() } },
-                label = { Text("Asset tag number") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(enabled = assetId.isNotBlank(), onClick = { onFind(assetId) }) { Text("Find") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 @Composable
@@ -428,7 +369,8 @@ private fun StatsGrid(
         StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, null),
     )
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        // Bottom padding keeps the last tile/result clear of the Add-item FAB.
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
