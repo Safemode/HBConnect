@@ -2,6 +2,7 @@ package com.safemode.hbconnect.ui.dashboard
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
@@ -38,6 +40,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
@@ -77,6 +82,17 @@ import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
 
 private data class StatTile(val label: String, val value: String, val icon: ImageVector, val route: String?)
+
+private val UUID_REGEX =
+    Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+/**
+ * The entity id encoded in a scanned Homebox label, or null if the code isn't one. A printed label's
+ * QR holds the entity's web URL (e.g. `https://host/item/{uuid}`), so we pull the first UUID out of
+ * it; the host is ignored on purpose, so a label pointing at a public hostname still resolves when
+ * the app connects over a LAN address. A bare UUID is accepted too.
+ */
+private fun entityIdFromScan(raw: String): String? = UUID_REGEX.find(raw.trim())?.value
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +120,32 @@ fun DashboardScreen(
 
     var showFilters by remember { mutableStateOf(false) }
     var showAssetLookup by remember { mutableStateOf(false) }
+
+    // Scanning a Homebox-printed QR label opens the item in-app: we parse the entity id out of the
+    // scanned URL ourselves and navigate, so it never hands off to a browser.
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val raw = result.contents
+        if (raw.isNullOrBlank()) return@rememberLauncherForActivityResult
+        val id = entityIdFromScan(raw)
+        when {
+            id != null -> onOpenEntity(id)
+            raw.trim().matches(Regex("\\d+")) -> viewModel.findByAssetId(raw.trim()) { eid, err ->
+                if (eid != null) onOpenEntity(eid)
+                else Toast.makeText(context, err ?: "No item with asset tag ${raw.trim()}", Toast.LENGTH_LONG).show()
+            }
+            else -> Toast.makeText(context, "That code isn't a Homebox item label.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun launchScan() {
+        scanLauncher.launch(
+            ScanOptions()
+                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt("Scan a Homebox QR label")
+                .setBeepEnabled(false)
+                .setOrientationLocked(false),
+        )
+    }
 
     if (showAssetLookup) {
         AssetLookupDialog(
@@ -163,11 +205,19 @@ fun DashboardScreen(
         contentWindowInsets = WindowInsets.navigationBars,
         floatingActionButton = {
             if (state is UiState.Success) {
-                ExtendedFloatingActionButton(
-                    text = { Text("Add item") },
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    onClick = onAddItem,
-                )
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    FloatingActionButton(onClick = { launchScan() }) {
+                        Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
+                    }
+                    ExtendedFloatingActionButton(
+                        text = { Text("Add item") },
+                        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                        onClick = onAddItem,
+                    )
+                }
             }
         },
     ) { padding ->
