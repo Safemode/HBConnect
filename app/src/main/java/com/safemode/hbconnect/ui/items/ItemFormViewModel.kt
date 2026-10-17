@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.EntityCreate
+import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
+import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,26 +101,7 @@ class ItemFormViewModel(
                     return@launch
                 }
                 original = entity
-                _form.value = ItemForm(
-                    name = entity.name.orEmpty(),
-                    description = entity.description.orEmpty(),
-                    quantity = (entity.quantity?.toInt() ?: 1).toString(),
-                    parentId = entity.parent?.id,
-                    entityTypeId = entity.entityType?.id,
-                    tagIds = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
-                    manufacturer = entity.manufacturer.orEmpty(),
-                    modelNumber = entity.modelNumber.orEmpty(),
-                    serialNumber = entity.serialNumber.orEmpty(),
-                    notes = entity.notes.orEmpty(),
-                    purchaseFrom = entity.purchaseFrom.orEmpty(),
-                    purchasePrice = entity.purchasePrice?.let { formatNum(it) }.orEmpty(),
-                    purchaseDate = entity.purchaseDate?.substringBefore('T').orEmpty(),
-                    warrantyExpires = entity.warrantyExpires?.substringBefore('T').orEmpty(),
-                    lifetimeWarranty = entity.lifetimeWarranty == true,
-                    warrantyDetails = entity.warrantyDetails.orEmpty(),
-                    insured = entity.insured == true,
-                    archived = entity.archived == true,
-                )
+                _form.value = formFrom(entity)
             } else {
                 val restored = if (usesDraft) ItemDraftStore.draft else null
                 // Restore a saved draft, otherwise default the entity type to the first item type.
@@ -131,6 +114,47 @@ class ItemFormViewModel(
 
     fun update(transform: (ItemForm) -> ItemForm) {
         setForm(transform(_form.value))
+    }
+
+    /** Builds the editable form from a loaded entity. */
+    private fun formFrom(entity: EntityOut) = ItemForm(
+        name = entity.name.orEmpty(),
+        description = entity.description.orEmpty(),
+        quantity = (entity.quantity?.toInt() ?: 1).toString(),
+        parentId = entity.parent?.id,
+        entityTypeId = entity.entityType?.id,
+        tagIds = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
+        manufacturer = entity.manufacturer.orEmpty(),
+        modelNumber = entity.modelNumber.orEmpty(),
+        serialNumber = entity.serialNumber.orEmpty(),
+        notes = entity.notes.orEmpty(),
+        purchaseFrom = entity.purchaseFrom.orEmpty(),
+        purchasePrice = entity.purchasePrice?.let { formatNum(it) }.orEmpty(),
+        purchaseDate = entity.purchaseDate?.substringBefore('T').orEmpty(),
+        warrantyExpires = entity.warrantyExpires?.substringBefore('T').orEmpty(),
+        lifetimeWarranty = entity.lifetimeWarranty == true,
+        warrantyDetails = entity.warrantyDetails.orEmpty(),
+        insured = entity.insured == true,
+        archived = entity.archived == true,
+    )
+
+    /**
+     * Clears the form. Editing reverts to the loaded values; a new item goes back to blank defaults
+     * and drops the draft. Also clears the created-this-session id so the next save starts fresh —
+     * which is what "Create and add another" relies on.
+     */
+    fun reset() {
+        if (isEdit) {
+            original?.let { _form.value = formFrom(it) }
+        } else {
+            createdId = null
+            original = null
+            _form.value = ItemForm(
+                parentId = presetParentId?.ifBlank { null },
+                entityTypeId = _itemTypes.value.firstOrNull()?.id,
+            )
+            clearDraft()
+        }
     }
 
     /** Applies a new form value and mirrors it into the draft store for the plain Add flow. */
@@ -177,6 +201,29 @@ class ItemFormViewModel(
                 tagIds = if (tagId in current) current - tagId else current + tagId,
             ),
         )
+    }
+
+    /** Creates a tag, adds it to the pickable list, and selects it. [onResult] reports success. */
+    fun createTag(name: String, onResult: (Boolean, String?) -> Unit) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            onResult(false, "Tag name is required.")
+            return
+        }
+        viewModelScope.launch {
+            repository.createTag(TagCreate(name = trimmed)).fold(
+                onSuccess = { created ->
+                    val id = created.id
+                    if (id != null) {
+                        _tags.value = (_tags.value + TagSummary(id = id, name = created.name ?: trimmed))
+                            .sortedBy { it.name?.lowercase() }
+                        setForm(_form.value.copy(tagIds = _form.value.tagIds + id))
+                    }
+                    onResult(true, null)
+                },
+                onFailure = { onResult(false, it.message) },
+            )
+        }
     }
 
     /** Validates and saves. Calls [onResult] with success and an optional error message. */

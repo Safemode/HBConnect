@@ -2,28 +2,37 @@ package com.safemode.hbconnect.ui.items
 
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -31,10 +40,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
+import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
 import com.safemode.hbconnect.ui.scan.ScanMode
 import com.safemode.hbconnect.ui.scan.ScanRequest
@@ -61,7 +73,7 @@ private fun formFactory(itemId: String?, parentId: String?) = object : ViewModel
         ItemFormViewModel(itemId, parentId) as T
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ItemFormScreen(
     itemId: String?,
@@ -81,6 +93,10 @@ fun ItemFormScreen(
 
     var scanning by remember { mutableStateOf(false) }
     var candidates by remember { mutableStateOf<List<BarcodeProduct>?>(null) }
+    var showReset by remember { mutableStateOf(false) }
+    var showTagSheet by remember { mutableStateOf(false) }
+    val tagSheetState = rememberModalBottomSheetState()
+
     val scanLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { code ->
         if (!code.isNullOrBlank()) {
             scanning = true
@@ -100,6 +116,23 @@ fun ItemFormScreen(
         }
     }
 
+    // Save; on success either return (Create / Save) or clear for the next entry (add another).
+    val doSave: (Boolean) -> Unit = { addAnother ->
+        viewModel.save { ok, err ->
+            if (ok) {
+                if (addAnother) {
+                    viewModel.reset()
+                    Toast.makeText(context, "Created — add another", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, if (viewModel.isEdit) "Saved" else "Created", Toast.LENGTH_SHORT).show()
+                    onBack()
+                }
+            } else {
+                Toast.makeText(context, err ?: "Save failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -112,22 +145,9 @@ fun ItemFormScreen(
                 actions = {
                     TextButton(
                         enabled = !saving && loadState is UiState.Success,
-                        onClick = {
-                            viewModel.save { ok, err ->
-                                if (ok) {
-                                    Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
-                                    onBack()
-                                } else {
-                                    Toast.makeText(context, err ?: "Save failed", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
+                        onClick = { showReset = true },
                     ) {
-                        if (saving) {
-                            CircularProgressIndicator(modifier = Modifier.padding(4.dp))
-                        } else {
-                            Text("Save")
-                        }
+                        Text("Reset")
                     }
                 },
             )
@@ -135,153 +155,226 @@ fun ItemFormScreen(
     ) { padding ->
         when (val s = loadState) {
             is UiState.Error -> ErrorState(message = s.message, modifier = Modifier.padding(padding))
-            is UiState.Success -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        scanLauncher.launch(
-                            ScanRequest(ScanMode.PRODUCT, "Scan a product barcode"),
-                        )
-                    },
-                    enabled = !scanning,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        Icons.Filled.QrCodeScanner,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    Text(if (scanning) "Looking up…" else "Scan barcode")
+            is UiState.Success -> {
+                // Collapse the optional sections by default, but open any that already hold data
+                // (editing an existing item, or a restored draft).
+                var identifiersOpen by rememberSaveable {
+                    mutableStateOf(form.manufacturer.isNotBlank() || form.modelNumber.isNotBlank() || form.serialNumber.isNotBlank())
                 }
-                OutlinedTextField(
-                    value = form.name,
-                    onValueChange = { v -> viewModel.update { it.copy(name = v) } },
-                    label = { Text("Name *") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.description,
-                    onValueChange = { v -> viewModel.update { it.copy(description = v) } },
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.quantity,
-                    onValueChange = { v -> viewModel.update { it.copy(quantity = v.filter(Char::isDigit)) } },
-                    label = { Text("Quantity") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OptionDropdownField(
-                    label = "Location",
-                    options = listOf(Option("(None)", null)) +
-                        locations.map { Option(it.displayName, it.id) },
-                    selectedValue = form.parentId,
-                    onSelect = { opt -> viewModel.update { it.copy(parentId = opt.value) } },
-                )
+                var purchaseOpen by rememberSaveable {
+                    mutableStateOf(form.purchaseFrom.isNotBlank() || form.purchasePrice.isNotBlank() || form.purchaseDate.isNotBlank())
+                }
+                var warrantyOpen by rememberSaveable {
+                    mutableStateOf(form.lifetimeWarranty || form.warrantyExpires.isNotBlank() || form.warrantyDetails.isNotBlank())
+                }
+                var otherOpen by rememberSaveable {
+                    mutableStateOf(form.insured || form.archived || form.notes.isNotBlank())
+                }
 
-                if (tags.isNotEmpty()) {
-                    Text("Tags", style = MaterialTheme.typography.titleMedium)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        tags.forEach { tag ->
-                            val id = tag.id ?: return@forEach
-                            FilterChip(
-                                selected = id in form.tagIds,
-                                onClick = { viewModel.toggleTag(id) },
-                                label = { Text(tag.name ?: "tag") },
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            scanLauncher.launch(ScanRequest(ScanMode.PRODUCT, "Scan a product barcode"))
+                        },
+                        enabled = !scanning,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Filled.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        Text(if (scanning) "Looking up…" else "Scan barcode")
+                    }
+                    OutlinedTextField(
+                        value = form.name,
+                        onValueChange = { v -> viewModel.update { it.copy(name = v) } },
+                        label = { Text("Name *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = form.description,
+                        onValueChange = { v -> viewModel.update { it.copy(description = v) } },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = form.quantity,
+                        onValueChange = { v -> viewModel.update { it.copy(quantity = v.filter(Char::isDigit)) } },
+                        label = { Text("Quantity") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OptionDropdownField(
+                        label = "Location",
+                        options = listOf(Option("(None)", null)) +
+                            locations.map { Option(it.displayName, it.id) },
+                        selectedValue = form.parentId,
+                        onSelect = { opt -> viewModel.update { it.copy(parentId = opt.value) } },
+                    )
+
+                    val selectedTagNames = tags
+                        .filter { it.id != null && it.id in form.tagIds }
+                        .mapNotNull { it.name }
+                    TagsField(
+                        summary = selectedTagNames.joinToString(", "),
+                        onClick = { showTagSheet = true },
+                    )
+
+                    CollapsibleSection("Identifiers", identifiersOpen, { identifiersOpen = !identifiersOpen }) {
+                        OutlinedTextField(
+                            value = form.manufacturer,
+                            onValueChange = { v -> viewModel.update { it.copy(manufacturer = v) } },
+                            label = { Text("Manufacturer") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = form.modelNumber,
+                            onValueChange = { v -> viewModel.update { it.copy(modelNumber = v) } },
+                            label = { Text("Model number") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = form.serialNumber,
+                            onValueChange = { v -> viewModel.update { it.copy(serialNumber = v) } },
+                            label = { Text("Serial number") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    CollapsibleSection("Purchase", purchaseOpen, { purchaseOpen = !purchaseOpen }) {
+                        OutlinedTextField(
+                            value = form.purchaseFrom,
+                            onValueChange = { v -> viewModel.update { it.copy(purchaseFrom = v) } },
+                            label = { Text("Bought from") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = form.purchasePrice,
+                            onValueChange = { v -> viewModel.update { it.copy(purchasePrice = v.filter { c -> c.isDigit() || c == '.' }) } },
+                            label = { Text("Price") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        DateField(
+                            label = "Purchase date",
+                            value = form.purchaseDate,
+                            onValueChange = { v -> viewModel.update { it.copy(purchaseDate = v) } },
+                        )
+                    }
+
+                    CollapsibleSection("Warranty", warrantyOpen, { warrantyOpen = !warrantyOpen }) {
+                        ToggleRow("Lifetime warranty", form.lifetimeWarranty) { v ->
+                            viewModel.update { it.copy(lifetimeWarranty = v) }
+                        }
+                        if (!form.lifetimeWarranty) {
+                            DateField(
+                                label = "Warranty expires",
+                                value = form.warrantyExpires,
+                                onValueChange = { v -> viewModel.update { it.copy(warrantyExpires = v) } },
                             )
+                        }
+                        OutlinedTextField(
+                            value = form.warrantyDetails,
+                            onValueChange = { v -> viewModel.update { it.copy(warrantyDetails = v) } },
+                            label = { Text("Warranty details") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    CollapsibleSection("Other", otherOpen, { otherOpen = !otherOpen }) {
+                        ToggleRow("Insured", form.insured) { v -> viewModel.update { it.copy(insured = v) } }
+                        if (viewModel.isEdit) {
+                            ToggleRow("Archived", form.archived) { v -> viewModel.update { it.copy(archived = v) } }
+                        }
+                        OutlinedTextField(
+                            value = form.notes,
+                            onValueChange = { v -> viewModel.update { it.copy(notes = v) } },
+                            label = { Text("Notes") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { doSave(false) },
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (saving) {
+                            CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text(if (viewModel.isEdit) "Save" else "Create")
+                        }
+                    }
+                    if (!viewModel.isEdit) {
+                        OutlinedButton(
+                            onClick = { doSave(true) },
+                            enabled = !saving,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Create and add another")
                         }
                     }
                 }
-
-                SectionHeader("Identifiers")
-                OutlinedTextField(
-                    value = form.manufacturer,
-                    onValueChange = { v -> viewModel.update { it.copy(manufacturer = v) } },
-                    label = { Text("Manufacturer") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.modelNumber,
-                    onValueChange = { v -> viewModel.update { it.copy(modelNumber = v) } },
-                    label = { Text("Model number") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.serialNumber,
-                    onValueChange = { v -> viewModel.update { it.copy(serialNumber = v) } },
-                    label = { Text("Serial number") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                SectionHeader("Purchase")
-                OutlinedTextField(
-                    value = form.purchaseFrom,
-                    onValueChange = { v -> viewModel.update { it.copy(purchaseFrom = v) } },
-                    label = { Text("Bought from") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = form.purchasePrice,
-                    onValueChange = { v -> viewModel.update { it.copy(purchasePrice = v.filter { c -> c.isDigit() || c == '.' }) } },
-                    label = { Text("Price") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                DateField(
-                    label = "Purchase date",
-                    value = form.purchaseDate,
-                    onValueChange = { v -> viewModel.update { it.copy(purchaseDate = v) } },
-                )
-
-                SectionHeader("Warranty")
-                ToggleRow("Lifetime warranty", form.lifetimeWarranty) { v ->
-                    viewModel.update { it.copy(lifetimeWarranty = v) }
-                }
-                if (!form.lifetimeWarranty) {
-                    DateField(
-                        label = "Warranty expires",
-                        value = form.warrantyExpires,
-                        onValueChange = { v -> viewModel.update { it.copy(warrantyExpires = v) } },
-                    )
-                }
-                OutlinedTextField(
-                    value = form.warrantyDetails,
-                    onValueChange = { v -> viewModel.update { it.copy(warrantyDetails = v) } },
-                    label = { Text("Warranty details") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                SectionHeader("Other")
-                ToggleRow("Insured", form.insured) { v -> viewModel.update { it.copy(insured = v) } }
-                if (viewModel.isEdit) {
-                    ToggleRow("Archived", form.archived) { v -> viewModel.update { it.copy(archived = v) } }
-                }
-                OutlinedTextField(
-                    value = form.notes,
-                    onValueChange = { v -> viewModel.update { it.copy(notes = v) } },
-                    label = { Text("Notes") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
             else -> Column(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) { CircularProgressIndicator() }
+        }
+    }
+
+    if (showReset) {
+        AlertDialog(
+            onDismissRequest = { showReset = false },
+            title = { Text("Reset form?") },
+            text = {
+                Text(
+                    if (viewModel.isEdit) "Changes will revert to the saved item."
+                    else "Everything you've entered will be cleared.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.reset()
+                    showReset = false
+                }) { Text("Reset") }
+            },
+            dismissButton = { TextButton(onClick = { showReset = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (showTagSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showTagSheet = false },
+            sheetState = tagSheetState,
+        ) {
+            TagPickerSheet(
+                tags = tags,
+                selected = form.tagIds,
+                onToggle = viewModel::toggleTag,
+                onCreate = { name ->
+                    viewModel.createTag(name) { ok, err ->
+                        if (!ok) Toast.makeText(context, err ?: "Couldn't create tag", Toast.LENGTH_LONG).show()
+                    }
+                },
+            )
         }
     }
 
@@ -316,13 +409,117 @@ fun ItemFormScreen(
     }
 }
 
+/** A read-only field that opens the tag picker; shows the selected tag names, or a placeholder. */
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(top = 8.dp),
-    )
+private fun TagsField(summary: String, onClick: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = summary,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Tags") },
+            placeholder = { Text("None selected") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        // Transparent overlay so a tap anywhere opens the picker.
+        Box(modifier = Modifier.matchParentSize().clickableNoRipple(onClick))
+    }
+}
+
+/** Contents of the tag multi-select sheet: create a tag up top, then toggle any existing ones. */
+@Composable
+private fun TagPickerSheet(
+    tags: List<TagSummary>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+    onCreate: (String) -> Unit,
+) {
+    var newName by remember { mutableStateOf("") }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Tags", style = MaterialTheme.typography.titleLarge)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("New tag") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            Button(
+                enabled = newName.isNotBlank(),
+                onClick = {
+                    onCreate(newName.trim())
+                    newName = ""
+                },
+            ) { Text("Add") }
+        }
+        if (tags.isEmpty()) {
+            Text(
+                "No tags yet — create one above.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                tags.forEach { tag ->
+                    val id = tag.id ?: return@forEach
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggle(id) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = id in selected, onCheckedChange = { onToggle(id) })
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(tag.name ?: "tag", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CollapsibleSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle() }
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Icon(
+                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+            )
+        }
+        if (expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+        }
+    }
 }
 
 @Composable
@@ -336,3 +533,10 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
+
+private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
+    this.clickable(
+        interactionSource = MutableInteractionSource(),
+        indication = null,
+        onClick = onClick,
+    )
