@@ -40,6 +40,10 @@ private fun locationFormFactory(locationId: String?, parentId: String?) = object
         LocationFormViewModel(locationId, parentId) as T
 }
 
+/**
+ * Add/edit location form: name, description, parent location, and type. Backed by
+ * [LocationFormViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationFormScreen(

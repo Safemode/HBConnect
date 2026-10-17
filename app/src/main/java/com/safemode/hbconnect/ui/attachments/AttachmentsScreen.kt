@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Star
@@ -83,6 +83,10 @@ private fun factory(entityId: String) = object : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T = AttachmentsViewModel(entityId) as T
 }
 
+/**
+ * Attachments for one item: a thumbnail/icon list with upload (photo or document via the system
+ * picker), open-in-external-viewer, set-primary, and delete. Backed by [AttachmentsViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttachmentsScreen(
@@ -386,7 +390,7 @@ private fun AttachmentRow(
                     )
                     DropdownMenuItem(
                         text = { Text("Change type") },
-                        leadingIcon = { Icon(Icons.Filled.Label, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
                         onClick = { menuOpen = false; onRetype() },
                     )
                     DropdownMenuItem(

@@ -16,6 +16,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Backs the Tags screen: lists the group's tags and creates/updates/deletes them (tags can nest via
+ * [TagCreate.parentId]). Follows the shared list-screen pattern - [load] with a full-screen spinner,
+ * [reloadSilently] without one - and refreshes silently both when the server becomes reachable and
+ * when a live-update TAG event arrives, so a change made elsewhere shows up without a manual reload.
+ */
 class TagsViewModel : ViewModel() {
     private val repository = Graph.repository
     private val settings = Graph.settingsRepository

@@ -21,6 +21,15 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/**
+ * Backs the entity detail screen for one item or location ([entityId]). Loads the entity plus its
+ * ancestor path and, for a location, the entities it contains ([children]). Quick actions (set
+ * quantity, move, retag) go through PATCH, which changes only the named fields - so, unlike the
+ * full-replace update on the edit form, they can't accidentally wipe anything and need no
+ * field-preservation. Re-fetches on a live ENTITY event (unless this entity was just deleted), and
+ * exposes QR-label and duplicate helpers. Picker lists for the quick actions load lazily on first
+ * use ([loadPickers]).
+ */
 class EntityDetailViewModel(private val entityId: String) : ViewModel() {
     private val repository = Graph.repository
 

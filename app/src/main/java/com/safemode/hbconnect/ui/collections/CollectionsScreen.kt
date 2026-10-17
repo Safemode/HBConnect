@@ -46,6 +46,11 @@ import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 
+/**
+ * Collections screen: pick which collection is active, create a new one, join another from an
+ * invite code or link, and rename collections. New items/locations/tags go into the active one.
+ * Backed by [CollectionsViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionsScreen(viewModel: CollectionsViewModel = viewModel()) {

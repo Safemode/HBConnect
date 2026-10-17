@@ -26,6 +26,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.LocalDate
 
+/**
+ * Bill of materials tool: downloads the server's CSV report of every item and its value to a
+ * document the user picks. Backed by [BillOfMaterialsViewModel].
+ */
 @Composable
 fun BillOfMaterialsScreen(viewModel: BillOfMaterialsViewModel = viewModel()) {
     val context = LocalContext.current

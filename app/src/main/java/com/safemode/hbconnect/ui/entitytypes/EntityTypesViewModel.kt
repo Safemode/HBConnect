@@ -14,6 +14,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Backs the Entity types screen: lists the group's entity types and creates/updates/deletes them.
+ *
+ * Follows the list-screen pattern used across the app: [state] holds the one-shot load result
+ * (loading/success/error/not-configured) and [refreshing] drives the pull-to-refresh spinner.
+ * [load] shows the full-screen spinner; [reloadSilently] refetches without it (used for background
+ * refreshes so the list doesn't flash). A reachability callback silently reloads when the server
+ * comes back, so a screen opened while offline fills in once the connection returns.
+ */
 class EntityTypesViewModel : ViewModel() {
     private val repository = Graph.repository
     private val settings = Graph.settingsRepository

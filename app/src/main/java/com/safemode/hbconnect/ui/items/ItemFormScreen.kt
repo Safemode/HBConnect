@@ -95,6 +95,11 @@ private fun formFactory(itemId: String?, parentId: String?) = object : ViewModel
         ItemFormViewModel(itemId, parentId) as T
 }
 
+/**
+ * Add/edit item form: name, quantity, location, type, tags, identifiers, purchase/warranty/insured
+ * details, notes, and photos. Supports barcode lookup to prefill fields and inline tag creation.
+ * Backed by [ItemFormViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ItemFormScreen(

@@ -70,6 +70,10 @@ import com.safemode.hbconnect.ui.common.verticalScrollbar
 
 private enum class BulkDialog { MOVE, TAGS, QUANTITY }
 
+/**
+ * Items list: a searchable, sortable list of the collection's items with a show-archived toggle and
+ * a bulk-select mode (move, tag, set quantity, delete). Backed by [ItemsViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ItemsScreen(

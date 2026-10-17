@@ -17,6 +17,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Backs the Templates screen: lists entity templates and creates/updates/deletes them, and spawns a
+ * new item from a template's defaults ([createItem]). Follows the shared list-screen pattern ([load]
+ * with a spinner, [reloadSilently] without) and refreshes silently when the server reconnects. The
+ * location picker used by "create item" is loaded lazily on first use ([loadLocations]).
+ */
 class EntityTemplatesViewModel : ViewModel() {
     private val repository = Graph.repository
     private val settings = Graph.settingsRepository

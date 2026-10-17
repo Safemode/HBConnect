@@ -54,6 +54,11 @@ import com.safemode.hbconnect.ui.common.Option
 import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 
+/**
+ * Server screen: a selector to switch between saved servers plus the connection form (scheme, host,
+ * port, and either username/password or an API key). Connects and validates against the server, and
+ * offers log out. Credentials are never stored in plaintext. Backed by [ServerViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerScreen(viewModel: ServerViewModel = viewModel()) {

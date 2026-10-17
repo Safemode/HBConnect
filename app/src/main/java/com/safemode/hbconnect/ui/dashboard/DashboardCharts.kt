@@ -33,6 +33,8 @@ fun BreakdownCard(
 ) {
     val rows = data.filter { it.total > 0.0 }.sortedByDescending { it.total }.take(maxRows)
     if (rows.isEmpty()) return
+    // Bars are drawn as a fraction of the largest row, so the top entry fills the width and the
+    // rest scale relative to it. coerceAtLeast guards against a divide-by-zero on all-zero data.
     val top = rows.first().total.coerceAtLeast(0.01)
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

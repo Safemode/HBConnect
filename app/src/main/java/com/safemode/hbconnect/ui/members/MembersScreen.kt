@@ -58,6 +58,10 @@ import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 
+/**
+ * Members & invitations: lists the collection's members, invites new ones (with a chosen use count
+ * and expiry), and removes members or revokes invitations. Backed by [MembersViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MembersScreen(viewModel: MembersViewModel = viewModel()) {

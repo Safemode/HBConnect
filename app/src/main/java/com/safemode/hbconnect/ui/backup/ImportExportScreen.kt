@@ -35,6 +35,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.LocalDate
 
+/**
+ * CSV import/export tool: export the collection's items to a CSV document, or import a Homebox CSV
+ * to create/update items. Both use the system document picker. Backed by [ImportExportViewModel].
+ */
 @Composable
 fun ImportExportScreen(viewModel: ImportExportViewModel = viewModel()) {
     val context = LocalContext.current

@@ -60,6 +60,11 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+/**
+ * Account screen: edit the signed-in user's profile (name/email), change the password, manage
+ * personal API keys (create with an optional expiry, delete), and log out of all login sessions.
+ * Backed by [AccountViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountScreen(viewModel: AccountViewModel = viewModel()) {

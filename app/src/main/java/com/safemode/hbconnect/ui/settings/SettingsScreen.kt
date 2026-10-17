@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +52,12 @@ import com.safemode.hbconnect.data.settings.ThemePreference
 import com.safemode.hbconnect.notifications.MaintenanceReminderScheduler
 import kotlinx.coroutines.flow.first
 
+/**
+ * Settings screen: theme and accent colour, item sort order, offline-cache size, live updates,
+ * maintenance reminders, and other preferences - each saved the moment it changes. The About
+ * section (version, links to the project/issues/developer) is anchored at the bottom. Backed by
+ * [SettingsViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
@@ -266,7 +272,7 @@ private fun LinkRow(label: String, onClick: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         Icon(
-            Icons.Filled.OpenInNew,
+            Icons.AutoMirrored.Filled.OpenInNew,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
         )

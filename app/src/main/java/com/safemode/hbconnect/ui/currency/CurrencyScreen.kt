@@ -40,6 +40,10 @@ import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 
+/**
+ * Currency picker: choose the group's currency (common ones surfaced on top, then the full list);
+ * prices format against it throughout the app. Backed by [CurrencyViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CurrencyScreen(viewModel: CurrencyViewModel = viewModel()) {

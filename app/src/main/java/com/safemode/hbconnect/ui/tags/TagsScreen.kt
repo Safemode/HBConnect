@@ -50,6 +50,10 @@ import com.safemode.hbconnect.ui.common.TreeNodeRow
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.flattenTree
 
+/**
+ * Tags screen: list and inline add/edit/delete the collection's tags (which can nest under a
+ * parent). Backed by [TagsViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TagsScreen(onBack: () -> Unit, viewModel: TagsViewModel = viewModel()) {

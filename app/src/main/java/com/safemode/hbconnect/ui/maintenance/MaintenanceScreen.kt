@@ -57,6 +57,10 @@ private fun factory(entityId: String) = object : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T = MaintenanceViewModel(entityId) as T
 }
 
+/**
+ * Per-item maintenance log: lists an item's scheduled/completed upkeep and adds, edits, or deletes
+ * entries (name, description, cost, dates). Backed by [MaintenanceViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaintenanceScreen(

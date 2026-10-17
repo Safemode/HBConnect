@@ -14,6 +14,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Backs the Locations screen: lists the group's location entities (read-only here; add/edit/delete
+ * live on the location form). Follows the shared list-screen pattern - [load] with a full-screen
+ * spinner, [reloadSilently] without one - and refreshes silently when the server becomes reachable
+ * and on a live-update ENTITY event, so locations added or moved elsewhere appear without a reload.
+ */
 class LocationsViewModel : ViewModel() {
     private val repository = Graph.repository
     private val settings = Graph.settingsRepository
