@@ -1,6 +1,7 @@
 package com.safemode.hbconnect.ui.currency
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +65,11 @@ fun CurrencyScreen(viewModel: CurrencyViewModel = viewModel()) {
     }
 }
 
+// Shown first, in this order, as a shortcut above the full alphabetical list.
+private val COMMON_CODES = listOf(
+    "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR", "NZD",
+)
+
 @Composable
 private fun CurrencyList(
     currencies: List<Currency>,
@@ -72,12 +78,19 @@ private fun CurrencyList(
     onSelect: (String) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    val searching = query.isNotBlank()
+
     val filtered = remember(query, currencies) {
-        if (query.isBlank()) currencies
-        else currencies.filter {
+        currencies.filter {
             it.code?.contains(query, ignoreCase = true) == true ||
                 it.name?.contains(query, ignoreCase = true) == true
         }
+    }
+    val common = remember(currencies) {
+        COMMON_CODES.mapNotNull { code -> currencies.firstOrNull { it.code.equals(code, ignoreCase = true) } }
+    }
+    val selected = remember(currencies, activeCode) {
+        currencies.firstOrNull { it.code != null && it.code.equals(activeCode, ignoreCase = true) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -92,17 +105,79 @@ private fun CurrencyList(
                 .padding(16.dp),
         )
         LazyColumn(modifier = Modifier.weight(1f).navigationBarsPadding()) {
-            items(filtered, key = { it.code ?: it.name ?: it.hashCode().toString() }) { currency ->
-                val code = currency.code
-                CurrencyRow(
-                    currency = currency,
-                    selected = code != null && code.equals(activeCode, ignoreCase = true),
-                    enabled = !busy && code != null,
-                    onClick = { if (code != null) onSelect(code) },
-                )
+            if (searching) {
+                items(filtered, key = { "f_${it.code ?: it.name}" }) { currency ->
+                    CurrencyRow(
+                        currency = currency,
+                        selected = currency.code.equals(activeCode, ignoreCase = true),
+                        enabled = !busy && currency.code != null,
+                        onClick = { currency.code?.let(onSelect) },
+                    )
+                }
+            } else {
+                item(key = "current") { SelectedBanner(selected) }
+                if (common.isNotEmpty()) {
+                    item(key = "common_label") { SectionLabel("Common") }
+                    items(common, key = { "c_${it.code}" }) { currency ->
+                        CurrencyRow(
+                            currency = currency,
+                            selected = currency.code.equals(activeCode, ignoreCase = true),
+                            enabled = !busy && currency.code != null,
+                            onClick = { currency.code?.let(onSelect) },
+                        )
+                    }
+                }
+                item(key = "all_label") { SectionLabel("All currencies") }
+                items(currencies, key = { "a_${it.code ?: it.name}" }) { currency ->
+                    CurrencyRow(
+                        currency = currency,
+                        selected = currency.code.equals(activeCode, ignoreCase = true),
+                        enabled = !busy && currency.code != null,
+                        onClick = { currency.code?.let(onSelect) },
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun SelectedBanner(currency: Currency?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Current",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                if (currency == null) "—"
+                else "${currency.code ?: "?"} — ${currency.name ?: "Unknown"}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        currency?.symbol?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+    )
 }
 
 @Composable
