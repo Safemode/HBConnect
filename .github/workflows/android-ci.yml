@@ -28,9 +28,12 @@ jobs:
           java-version: '21'
 
       # Installs the Android command-line tools and accepts the SDK licenses so the build can
-      # provision whatever build-tools it needs.
+      # provision whatever build-tools it needs. Override the default packages input: it otherwise
+      # installs the obsolete "tools" package, which no longer exists and fails the step.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       # compileSdk is new enough that the runner image may not ship its platform; install it so the
       # build doesn't fail looking for android-37.
