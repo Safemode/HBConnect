@@ -90,10 +90,13 @@ fun HBConnectRoot() {
             }
         }
     }
-    // launchSingleTop so repeated Add taps (the bar shows on the form too) reuse the open form
-    // instead of stacking another copy on top.
+    // The bar shows on the item form too. If we're already on a form, do nothing — re-navigating
+    // would flash (and clobber an in-progress edit). launchSingleTop still guards a rapid double-tap
+    // from elsewhere, where currentRoute hasn't updated between the two taps yet.
     val onAddItem: () -> Unit = {
-        navController.navigate(Routes.itemForm()) { launchSingleTop = true }
+        if (currentRoute != Routes.ITEM_FORM) {
+            navController.navigate(Routes.itemForm()) { launchSingleTop = true }
+        }
     }
 
     val context = LocalContext.current
