@@ -13,11 +13,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.safemode.hbconnect.data.settings.AuthMode
+import com.safemode.hbconnect.ui.common.Option
+import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,7 +60,11 @@ fun ServerScreen(viewModel: ServerViewModel = viewModel()) {
     val form by viewModel.form.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
+    val servers by viewModel.servers.collectAsStateWithLifecycle()
+    val activeServerId by viewModel.activeServerId.collectAsStateWithLifecycle()
+    val addingNew by viewModel.addingNew.collectAsStateWithLifecycle()
     var showSecret by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
         Column(
@@ -66,6 +75,44 @@ fun ServerScreen(viewModel: ServerViewModel = viewModel()) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // ---- Servers ----
+            if (servers.isNotEmpty() || addingNew) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("Servers", style = MaterialTheme.typography.titleMedium)
+                        if (servers.isNotEmpty()) {
+                            OptionDropdownField(
+                                label = "Active server",
+                                options = servers.map { Option(it.displayName, it.id) },
+                                selectedValue = if (addingNew) null else activeServerId,
+                                onSelect = { option -> option.value?.let(viewModel::selectServer) },
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = viewModel::startNewServer, enabled = !busy && !addingNew) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Text("  Add server")
+                            }
+                            if (servers.isNotEmpty() && !addingNew) {
+                                TextButton(onClick = { confirmRemove = true }, enabled = !busy) {
+                                    Text("Remove this server")
+                                }
+                            }
+                        }
+                        if (addingNew) {
+                            Text(
+                                "New server. Enter its details below and connect to save it.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
             // ---- Connection ----
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -248,6 +295,26 @@ fun ServerScreen(viewModel: ServerViewModel = viewModel()) {
                     }
                 }
             }
+        }
+
+        if (confirmRemove) {
+            AlertDialog(
+                onDismissRequest = { confirmRemove = false },
+                title = { Text("Remove this server?") },
+                text = {
+                    Text(
+                        "Remove this server connection from the app? Its saved credentials will be " +
+                            "deleted from this device.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmRemove = false
+                        viewModel.deleteActiveServer()
+                    }) { Text("Remove") }
+                },
+                dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+            )
         }
     }
 }
