@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dns
@@ -31,6 +32,7 @@ object Routes {
     const val IMPORT_EXPORT = "import-export"
     const val COLLECTIONS = "collections"
     const val MEMBERS = "members"
+    const val CURRENCY = "currency"
     const val SERVER = "server"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
@@ -73,6 +75,7 @@ enum class BottomTab(val route: String, val label: String, val icon: ImageVector
 enum class MoreDestination(val route: String, val label: String, val icon: ImageVector) {
     COLLECTIONS(Routes.COLLECTIONS, "Collections", Icons.Filled.Collections),
     MEMBERS(Routes.MEMBERS, "Members", Icons.Filled.People),
+    CURRENCY(Routes.CURRENCY, "Currency", Icons.Filled.AttachMoney),
     VALUE_BREAKDOWN(Routes.VALUE_BREAKDOWN, "Value breakdown", Icons.Filled.BarChart),
     ENTITY_TYPES(Routes.ENTITY_TYPES, "Entity types", Icons.Filled.Category),
     TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),

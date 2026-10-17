@@ -20,6 +20,7 @@ import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
+import com.safemode.hbconnect.data.remote.models.GroupUpdate
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreate
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
@@ -91,6 +92,10 @@ interface HomeboxApi {
     /** The signed-in user's group, including its configured currency code. */
     @GET("api/v1/groups")
     suspend fun group(): Response<Group>
+
+    /** Updates the group (owner only). Sends name + currency; both are written as given. */
+    @PUT("api/v1/groups")
+    suspend fun updateGroup(@Body body: GroupUpdate): Response<Group>
 
     /** Every collection (group) the signed-in user belongs to, for the collection switcher. */
     @GET("api/v1/groups/all")

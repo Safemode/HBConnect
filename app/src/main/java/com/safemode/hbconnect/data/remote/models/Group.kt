@@ -6,3 +6,9 @@ data class Group(
     val name: String? = null,
     val currency: String? = null,
 )
+
+/** Body for PUT /api/v1/groups. Both fields are written as-is, so send the current name. */
+data class GroupUpdate(
+    val name: String,
+    val currency: String,
+)
