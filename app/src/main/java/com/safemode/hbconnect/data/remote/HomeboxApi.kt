@@ -20,6 +20,10 @@ import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
+import com.safemode.hbconnect.data.remote.models.GroupInvitation
+import com.safemode.hbconnect.data.remote.models.GroupInvitationCreate
+import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
+import com.safemode.hbconnect.data.remote.models.GroupMember
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.LoginForm
 import com.safemode.hbconnect.data.remote.models.TagCreate
@@ -91,6 +95,22 @@ interface HomeboxApi {
     /** Every collection (group) the signed-in user belongs to, for the collection switcher. */
     @GET("api/v1/groups/all")
     suspend fun groupsAll(): Response<List<Group>>
+
+    // ---- Group members / invitations ----
+    @GET("api/v1/groups/members")
+    suspend fun groupMembers(): Response<List<GroupMember>>
+
+    @DELETE("api/v1/groups/members/{userId}")
+    suspend fun removeGroupMember(@Path("userId") userId: String): Response<ResponseBody>
+
+    @GET("api/v1/groups/invitations")
+    suspend fun groupInvitations(): Response<List<GroupInvitation>>
+
+    @POST("api/v1/groups/invitations")
+    suspend fun createGroupInvitation(@Body body: GroupInvitationCreate): Response<GroupInvitationCreated>
+
+    @DELETE("api/v1/groups/invitations/{id}")
+    suspend fun deleteGroupInvitation(@Path("id") id: String): Response<ResponseBody>
 
     /** Supported currencies and their symbol/decimal metadata. */
     @GET("api/v1/currencies")
