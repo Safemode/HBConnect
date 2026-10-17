@@ -1,8 +1,16 @@
 package com.safemode.hbconnect.ui.items
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,15 +24,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -44,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,9 +64,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import coil.compose.AsyncImage
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
@@ -69,6 +87,7 @@ import com.safemode.hbconnect.ui.common.Option
 import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.verticalScrollbar
+import java.io.File
 
 @Suppress("UNCHECKED_CAST")
 private fun formFactory(itemId: String?, parentId: String?) = object : ViewModelProvider.Factory {
@@ -92,12 +111,41 @@ fun ItemFormScreen(
     val tags by viewModel.tags.collectAsStateWithLifecycle()
     val loadState by viewModel.load.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
+    val photos by viewModel.photos.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var scanning by remember { mutableStateOf(false) }
     var candidates by remember { mutableStateOf<List<BarcodeProduct>?>(null) }
     var showReset by remember { mutableStateOf(false) }
     var showTagPicker by remember { mutableStateOf(false) }
+
+    // Camera capture: the photo is written to a FileProvider URI and held until the item is saved,
+    // then uploaded as an attachment. The path is saved so it survives rotation in the camera view.
+    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        val path = pendingPhotoPath
+        pendingPhotoPath = null
+        if (success && path != null) viewModel.addPhoto(path)
+        else path?.let { runCatching { File(it).delete() } }
+    }
+    fun launchCamera() {
+        val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
+        val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
+        pendingPhotoPath = file.absolutePath
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        cameraLauncher.launch(uri)
+    }
+    val cameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) launchCamera()
+        else Toast.makeText(context, "Camera permission is needed to take a photo", Toast.LENGTH_LONG).show()
+    }
+    fun takePhoto() {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) launchCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
+    }
 
     val scanLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { code ->
         if (!code.isNullOrBlank()) {
@@ -122,6 +170,8 @@ fun ItemFormScreen(
     val doSave: (Boolean) -> Unit = { addAnother ->
         viewModel.save { ok, err ->
             if (ok) {
+                // On success, err carries only a soft photo-upload warning (the item is saved).
+                if (err != null) Toast.makeText(context, err, Toast.LENGTH_LONG).show()
                 if (addAnother) {
                     viewModel.reset()
                     Toast.makeText(context, "Created — add another", Toast.LENGTH_SHORT).show()
@@ -172,6 +222,10 @@ fun ItemFormScreen(
                 var otherOpen by rememberSaveable {
                     mutableStateOf(form.insured || form.archived || form.notes.isNotBlank())
                 }
+                // One outer dropdown holds all the optional sections; open it when any has data.
+                var detailsOpen by rememberSaveable {
+                    mutableStateOf(identifiersOpen || purchaseOpen || warrantyOpen || otherOpen)
+                }
 
                 Column(
                     modifier = Modifier
@@ -218,6 +272,13 @@ fun ItemFormScreen(
                         onClick = { showTagPicker = true },
                     )
 
+                    PhotosSection(
+                        photos = photos,
+                        onTakePhoto = { takePhoto() },
+                        onRemove = viewModel::removePhoto,
+                    )
+
+                    CollapsibleSection("More details", detailsOpen, { detailsOpen = !detailsOpen }) {
                     CollapsibleSection("Identifiers", identifiersOpen, { identifiersOpen = !identifiersOpen }) {
                         OutlinedTextField(
                             value = form.manufacturer,
@@ -295,6 +356,7 @@ fun ItemFormScreen(
                             label = { Text("Notes") },
                             modifier = Modifier.fillMaxWidth(),
                         )
+                    }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -424,6 +486,53 @@ private fun TagsField(summary: String, onClick: () -> Unit) {
     }
 }
 
+/** Camera capture for the item: a Take-photo button and thumbnails of pending (not-yet-uploaded) shots. */
+@Composable
+private fun PhotosSection(
+    photos: List<String>,
+    onTakePhoto: () -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Photos", style = MaterialTheme.typography.titleMedium)
+        OutlinedButton(onClick = onTakePhoto, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text("Take photo")
+        }
+        if (photos.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                photos.forEach { path ->
+                    Box(modifier = Modifier.size(84.dp)) {
+                        AsyncImage(
+                            model = File(path),
+                            contentDescription = "Item photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize().clip(RoundedCornerShape(10.dp)),
+                        )
+                        IconButton(
+                            onClick = { onRemove(path) },
+                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Remove photo",
+                                tint = MaterialTheme.colorScheme.onError,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.error)
+                                    .padding(2.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
  * Tag multi-select popup: create a tag up top, then toggle any existing ones. The list is a
  * LazyColumn so it scrolls smoothly inside the dialog without fighting a sheet drag.
@@ -501,6 +610,7 @@ private fun TagPickerDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CollapsibleSection(
     title: String,
@@ -508,7 +618,21 @@ private fun CollapsibleSection(
     onToggle: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    // When the user expands a section, scroll it into view so its fields aren't left below the fold.
+    val bringIntoView = remember { BringIntoViewRequester() }
+    var firstRun by remember { mutableStateOf(true) }
+    LaunchedEffect(expanded) {
+        if (firstRun) {
+            firstRun = false
+        } else if (expanded) {
+            bringIntoView.bringIntoView()
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoView),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

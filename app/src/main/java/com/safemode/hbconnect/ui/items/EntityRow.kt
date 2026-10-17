@@ -1,6 +1,7 @@
 package com.safemode.hbconnect.ui.items
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,12 +38,24 @@ fun entityImageUrl(entity: EntitySummary): String? {
     return Graph.repository.attachmentUrl(id, attachmentId)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun EntityRow(entity: EntitySummary, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun EntityRow(
+    entity: EntitySummary,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors = if (selected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        },
     ) {
         Row(
             modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 12.dp),
@@ -54,15 +69,20 @@ fun EntityRow(entity: EntitySummary, onClick: () -> Unit, modifier: Modifier = M
                     .clip(RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (imageUrl != null && !entity.isLocation) {
-                    AsyncImage(
+                when {
+                    selected -> Icon(
+                        Icons.Filled.Check,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(30.dp),
+                    )
+                    imageUrl != null && !entity.isLocation -> AsyncImage(
                         model = imageUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.size(52.dp),
                     )
-                } else {
-                    Icon(
+                    else -> Icon(
                         if (entity.isLocation) Icons.Outlined.Place else Icons.Filled.Inventory2,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
