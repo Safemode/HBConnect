@@ -9,41 +9,60 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 
-/** Routes that keep the bottom bar visible. Everything else (details, forms, More sub-screens) hides it. */
-val bottomBarRoutes = setOf(Routes.DASHBOARD, Routes.ITEMS, Routes.LOCATIONS, Routes.MORE)
+/**
+ * Which tab reads as selected for a given route. Home/Items/Locations map to themselves; every
+ * screen reached from the More hub (including its own sub-screens) keeps More lit. Entity detail
+ * and the add/edit forms belong to no tab, so nothing is highlighted there.
+ */
+fun selectedTabFor(route: String?): BottomTab? = when (route) {
+    Routes.DASHBOARD -> BottomTab.HOME
+    Routes.ITEMS -> BottomTab.ITEMS
+    Routes.LOCATIONS -> BottomTab.LOCATIONS
+    Routes.MORE,
+    Routes.TAGS,
+    Routes.ENTITY_TYPES,
+    Routes.TEMPLATES,
+    Routes.MAINTENANCE_ALL,
+    Routes.SERVER,
+    Routes.SETTINGS,
+    Routes.ABOUT,
+    -> BottomTab.MORE
+    else -> null
+}
 
 /**
- * The app's primary navigation: Home, Items, a center Add action, Locations, and More. Add isn't a
- * tab — it opens the new-item form — so it never shows a selected state.
+ * The app's primary navigation: Home, Items, a center Add action, Locations, and More. It stays
+ * visible on every screen. Add isn't a tab — it opens the new-item form — so it never shows a
+ * selected state.
  */
 @Composable
 fun AppBottomBar(
-    currentRoute: String?,
+    selectedTab: BottomTab?,
     onSelectTab: (BottomTab) -> Unit,
     onAdd: () -> Unit,
 ) {
     NavigationBar {
-        TabItem(BottomTab.HOME, currentRoute, onSelectTab)
-        TabItem(BottomTab.ITEMS, currentRoute, onSelectTab)
+        TabItem(BottomTab.HOME, selectedTab, onSelectTab)
+        TabItem(BottomTab.ITEMS, selectedTab, onSelectTab)
         NavigationBarItem(
             selected = false,
             onClick = onAdd,
             icon = { Icon(Icons.Filled.AddCircle, contentDescription = null) },
             label = { Text("Add") },
         )
-        TabItem(BottomTab.LOCATIONS, currentRoute, onSelectTab)
-        TabItem(BottomTab.MORE, currentRoute, onSelectTab)
+        TabItem(BottomTab.LOCATIONS, selectedTab, onSelectTab)
+        TabItem(BottomTab.MORE, selectedTab, onSelectTab)
     }
 }
 
 @Composable
 private fun RowScope.TabItem(
     tab: BottomTab,
-    currentRoute: String?,
+    selectedTab: BottomTab?,
     onSelectTab: (BottomTab) -> Unit,
 ) {
     NavigationBarItem(
-        selected = currentRoute == tab.route,
+        selected = tab == selectedTab,
         onClick = { onSelectTab(tab) },
         icon = { Icon(tab.icon, contentDescription = null) },
         label = { Text(tab.label) },

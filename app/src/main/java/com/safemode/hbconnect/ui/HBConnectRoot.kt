@@ -64,7 +64,7 @@ import com.safemode.hbconnect.ui.more.MoreScreen
 import com.safemode.hbconnect.ui.navigation.AppBottomBar
 import com.safemode.hbconnect.ui.navigation.BottomTab
 import com.safemode.hbconnect.ui.navigation.Routes
-import com.safemode.hbconnect.ui.navigation.bottomBarRoutes
+import com.safemode.hbconnect.ui.navigation.selectedTabFor
 import com.safemode.hbconnect.ui.server.ServerScreen
 import com.safemode.hbconnect.ui.settings.SettingsScreen
 import com.safemode.hbconnect.ui.tags.TagsScreen
@@ -79,7 +79,6 @@ fun HBConnectRoot() {
 
     val serverState by Graph.serverStatus.state.collectAsStateWithLifecycle()
     val showBanner = serverState != ServerReachability.REACHABLE
-    val showBottomBar = currentRoute in bottomBarRoutes
 
     // Tabs use save/restore so each keeps its scroll position, and back always returns to Home.
     val onSelectTab: (BottomTab) -> Unit = { tab ->
@@ -117,19 +116,14 @@ fun HBConnectRoot() {
     }
     Column(modifier = rootModifier) {
         ConnectivityBanner(state = serverState)
-        // On top-level destinations the bottom bar owns the system navigation-bar inset, so consume
-        // it here to stop the screens' own Scaffolds from padding for it a second time.
-        val navHostModifier = if (showBottomBar) {
-            Modifier
-                .weight(1f)
-                .consumeWindowInsets(WindowInsets.navigationBars)
-        } else {
-            Modifier.weight(1f)
-        }
+        // The always-visible bottom bar owns the system navigation-bar inset, so consume it here to
+        // stop the screens' own Scaffolds from padding for it a second time.
         NavHost(
             navController = navController,
             startDestination = Routes.DASHBOARD,
-            modifier = navHostModifier,
+            modifier = Modifier
+                .weight(1f)
+                .consumeWindowInsets(WindowInsets.navigationBars),
         ) {
             composable(Routes.DASHBOARD) {
                 MainScaffold("HBConnect") {
@@ -256,13 +250,11 @@ fun HBConnectRoot() {
                 SubScaffold("Settings", onBack = { navController.popBackStack() }) { SettingsScreen() }
             }
         }
-        if (showBottomBar) {
-            AppBottomBar(
-                currentRoute = currentRoute,
-                onSelectTab = onSelectTab,
-                onAdd = onAddItem,
-            )
-        }
+        AppBottomBar(
+            selectedTab = selectedTabFor(currentRoute),
+            onSelectTab = onSelectTab,
+            onAdd = onAddItem,
+        )
     }
 }
 
