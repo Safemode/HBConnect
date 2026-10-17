@@ -54,6 +54,7 @@ import com.safemode.hbconnect.ui.about.AboutScreen
 import com.safemode.hbconnect.ui.attachments.AttachmentsScreen
 import com.safemode.hbconnect.ui.backup.ImportExportScreen
 import com.safemode.hbconnect.ui.collections.CollectionsScreen
+import com.safemode.hbconnect.ui.currency.CurrencyScreen
 import com.safemode.hbconnect.ui.dashboard.DashboardScreen
 import com.safemode.hbconnect.ui.entity.EntityDetailScreen
 import com.safemode.hbconnect.ui.entitytypes.EntityTypesScreen
@@ -216,6 +217,11 @@ fun HBConnectRoot() {
             composable(Routes.MEMBERS) {
                 SubScaffold("Members", onBack = { navController.popBackStack() }) {
                     MembersScreen()
+                }
+            }
+            composable(Routes.CURRENCY) {
+                SubScaffold("Currency", onBack = { navController.popBackStack() }) {
+                    CurrencyScreen()
                 }
             }
             composable(
