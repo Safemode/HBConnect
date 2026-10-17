@@ -212,8 +212,9 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     suspend fun groupInvitations(): Result<List<GroupInvitation>> = call { it.groupInvitations() }
 
-    suspend fun createGroupInvitation(uses: Int): Result<GroupInvitationCreated> =
-        call { it.createGroupInvitation(GroupInvitationCreate(uses = uses)) }
+    /** [expiresAt] is an ISO-8601 instant; null lets the server default it to 24 hours. */
+    suspend fun createGroupInvitation(uses: Int, expiresAt: String? = null): Result<GroupInvitationCreated> =
+        call { it.createGroupInvitation(GroupInvitationCreate(uses = uses, expiresAt = expiresAt)) }
 
     suspend fun deleteGroupInvitation(id: String): Result<Unit> =
         callUnit { it.deleteGroupInvitation(id) }

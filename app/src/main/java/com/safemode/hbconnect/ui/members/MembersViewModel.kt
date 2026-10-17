@@ -57,12 +57,15 @@ class MembersViewModel : ViewModel() {
         }
     }
 
-    /** Creates an invitation good for [uses] joins; returns the created invite (with its token). */
-    fun createInvitation(uses: Int, onResult: (GroupInvitationCreated?, String?) -> Unit) {
+    /**
+     * Creates an invitation good for [uses] joins, expiring at [expiresAt] (ISO-8601) or the server
+     * default of 24 hours when null; returns the created invite (with its token).
+     */
+    fun createInvitation(uses: Int, expiresAt: String?, onResult: (GroupInvitationCreated?, String?) -> Unit) {
         if (_busy.value) return
         viewModelScope.launch {
             _busy.value = true
-            val result = repository.createGroupInvitation(uses)
+            val result = repository.createGroupInvitation(uses, expiresAt)
             _busy.value = false
             result.fold(
                 onSuccess = { created ->

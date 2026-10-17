@@ -21,13 +21,18 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +44,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
@@ -119,9 +127,9 @@ fun MembersScreen(viewModel: MembersViewModel = viewModel()) {
     if (showInviteDialog) {
         CreateInviteDialog(
             onDismiss = { showInviteDialog = false },
-            onCreate = { uses ->
+            onCreate = { uses, expiresAt ->
                 showInviteDialog = false
-                viewModel.createInvitation(uses) { created, err ->
+                viewModel.createInvitation(uses, expiresAt) { created, err ->
                     if (created != null) createdInvite = created else toast(err ?: "Couldn't create invitation.")
                 }
             },
@@ -207,19 +215,24 @@ private fun InvitationRow(invite: GroupInvitation, onDelete: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateInviteDialog(onDismiss: () -> Unit, onCreate: (Int) -> Unit) {
+private fun CreateInviteDialog(onDismiss: () -> Unit, onCreate: (Int, String?) -> Unit) {
     var uses by remember { mutableStateOf("1") }
     val parsed = uses.toIntOrNull()
     val valid = parsed != null && parsed in 1..100
+    // null = use the server default of 24 hours; otherwise the selected date (UTC day).
+    var expiryMillis by remember { mutableStateOf<Long?>(null) }
+    var showPicker by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Invite member") },
         text = {
             Column {
                 Text(
-                    "Creates an invite token to share. It expires in 24 hours and can be used the " +
-                        "number of times you set.",
+                    "Creates an invite token to share. Choose how many times it can be used and " +
+                        "when it expires.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -234,13 +247,77 @@ private fun CreateInviteDialog(onDismiss: () -> Unit, onCreate: (Int) -> Unit) {
                         .fillMaxWidth()
                         .padding(top = 12.dp),
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Expires", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            expiryLabel(expiryMillis),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { showPicker = true }) {
+                        Text(if (expiryMillis == null) "Set date" else "Change")
+                    }
+                }
+                if (expiryMillis != null) {
+                    TextButton(onClick = { expiryMillis = null }) { Text("Use default (24 hours)") }
+                }
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = { onCreate(parsed!!) }) { Text("Create") }
+            TextButton(
+                enabled = valid,
+                onClick = { onCreate(parsed!!, expiryMillis?.let(::endOfDayIso)) },
+            ) { Text("Create") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+
+    if (showPicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = expiryMillis ?: (System.currentTimeMillis() + DAY_MS),
+            selectableDates = FutureDates,
+        )
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    expiryMillis = pickerState.selectedDateMillis
+                    showPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } },
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
+
+private const val DAY_MS = 24L * 60 * 60 * 1000
+
+/** Only today or later is selectable, so an invite can't be created already expired. */
+@OptIn(ExperimentalMaterial3Api::class)
+private val FutureDates = object : SelectableDates {
+    override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+        val today = LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        return utcTimeMillis >= today
+    }
+}
+
+private fun expiryLabel(utcDateMillis: Long?): String =
+    if (utcDateMillis == null) "In 24 hours (default)"
+    else "On ${Instant.ofEpochMilli(utcDateMillis).atZone(ZoneOffset.UTC).toLocalDate()}"
+
+/** The selected UTC day as an end-of-day ISO-8601 instant, e.g. 2026-10-25T23:59:59Z. */
+private fun endOfDayIso(utcDateMillis: Long): String {
+    val date = Instant.ofEpochMilli(utcDateMillis).atZone(ZoneOffset.UTC).toLocalDate()
+    return date.atTime(23, 59, 59).toInstant(ZoneOffset.UTC).toString()
 }
 
 @Composable
