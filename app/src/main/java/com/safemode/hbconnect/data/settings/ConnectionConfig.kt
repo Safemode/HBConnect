@@ -20,6 +20,14 @@ enum class ThemePreference(val label: String) {
     MIDNIGHT("Midnight"),
 }
 
+/** How far ahead of a scheduled maintenance date to send a reminder notification. */
+enum class MaintenanceLead(val label: String, val days: Long) {
+    DUE_DAY("On the due date", 0),
+    ONE_DAY("1 day before", 1),
+    THREE_DAYS("3 days before", 3),
+    ONE_WEEK("1 week before", 7),
+}
+
 /** Order for the item list. */
 enum class ItemSortOrder(val label: String) {
     NAME_ASC("Name (A–Z)"),
@@ -58,6 +66,10 @@ data class ConnectionConfig(
      * proxy in front of Homebox can't forward WebSocket upgrades.
      */
     val liveUpdates: Boolean = true,
+    /** When true, a background worker checks scheduled maintenance and posts due reminders. */
+    val maintenanceReminders: Boolean = false,
+    /** How far ahead of the scheduled date a maintenance reminder fires. */
+    val maintenanceLead: MaintenanceLead = MaintenanceLead.DUE_DAY,
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean
