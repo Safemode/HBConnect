@@ -218,6 +218,10 @@ fun ItemFormScreen(
                 var otherOpen by rememberSaveable {
                     mutableStateOf(form.insured || form.archived || form.notes.isNotBlank())
                 }
+                // One outer dropdown holds all the optional sections; open it when any has data.
+                var detailsOpen by rememberSaveable {
+                    mutableStateOf(identifiersOpen || purchaseOpen || warrantyOpen || otherOpen)
+                }
 
                 Column(
                     modifier = Modifier
@@ -270,6 +274,7 @@ fun ItemFormScreen(
                         onRemove = viewModel::removePhoto,
                     )
 
+                    CollapsibleSection("More details", detailsOpen, { detailsOpen = !detailsOpen }) {
                     CollapsibleSection("Identifiers", identifiersOpen, { identifiersOpen = !identifiersOpen }) {
                         OutlinedTextField(
                             value = form.manufacturer,
@@ -347,6 +352,7 @@ fun ItemFormScreen(
                             label = { Text("Notes") },
                             modifier = Modifier.fillMaxWidth(),
                         )
+                    }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
