@@ -13,10 +13,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +54,7 @@ fun CollectionsScreen(viewModel: CollectionsViewModel = viewModel()) {
     val context = LocalContext.current
 
     var showJoin by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<Group?>(null) }
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
         PullToRefreshBox(
@@ -72,6 +75,7 @@ fun CollectionsScreen(viewModel: CollectionsViewModel = viewModel()) {
                     activeId = activeId,
                     onSelect = viewModel::select,
                     onJoin = { showJoin = true },
+                    onRename = { renameTarget = it },
                 )
             }
         }
@@ -92,6 +96,23 @@ fun CollectionsScreen(viewModel: CollectionsViewModel = viewModel()) {
             },
         )
     }
+
+    renameTarget?.let { group ->
+        RenameDialog(
+            currentName = group.name.orEmpty(),
+            onDismiss = { renameTarget = null },
+            onRename = { newName ->
+                renameTarget = null
+                viewModel.rename(group, newName) { ok, err ->
+                    Toast.makeText(
+                        context,
+                        if (ok) "Collection renamed." else err ?: "Couldn't rename.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -100,6 +121,7 @@ private fun CollectionList(
     activeId: String?,
     onSelect: (Group) -> Unit,
     onJoin: () -> Unit,
+    onRename: (Group) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxWidth()) {
         item(key = "header") {
@@ -134,6 +156,7 @@ private fun CollectionList(
                     name = group.name?.takeIf { it.isNotBlank() } ?: "Untitled collection",
                     selected = group.id != null && group.id == activeId,
                     onClick = { onSelect(group) },
+                    onRename = { onRename(group) },
                 )
             }
         }
@@ -141,12 +164,12 @@ private fun CollectionList(
 }
 
 @Composable
-private fun CollectionRow(name: String, selected: Boolean, onClick: () -> Unit) {
+private fun CollectionRow(name: String, selected: Boolean, onClick: () -> Unit, onRename: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(start = 16.dp, end = 4.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onClick)
@@ -159,7 +182,39 @@ private fun CollectionRow(name: String, selected: Boolean, onClick: () -> Unit) 
                 .weight(1f)
                 .padding(start = 8.dp),
         )
+        IconButton(onClick = onRename) {
+            Icon(
+                Icons.Filled.Edit,
+                contentDescription = "Rename $name",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+}
+
+@Composable
+private fun RenameDialog(currentName: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var name by remember { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename collection") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Collection name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank() && name.trim() != currentName.trim(),
+                onClick = { onRename(name) },
+            ) { Text("Rename") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

@@ -164,9 +164,14 @@ class ApiProvider(
 class AuthInterceptor(private val configProvider: () -> ConnectionConfig) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val config = configProvider()
-        val builder = chain.request().newBuilder()
+        val request = chain.request()
+        val builder = request.newBuilder()
         config.authHeader()?.let { builder.header("Authorization", it) }
-        config.tenantHeader()?.let { builder.header("X-Tenant", it) }
+        // A request may target a specific collection via its own X-Tenant header (e.g. renaming a
+        // non-active collection); only fall back to the active collection when it set none.
+        if (request.header("X-Tenant") == null) {
+            config.tenantHeader()?.let { builder.header("X-Tenant", it) }
+        }
         builder.header("Accept", "application/json")
         return chain.proceed(builder.build())
     }

@@ -63,6 +63,11 @@ object Graph {
     private val _activeGroupName = MutableStateFlow<String?>(null)
     val activeGroupName: StateFlow<String?> = _activeGroupName.asStateFlow()
 
+    /** Updates the glanceable active-collection name (e.g. after a rename), keeping the header fresh. */
+    fun setActiveGroupName(name: String?) {
+        _activeGroupName.value = name?.ifBlank { null }
+    }
+
     /**
      * An entity id a notification asked the app to open, consumed by the UI once navigated. Set from
      * [MainActivity] when launched from a maintenance reminder.

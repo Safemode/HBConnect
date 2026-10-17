@@ -56,12 +56,44 @@ class CollectionsViewModel : ViewModel() {
             return
         }
         // The default group (used when no override is set) is whatever GET /groups returns.
-        val defaultId = repository.group().getOrNull()?.id
-        _activeId.value = config.activeGroupId.ifBlank { defaultId }
-        _state.value = repository.groupsAll().fold(
+        val defaultGroup = repository.group().getOrNull()
+        val activeId = config.activeGroupId.ifBlank { defaultGroup?.id }
+        _activeId.value = activeId
+        val result = repository.groupsAll()
+        _state.value = result.fold(
             onSuccess = { groups -> UiState.Success(groups.sortedBy { it.name?.lowercase() }) },
             onFailure = { UiState.Error(it.message ?: "Failed to load collections.") },
         )
+        // Keep the glanceable active-collection name (shown on the More hub) in sync, so a rename
+        // done here - or anywhere - is reflected there too.
+        val active = result.getOrNull()?.firstOrNull { it.id == activeId } ?: defaultGroup
+        Graph.setActiveGroupName(active?.name)
+    }
+
+    /**
+     * Renames [group] to [newName]. Sends the collection's current currency unchanged (the server
+     * writes both fields), fetching it first only if the list didn't carry one. Targets the
+     * collection's own tenant, so a collection other than the active one can be renamed too.
+     */
+    fun rename(group: Group, newName: String, onResult: (Boolean, String?) -> Unit) {
+        val id = group.id
+        val name = newName.trim()
+        if (id == null || name.isBlank()) {
+            onResult(false, "Enter a name.")
+            return
+        }
+        viewModelScope.launch {
+            val currency = group.currency?.ifBlank { null }
+                ?: repository.group(tenant = id).getOrNull()?.currency
+                ?: ""
+            repository.updateGroup(name, currency, tenant = id).fold(
+                onSuccess = {
+                    reload()
+                    onResult(true, null)
+                },
+                onFailure = { onResult(false, it.message ?: "Couldn't rename the collection.") },
+            )
+        }
     }
 
     /** Switches the active collection. No-op if already active. */

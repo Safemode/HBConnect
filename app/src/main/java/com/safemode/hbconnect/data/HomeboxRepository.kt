@@ -226,14 +226,18 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         acc
     }
 
-    suspend fun group(): Result<Group> = call { it.group() }
+    /** A group - the active collection, or the one named by [tenant]. */
+    suspend fun group(tenant: String? = null): Result<Group> = call { it.group(tenant) }
 
     /** Every collection (group) the user belongs to. */
     suspend fun groupsAll(): Result<List<Group>> = call { it.groupsAll() }
 
-    /** Updates the group's name and currency (owner only). */
-    suspend fun updateGroup(name: String, currency: String): Result<Group> =
-        call { it.updateGroup(GroupUpdate(name = name, currency = currency)) }
+    /**
+     * Updates a group's name and currency (owner only). [tenant] targets a specific collection
+     * instead of the active one, so a collection other than the current one can be renamed.
+     */
+    suspend fun updateGroup(name: String, currency: String, tenant: String? = null): Result<Group> =
+        call { it.updateGroup(GroupUpdate(name = name, currency = currency), tenant) }
 
     // ---- Group members / invitations ----
     suspend fun groupMembers(): Result<List<GroupMember>> = call { it.groupMembers() }

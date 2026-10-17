@@ -51,6 +51,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Headers
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
@@ -119,13 +120,22 @@ interface HomeboxApi {
         @Query("end") end: String? = null,
     ): Response<ValueOverTime>
 
-    /** The signed-in user's group, including its configured currency code. */
+    /**
+     * A group (the active collection, or the one named by [tenant]), including its currency code.
+     * [tenant] overrides the active collection's X-Tenant header for this request.
+     */
     @GET("api/v1/groups")
-    suspend fun group(): Response<Group>
+    suspend fun group(@Header("X-Tenant") tenant: String? = null): Response<Group>
 
-    /** Updates the group (owner only). Sends name + currency; both are written as given. */
+    /**
+     * Updates a group (owner only). Sends name + currency; both are written as given. [tenant]
+     * targets a specific collection (its X-Tenant) instead of the active one.
+     */
     @PUT("api/v1/groups")
-    suspend fun updateGroup(@Body body: GroupUpdate): Response<Group>
+    suspend fun updateGroup(
+        @Body body: GroupUpdate,
+        @Header("X-Tenant") tenant: String? = null,
+    ): Response<Group>
 
     /** Every collection (group) the signed-in user belongs to, for the collection switcher. */
     @GET("api/v1/groups/all")
