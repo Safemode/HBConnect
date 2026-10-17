@@ -99,6 +99,7 @@ private fun CollectionRow(name: String, selected: Boolean, onClick: () -> Unit) 
         Text(
             name,
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             modifier = Modifier
                 .weight(1f)
