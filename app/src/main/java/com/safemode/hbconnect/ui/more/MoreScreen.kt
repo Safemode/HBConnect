@@ -26,6 +26,7 @@ import com.safemode.hbconnect.ui.navigation.MoreDestination
 
 /** Management entries live at the top; server/settings/about are pinned to the bottom. */
 private val bottomItems = setOf(
+    MoreDestination.ACCOUNT,
     MoreDestination.SERVER,
     MoreDestination.SETTINGS,
     MoreDestination.ABOUT,
