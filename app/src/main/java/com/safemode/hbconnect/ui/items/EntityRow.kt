@@ -36,9 +36,9 @@ fun entityImageUrl(entity: EntitySummary): String? {
 }
 
 @Composable
-fun EntityRow(entity: EntitySummary, onClick: () -> Unit) {
+fun EntityRow(entity: EntitySummary, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
     ) {

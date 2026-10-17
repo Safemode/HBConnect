@@ -10,7 +10,7 @@ the older labels.
 ## Getting started
 
 1. Build & install the app (Android Studio, or `./gradlew installDebug`).
-2. Open **Server** from the navigation drawer and enter:
+2. Open **Server** from the **More** tab and enter:
    - **Scheme** (HTTP/HTTPS), **Host / IP**, and optional **Port** (Homebox's default is `7745`).
    - **Username / password** — signs in via `/api/v1/users/login` and stores the returned bearer
      token on-device (encrypted); your password is never saved. Or switch to **API key** and paste
@@ -29,7 +29,8 @@ enabled in the manifest.
 ## Architecture
 
 - **UI:** Jetpack Compose + Material 3 (dynamic color on Android 12+), Navigation Compose, a
-  navigation drawer, and a `ViewModel` + `StateFlow` per screen.
+  bottom navigation bar (Home / Items / Add / Locations / More), and a `ViewModel` + `StateFlow`
+  per screen.
 - **Networking:** Retrofit + OkHttp + Moshi. The base URL is built dynamically from the saved
   connection settings; an `AuthInterceptor` injects the `Authorization: Bearer …` header on every
   request (login returns the token already prefixed; API keys are normalized to carry one `Bearer`).

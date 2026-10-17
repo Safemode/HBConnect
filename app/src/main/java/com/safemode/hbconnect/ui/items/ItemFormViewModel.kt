@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.EntityCreate
+import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
+import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +39,16 @@ data class ItemForm(
     val archived: Boolean = false,
 )
 
+/**
+ * In-memory draft of the generic "New item" form (the bottom-bar Add). It outlives the form's
+ * back-stack entry, so leaving the form — switching tabs, pressing back — keeps what was typed, and
+ * reopening Add restores it. A successful save clears it. Edits and "add item here" (preset parent)
+ * flows don't use it. Process death discards the draft.
+ */
+object ItemDraftStore {
+    var draft: ItemForm? = null
+}
+
 class ItemFormViewModel(
     private val itemId: String?,
     private val presetParentId: String?,
@@ -44,6 +56,9 @@ class ItemFormViewModel(
     private val repository = Graph.repository
 
     val isEdit: Boolean = !itemId.isNullOrBlank()
+
+    /** Only the plain Add flow drafts; editing and add-here (preset parent) always start clean. */
+    private val usesDraft: Boolean = !isEdit && presetParentId.isNullOrBlank()
 
     private val _form = MutableStateFlow(ItemForm(parentId = presetParentId?.ifBlank { null }))
     val form: StateFlow<ItemForm> = _form.asStateFlow()
@@ -86,36 +101,71 @@ class ItemFormViewModel(
                     return@launch
                 }
                 original = entity
-                _form.value = ItemForm(
-                    name = entity.name.orEmpty(),
-                    description = entity.description.orEmpty(),
-                    quantity = (entity.quantity?.toInt() ?: 1).toString(),
-                    parentId = entity.parent?.id,
-                    entityTypeId = entity.entityType?.id,
-                    tagIds = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
-                    manufacturer = entity.manufacturer.orEmpty(),
-                    modelNumber = entity.modelNumber.orEmpty(),
-                    serialNumber = entity.serialNumber.orEmpty(),
-                    notes = entity.notes.orEmpty(),
-                    purchaseFrom = entity.purchaseFrom.orEmpty(),
-                    purchasePrice = entity.purchasePrice?.let { formatNum(it) }.orEmpty(),
-                    purchaseDate = entity.purchaseDate?.substringBefore('T').orEmpty(),
-                    warrantyExpires = entity.warrantyExpires?.substringBefore('T').orEmpty(),
-                    lifetimeWarranty = entity.lifetimeWarranty == true,
-                    warrantyDetails = entity.warrantyDetails.orEmpty(),
-                    insured = entity.insured == true,
-                    archived = entity.archived == true,
-                )
+                _form.value = formFrom(entity)
             } else {
-                // Default the entity type to the first item type when creating.
-                _form.value = _form.value.copy(entityTypeId = _itemTypes.value.firstOrNull()?.id)
+                val restored = if (usesDraft) ItemDraftStore.draft else null
+                // Restore a saved draft, otherwise default the entity type to the first item type.
+                _form.value = restored
+                    ?: _form.value.copy(entityTypeId = _itemTypes.value.firstOrNull()?.id)
             }
             _load.value = UiState.Success(Unit)
         }
     }
 
     fun update(transform: (ItemForm) -> ItemForm) {
-        _form.value = transform(_form.value)
+        setForm(transform(_form.value))
+    }
+
+    /** Builds the editable form from a loaded entity. */
+    private fun formFrom(entity: EntityOut) = ItemForm(
+        name = entity.name.orEmpty(),
+        description = entity.description.orEmpty(),
+        quantity = (entity.quantity?.toInt() ?: 1).toString(),
+        parentId = entity.parent?.id,
+        entityTypeId = entity.entityType?.id,
+        tagIds = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
+        manufacturer = entity.manufacturer.orEmpty(),
+        modelNumber = entity.modelNumber.orEmpty(),
+        serialNumber = entity.serialNumber.orEmpty(),
+        notes = entity.notes.orEmpty(),
+        purchaseFrom = entity.purchaseFrom.orEmpty(),
+        purchasePrice = entity.purchasePrice?.let { formatNum(it) }.orEmpty(),
+        purchaseDate = entity.purchaseDate?.substringBefore('T').orEmpty(),
+        warrantyExpires = entity.warrantyExpires?.substringBefore('T').orEmpty(),
+        lifetimeWarranty = entity.lifetimeWarranty == true,
+        warrantyDetails = entity.warrantyDetails.orEmpty(),
+        insured = entity.insured == true,
+        archived = entity.archived == true,
+    )
+
+    /**
+     * Clears the form. Editing reverts to the loaded values; a new item goes back to blank defaults
+     * and drops the draft. Also clears the created-this-session id so the next save starts fresh —
+     * which is what "Create and add another" relies on.
+     */
+    fun reset() {
+        if (isEdit) {
+            original?.let { _form.value = formFrom(it) }
+        } else {
+            createdId = null
+            original = null
+            _form.value = ItemForm(
+                parentId = presetParentId?.ifBlank { null },
+                entityTypeId = _itemTypes.value.firstOrNull()?.id,
+            )
+            clearDraft()
+        }
+    }
+
+    /** Applies a new form value and mirrors it into the draft store for the plain Add flow. */
+    private fun setForm(new: ItemForm) {
+        _form.value = new
+        if (usesDraft) ItemDraftStore.draft = new
+    }
+
+    /** Discards the saved draft once the item has been committed. */
+    private fun clearDraft() {
+        if (usesDraft) ItemDraftStore.draft = null
     }
 
     /** Looks up a scanned barcode; [onResult] gets the candidate products, or an error message. */
@@ -134,19 +184,46 @@ class ItemFormViewModel(
      * barcode databases often return very long titles/descriptions that would 422 on save.
      */
     fun applyBarcodeProduct(p: BarcodeProduct) {
-        _form.value = _form.value.copy(
-            name = _form.value.name.ifBlank { p.item?.name?.trim()?.take(255).orEmpty() },
-            description = _form.value.description.ifBlank { p.item?.description?.trim()?.take(1000).orEmpty() },
-            manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim()?.take(255).orEmpty() },
-            modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim()?.take(255).orEmpty() },
+        setForm(
+            _form.value.copy(
+                name = _form.value.name.ifBlank { p.item?.name?.trim()?.take(255).orEmpty() },
+                description = _form.value.description.ifBlank { p.item?.description?.trim()?.take(1000).orEmpty() },
+                manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim()?.take(255).orEmpty() },
+                modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim()?.take(255).orEmpty() },
+            ),
         )
     }
 
     fun toggleTag(tagId: String) {
         val current = _form.value.tagIds
-        _form.value = _form.value.copy(
-            tagIds = if (tagId in current) current - tagId else current + tagId,
+        setForm(
+            _form.value.copy(
+                tagIds = if (tagId in current) current - tagId else current + tagId,
+            ),
         )
+    }
+
+    /** Creates a tag, adds it to the pickable list, and selects it. [onResult] reports success. */
+    fun createTag(name: String, onResult: (Boolean, String?) -> Unit) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            onResult(false, "Tag name is required.")
+            return
+        }
+        viewModelScope.launch {
+            repository.createTag(TagCreate(name = trimmed)).fold(
+                onSuccess = { created ->
+                    val id = created.id
+                    if (id != null) {
+                        _tags.value = (_tags.value + TagSummary(id = id, name = created.name ?: trimmed))
+                            .sortedBy { it.name?.lowercase() }
+                        setForm(_form.value.copy(tagIds = _form.value.tagIds + id))
+                    }
+                    onResult(true, null)
+                },
+                onFailure = { onResult(false, it.message) },
+            )
+        }
     }
 
     /** Validates and saves. Calls [onResult] with success and an optional error message. */
@@ -163,7 +240,7 @@ class ItemFormViewModel(
                 val existingId = itemId?.ifBlank { null } ?: createdId
                 if (existingId != null) {
                     repository.updateEntity(existingId, buildUpdate(f, existingId)).fold(
-                        onSuccess = { onResult(true, null) },
+                        onSuccess = { clearDraft(); onResult(true, null) },
                         onFailure = { onResult(false, it.message) },
                     )
                 } else {
@@ -176,10 +253,11 @@ class ItemFormViewModel(
                             createdId = created.id
                             val id = created.id
                             if (id == null || !needsDetailUpdate(f)) {
+                                clearDraft()
                                 onResult(true, null)
                             } else {
                                 repository.updateEntity(id, buildUpdate(f, id)).fold(
-                                    onSuccess = { onResult(true, null) },
+                                    onSuccess = { clearDraft(); onResult(true, null) },
                                     onFailure = {
                                         onResult(
                                             false,

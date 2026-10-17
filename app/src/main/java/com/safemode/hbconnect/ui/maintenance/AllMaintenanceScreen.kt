@@ -85,7 +85,7 @@ fun AllMaintenanceScreen(
                     UiState.NotConfigured -> EmptyState(
                         icon = Icons.Filled.Build,
                         title = "Not connected yet",
-                        message = "Open the menu and go to Server to connect to your Homebox.",
+                        message = "Go to More → Server to connect to your Homebox.",
                     )
                     is UiState.Error -> ErrorState(message = s.message, onRetry = { viewModel.load(showLoading = true) })
                     is UiState.Success -> if (s.data.isEmpty()) {

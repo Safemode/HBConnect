@@ -46,6 +46,7 @@ data class EntitySummary(
     val imageId: String? = null,
     val thumbnailId: String? = null,
     val purchasePrice: Double? = null,
+    val manufacturer: String? = null,
     val soldDate: String? = null,
     val tags: List<TagSummary>? = null,
     val createdAt: String? = null,

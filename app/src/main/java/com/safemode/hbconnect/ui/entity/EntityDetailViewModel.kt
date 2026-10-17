@@ -8,6 +8,7 @@ import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
+import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,6 +75,28 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
 
     fun setTags(tagIds: List<String>, onResult: (Boolean, String?) -> Unit) =
         patch(EntityPatch(id = entityId, tagIds = tagIds), onResult)
+
+    /** Creates a tag and adds it to the picker list; [onResult] gets the new tag's id, or an error. */
+    fun createTag(name: String, onResult: (String?, String?) -> Unit) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            onResult(null, "Tag name is required.")
+            return
+        }
+        viewModelScope.launch {
+            repository.createTag(TagCreate(name = trimmed)).fold(
+                onSuccess = { created ->
+                    val id = created.id
+                    if (id != null) {
+                        _tags.value = (_tags.value + TagSummary(id = id, name = created.name ?: trimmed))
+                            .sortedBy { it.name?.lowercase() }
+                    }
+                    onResult(id, null)
+                },
+                onFailure = { onResult(null, it.message) },
+            )
+        }
+    }
 
     private fun patch(body: EntityPatch, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
