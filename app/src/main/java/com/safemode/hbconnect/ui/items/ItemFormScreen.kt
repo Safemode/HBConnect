@@ -181,20 +181,6 @@ fun ItemFormScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            scanLauncher.launch(ScanRequest(ScanMode.PRODUCT, "Scan a product barcode"))
-                        },
-                        enabled = !scanning,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            Icons.Filled.QrCodeScanner,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 8.dp),
-                        )
-                        Text(if (scanning) "Looking up…" else "Scan barcode")
-                    }
                     OutlinedTextField(
                         value = form.name,
                         onValueChange = { v -> viewModel.update { it.copy(name = v) } },
@@ -312,6 +298,20 @@ fun ItemFormScreen(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            scanLauncher.launch(ScanRequest(ScanMode.PRODUCT, "Scan a product barcode"))
+                        },
+                        enabled = !scanning,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Filled.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        Text(if (scanning) "Looking up…" else "Scan barcode")
+                    }
                     Button(
                         onClick = { doSave(false) },
                         enabled = !saving,
