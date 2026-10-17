@@ -77,7 +77,7 @@ the cached copy instead.
 | Templates | ✅ | ✅ | ✅ | ✅ |
 | Item attachments (view / open / upload) | ✅ | ✅ | — | ✅ |
 | Item maintenance log | ✅ | ✅ | ✅ | ✅ |
-| Collections (switch / join / rename) | ✅ | — | ✅ | — |
+| Collections (create / switch / join / rename) | ✅ | ✅ | ✅ | — |
 | Members & invitations | ✅ | ✅ | — | ✅ |
 | Account (profile, password, API keys) | ✅ | ✅ | ✅ | ✅ |
 | Currency | ✅ | — | ✅ | — |
