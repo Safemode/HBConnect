@@ -18,7 +18,7 @@ enum class SearchSort(val label: String, val orderBy: String, val orderDirection
 
 /**
  * Optional filters applied to the dashboard's server-wide entity search. All are additive (AND),
- * except [tagIds] which the server ORs together — unless [negateTags] is set, which excludes
+ * except [tagIds] which the server ORs together - unless [negateTags] is set, which excludes
  * entities carrying any selected tag.
  */
 data class EntityFilters(
@@ -29,7 +29,7 @@ data class EntityFilters(
     val negateTags: Boolean = false,
     val photo: PhotoFilter = PhotoFilter.ANY,
     val fields: List<FieldFilter> = emptyList(),
-    /** Result ordering — not counted as an active filter (it reorders, it doesn't restrict). */
+    /** Result ordering - not counted as an active filter (it reorders, it doesn't restrict). */
     val sort: SearchSort = SearchSort.NAME,
 ) {
     /** Number of active filter facets, for the filter-button badge. */

@@ -405,7 +405,7 @@ private fun AddTagsDialog(
                 }
                 if (withIds.isEmpty()) {
                     Text(
-                        "No tags yet — create one above.",
+                        "No tags yet - create one above.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

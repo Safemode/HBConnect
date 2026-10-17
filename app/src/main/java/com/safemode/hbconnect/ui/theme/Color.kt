@@ -2,7 +2,7 @@ package com.safemode.hbconnect.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Brand palette — a storeroom teal/green with warm amber accents.
+// Brand palette - a storeroom teal/green with warm amber accents.
 val md_primary_light = Color(0xFF006A60)
 val md_onPrimary_light = Color(0xFFFFFFFF)
 val md_primaryContainer_light = Color(0xFF9EF2E4)

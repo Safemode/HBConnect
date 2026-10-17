@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Read the persisted settings synchronously once (a single small DataStore file) so the
-        // very first frame — and the window background behind it — already match the saved theme.
+        // very first frame - and the window background behind it - already match the saved theme.
         // Without this the first frame defaults to SYSTEM and the window stays the OS day/night
         // colour, which flashes white when the in-app theme is dark but the device is not.
         val initialConfig = runBlocking { Graph.settingsRepository.config.first() }

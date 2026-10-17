@@ -28,3 +28,9 @@ data class GroupInvitationCreated(
     val expiresAt: String? = null,
     val uses: Int = 0,
 )
+
+/** Response from accepting an invitation (POST /groups/invitations/{token}): the joined group. */
+data class GroupAcceptInvitation(
+    val id: String? = null,
+    val name: String? = null,
+)

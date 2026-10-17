@@ -31,6 +31,9 @@ class CurrencyViewModel : ViewModel() {
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
     // Preserved and re-sent on update so changing the currency doesn't blank the group name.
     private var groupName: String = ""
 
@@ -40,21 +43,31 @@ class CurrencyViewModel : ViewModel() {
     }
 
     fun load() {
+        viewModelScope.launch { reload() }
+    }
+
+    fun refresh() {
         viewModelScope.launch {
-            val config = settings.config.first()
-            if (!config.isConfigured) {
-                _state.value = UiState.NotConfigured
-                return@launch
-            }
-            repository.group().getOrNull()?.let {
-                groupName = it.name.orEmpty()
-                _activeCode.value = it.currency
-            }
-            _state.value = repository.currencies().fold(
-                onSuccess = { list -> UiState.Success(list.sortedBy { it.code?.uppercase() }) },
-                onFailure = { UiState.Error(it.message ?: "Failed to load currencies.") },
-            )
+            _refreshing.value = true
+            reload()
+            _refreshing.value = false
         }
+    }
+
+    private suspend fun reload() {
+        val config = settings.config.first()
+        if (!config.isConfigured) {
+            _state.value = UiState.NotConfigured
+            return
+        }
+        repository.group().getOrNull()?.let {
+            groupName = it.name.orEmpty()
+            _activeCode.value = it.currency
+        }
+        _state.value = repository.currencies().fold(
+            onSuccess = { list -> UiState.Success(list.sortedBy { it.code?.uppercase() }) },
+            onFailure = { UiState.Error(it.message ?: "Failed to load currencies.") },
+        )
     }
 
     /** Sets the group's currency to [code]; refreshes app-wide formatting on success. */

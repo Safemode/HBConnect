@@ -6,13 +6,13 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Where the app stands with the server right now. */
 enum class ServerReachability {
-    /** Haven't confirmed yet — showing cached data while a probe runs. */
+    /** Haven't confirmed yet - showing cached data while a probe runs. */
     CHECKING,
 
     /** Server responded; live data is being used. */
     REACHABLE,
 
-    /** Confirmed down/unroutable — serving cached data only. */
+    /** Confirmed down/unroutable - serving cached data only. */
     UNREACHABLE,
 }
 

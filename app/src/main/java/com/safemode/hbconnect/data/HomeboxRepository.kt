@@ -24,6 +24,7 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupUpdate
+import com.safemode.hbconnect.data.remote.models.GroupAcceptInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreate
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
@@ -82,7 +83,7 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     private fun mapError(code: Int, body: String?): Exception {
         val detail = body?.take(200)?.ifBlank { null }
         return when (code) {
-            401 -> IllegalStateException("Unauthorized (401). Your session may have expired — sign in again under Server.")
+            401 -> IllegalStateException("Unauthorized (401). Your session may have expired - sign in again under Server.")
             403 -> IllegalStateException("Forbidden (403). This account lacks access.")
             404 -> IllegalStateException("Not found (404). Check the server address.")
             else -> IllegalStateException("Server error $code${detail?.let { ": $it" } ?: ""}")
@@ -224,12 +225,16 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     suspend fun deleteGroupInvitation(id: String): Result<Unit> =
         callUnit { it.deleteGroupInvitation(id) }
 
+    /** Accepts an invitation [token], joining that collection. */
+    suspend fun acceptGroupInvitation(token: String): Result<GroupAcceptInvitation> =
+        call { it.acceptGroupInvitation(token) }
+
     suspend fun currencies(): Result<List<Currency>> = call { it.currencies() }
 
     suspend fun serverVersion(): Result<String> = status().map { s ->
         s.build?.version?.ifBlank { null }
             ?: s.versions?.firstOrNull()?.ifBlank { null }
-            ?: "—"
+            ?: "-"
     }
 
     // ---- Entities ----
@@ -273,7 +278,7 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     /**
      * Server-wide search across items and (when sensible) locations for the dashboard search. The
      * entities endpoint returns one kind per call, so items and locations are queried in parallel
-     * and merged — items first, then locations, each by name.
+     * and merged - items first, then locations, each by name.
      *
      * Locations are only queried for plain text/tag searches: when an item-centric filter is set
      * (a photo filter, a custom-field match, or a location filter) they're skipped, since those
@@ -360,7 +365,7 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     suspend fun updateEntity(id: String, body: EntityUpdate): Result<EntityOut> =
         call { it.updateEntity(id, body) }
 
-    /** Partial update — only the non-null fields of [body] are changed. */
+    /** Partial update - only the non-null fields of [body] are changed. */
     suspend fun patchEntity(id: String, body: EntityPatch): Result<EntityOut> =
         call { it.patchEntity(id, body) }
 

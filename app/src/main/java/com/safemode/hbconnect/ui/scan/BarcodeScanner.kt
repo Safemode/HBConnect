@@ -72,10 +72,10 @@ import kotlin.coroutines.suspendCoroutine
 
 /** Which symbologies the scanner should look for. */
 enum class ScanMode(val formats: List<BarcodeFormat>) {
-    /** QR codes only — used for Homebox labels on the dashboard. */
+    /** QR codes only - used for Homebox labels on the dashboard. */
     QR(listOf(BarcodeFormat.QR_CODE)),
 
-    /** 1D product codes — used for UPC/EAN lookup on the new-item screen. */
+    /** 1D product codes - used for UPC/EAN lookup on the new-item screen. */
     PRODUCT(
         listOf(
             BarcodeFormat.UPC_A,
@@ -114,7 +114,7 @@ class ScanBarcodeContract : ActivityResultContract<ScanRequest, String?>() {
 
 /**
  * Host activity for the scanner. Deliberately not orientation-locked, so it rotates with the device
- * — portrait in portrait, landscape in landscape.
+ * - portrait in portrait, landscape in landscape.
  */
 class BarcodeScannerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

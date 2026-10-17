@@ -16,9 +16,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.ui.navigation.MoreDestination
 
 /** Management entries live at the top; server/settings/about are pinned to the bottom. */
@@ -34,6 +37,8 @@ private val bottomItems = setOf(
  */
 @Composable
 fun MoreScreen(onOpen: (String) -> Unit) {
+    val activeCollection by Graph.activeGroupName.collectAsStateWithLifecycle()
+
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -42,7 +47,13 @@ fun MoreScreen(onOpen: (String) -> Unit) {
         ) {
             MoreDestination.entries
                 .filter { it !in bottomItems }
-                .forEach { dest -> MoreRow(dest, onOpen) }
+                .forEach { dest ->
+                    MoreRow(
+                        dest = dest,
+                        onOpen = onOpen,
+                        subtitle = if (dest == MoreDestination.COLLECTIONS) activeCollection else null,
+                    )
+                }
         }
 
         HorizontalDivider()
@@ -54,7 +65,7 @@ fun MoreScreen(onOpen: (String) -> Unit) {
 }
 
 @Composable
-private fun MoreRow(dest: MoreDestination, onOpen: (String) -> Unit) {
+private fun MoreRow(dest: MoreDestination, onOpen: (String) -> Unit, subtitle: String? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -68,10 +79,19 @@ private fun MoreRow(dest: MoreDestination, onOpen: (String) -> Unit) {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.width(24.dp))
-        Text(
-            dest.label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Column {
+            Text(
+                dest.label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

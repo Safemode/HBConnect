@@ -30,8 +30,8 @@ enum class MaintenanceLead(val label: String, val days: Long) {
 
 /** Order for the item list. */
 enum class ItemSortOrder(val label: String) {
-    NAME_ASC("Name (A–Z)"),
-    NAME_DESC("Name (Z–A)"),
+    NAME_ASC("Name (A-Z)"),
+    NAME_DESC("Name (Z-A)"),
     NEWEST_FIRST("Newest first"),
     OLDEST_FIRST("Oldest first"),
 }

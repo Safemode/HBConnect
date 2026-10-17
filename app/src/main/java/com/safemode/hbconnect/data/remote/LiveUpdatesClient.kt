@@ -29,7 +29,7 @@ enum class LiveEvent { ENTITY, TAG, USER, EXPORT, IMPORT }
  * Keeps a single WebSocket open to Homebox's `/api/v1/ws/events` endpoint and republishes the
  * server's mutation signals as [LiveEvent]s on [events]. The server's messages are payload-free
  * (`{"event":"entity.mutation"}` and friends) plus a periodic `{"event":"ping"}`, so a [LiveEvent]
- * means only "something in this category changed in your group" — collectors react by refreshing.
+ * means only "something in this category changed in your group" - collectors react by refreshing.
  *
  * Connection is driven entirely by [connectTo]: pass a configured [ConnectionConfig] to connect (or
  * reconnect against new host/credentials) and `null` to disconnect. The bearer token is sent as the

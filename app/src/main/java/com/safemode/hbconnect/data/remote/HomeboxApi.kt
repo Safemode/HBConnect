@@ -21,6 +21,7 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupUpdate
+import com.safemode.hbconnect.data.remote.models.GroupAcceptInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreate
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
@@ -65,7 +66,7 @@ interface HomeboxApi {
 
     // The server's local auth provider matches the Content-Type header exactly against
     // "application/json", so the charset parameter Moshi would otherwise append must be suppressed
-    // by pinning the header here — otherwise login is rejected with a 401.
+    // by pinning the header here - otherwise login is rejected with a 401.
     @Headers("Content-Type: application/json")
     @POST("api/v1/users/login")
     suspend fun login(@Body body: LoginForm): Response<TokenResponse>
@@ -116,6 +117,10 @@ interface HomeboxApi {
 
     @DELETE("api/v1/groups/invitations/{id}")
     suspend fun deleteGroupInvitation(@Path("id") id: String): Response<ResponseBody>
+
+    /** Accepts an invitation by its token, joining that collection. */
+    @POST("api/v1/groups/invitations/{token}")
+    suspend fun acceptGroupInvitation(@Path("token") token: String): Response<GroupAcceptInvitation>
 
     /** Supported currencies and their symbol/decimal metadata. */
     @GET("api/v1/currencies")

@@ -3,22 +3,25 @@ package com.safemode.hbconnect.ui.currency
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,36 +35,46 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.safemode.hbconnect.data.remote.models.Currency
+import com.safemode.hbconnect.ui.common.EmptyState
+import com.safemode.hbconnect.ui.common.ErrorState
+import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CurrencyScreen(viewModel: CurrencyViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val activeCode by viewModel.activeCode.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
+    val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    when (val s = state) {
-        is UiState.Loading -> Centered { CircularProgressIndicator() }
-        is UiState.NotConfigured -> Centered {
-            Text("Connect to a server under Server first.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        is UiState.Error -> Centered {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(s.message, color = MaterialTheme.colorScheme.error)
-                Button(onClick = { viewModel.load() }, modifier = Modifier.padding(top = 12.dp)) { Text("Retry") }
+    Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.padding(padding),
+        ) {
+            when (val s = state) {
+                UiState.Loading -> LoadingState()
+                UiState.NotConfigured -> EmptyState(
+                    icon = Icons.Filled.AttachMoney,
+                    title = "Not connected yet",
+                    message = "Go to More → Server to connect to your Homebox.",
+                )
+                is UiState.Error -> ErrorState(message = s.message, onRetry = viewModel::load)
+                is UiState.Success -> CurrencyList(
+                    currencies = s.data,
+                    activeCode = activeCode,
+                    busy = busy,
+                    onSelect = { code ->
+                        viewModel.select(code) { ok, err ->
+                            if (!ok) Toast.makeText(context, err ?: "Couldn't change currency.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                )
             }
         }
-        is UiState.Success -> CurrencyList(
-            currencies = s.data,
-            activeCode = activeCode,
-            busy = busy,
-            onSelect = { code ->
-                viewModel.select(code) { ok, err ->
-                    if (!ok) Toast.makeText(context, err ?: "Couldn't change currency.", Toast.LENGTH_SHORT).show()
-                }
-            },
-        )
     }
 }
 
@@ -104,7 +117,7 @@ private fun CurrencyList(
                 .fillMaxWidth()
                 .padding(16.dp),
         )
-        LazyColumn(modifier = Modifier.weight(1f).navigationBarsPadding()) {
+        LazyColumn(modifier = Modifier.weight(1f)) {
             if (searching) {
                 items(filtered, key = { "f_${it.code ?: it.name}" }) { currency ->
                     CurrencyRow(
@@ -157,8 +170,8 @@ private fun SelectedBanner(currency: Currency?) {
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                if (currency == null) "—"
-                else "${currency.code ?: "?"} — ${currency.name ?: "Unknown"}",
+                if (currency == null) "-"
+                else "${currency.code ?: "?"} - ${currency.name ?: "Unknown"}",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
@@ -201,7 +214,7 @@ private fun CurrencyRow(
                 .padding(start = 8.dp),
         ) {
             Text(
-                "${currency.code ?: "?"} — ${currency.name ?: "Unknown"}",
+                "${currency.code ?: "?"} - ${currency.name ?: "Unknown"}",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -211,9 +224,4 @@ private fun CurrencyRow(
             Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-}
-
-@Composable
-private fun Centered(content: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 }

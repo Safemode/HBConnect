@@ -11,7 +11,7 @@ data class GroupStatistics(
 )
 
 /**
- * A value total for one organizer (location or tag) — the summed purchase price of its items,
+ * A value total for one organizer (location or tag) - the summed purchase price of its items,
  * not an item count.
  */
 data class TotalsByOrganizer(

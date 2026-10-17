@@ -59,6 +59,10 @@ object Graph {
     private val _currency = MutableStateFlow<Currency?>(null)
     val currency: StateFlow<Currency?> = _currency.asStateFlow()
 
+    /** The active collection's name, for a glanceable indicator; null until loaded. */
+    private val _activeGroupName = MutableStateFlow<String?>(null)
+    val activeGroupName: StateFlow<String?> = _activeGroupName.asStateFlow()
+
     /**
      * An entity id a notification asked the app to open, consumed by the UI once navigated. Set from
      * [MainActivity] when launched from a maintenance reminder.
@@ -187,15 +191,18 @@ object Graph {
 
     /**
      * True when the token expires within [REFRESH_WINDOW] (or the expiry can't be parsed, so we
-     * refresh to be safe). An already-expired token also returns true — the refresh will simply
+     * refresh to be safe). An already-expired token also returns true - the refresh will simply
      * fail and the user re-logs in.
      */
     /**
-     * Resolves the group's currency code against the server's currency list and caches it for
-     * money formatting. Best-effort: failures leave the previous value (prices then show unadorned).
+     * Caches the active group's name (for the collection indicator) and resolves its currency code
+     * against the server's currency list for money formatting. Best-effort: failures leave the
+     * previous values (prices then show unadorned).
      */
     suspend fun loadCurrency() {
-        val code = repository.group().getOrNull()?.currency?.ifBlank { null } ?: return
+        val group = repository.group().getOrNull()
+        _activeGroupName.value = group?.name?.ifBlank { null }
+        val code = group?.currency?.ifBlank { null } ?: return
         val match = repository.currencies().getOrNull()
             ?.firstOrNull { it.code.equals(code, ignoreCase = true) }
         _currency.value = match ?: Currency(code = code)

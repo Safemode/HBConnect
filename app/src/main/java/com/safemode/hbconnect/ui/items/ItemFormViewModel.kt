@@ -42,7 +42,7 @@ data class ItemForm(
 
 /**
  * In-memory draft of the generic "New item" form (the bottom-bar Add). It outlives the form's
- * back-stack entry, so leaving the form — switching tabs, pressing back — keeps what was typed, and
+ * back-stack entry, so leaving the form - switching tabs, pressing back - keeps what was typed, and
  * reopening Add restores it. A successful save clears it. Edits and "add item here" (preset parent)
  * flows don't use it. Process death discards the draft.
  */
@@ -149,7 +149,7 @@ class ItemFormViewModel(
 
     /**
      * Clears the form. Editing reverts to the loaded values; a new item goes back to blank defaults
-     * and drops the draft. Also clears the created-this-session id so the next save starts fresh —
+     * and drops the draft. Also clears the created-this-session id so the next save starts fresh -
      * which is what "Create and add another" relies on.
      */
     fun reset() {

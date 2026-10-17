@@ -203,7 +203,7 @@ private fun TagDialog(
     var description by remember { mutableStateOf(tag.description.orEmpty()) }
     var parentId by remember { mutableStateOf(tag.parentId) }
     val isEdit = !tag.id.isNullOrBlank()
-    // A tag can't be its own parent; descendants are left in — the server rejects a true cycle.
+    // A tag can't be its own parent; descendants are left in - the server rejects a true cycle.
     val parentOptions = listOf(Option("(None)", null)) +
         allTags.filter { it.id != null && it.id != tag.id }
             .map { Option(it.name ?: "tag", it.id) }

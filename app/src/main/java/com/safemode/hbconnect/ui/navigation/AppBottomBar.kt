@@ -37,7 +37,7 @@ fun selectedTabFor(route: String?): BottomTab? = when (route) {
 
 /**
  * The app's primary navigation: Home, Items, a center Add action, Locations, and More. It stays
- * visible on every screen. Add isn't a tab — it opens the new-item form — so it never shows a
+ * visible on every screen. Add isn't a tab - it opens the new-item form - so it never shows a
  * selected state.
  */
 @Composable
