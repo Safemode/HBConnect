@@ -37,6 +37,16 @@ data class ItemForm(
     val archived: Boolean = false,
 )
 
+/**
+ * In-memory draft of the generic "New item" form (the bottom-bar Add). It outlives the form's
+ * back-stack entry, so leaving the form — switching tabs, pressing back — keeps what was typed, and
+ * reopening Add restores it. A successful save clears it. Edits and "add item here" (preset parent)
+ * flows don't use it. Process death discards the draft.
+ */
+object ItemDraftStore {
+    var draft: ItemForm? = null
+}
+
 class ItemFormViewModel(
     private val itemId: String?,
     private val presetParentId: String?,
@@ -44,6 +54,9 @@ class ItemFormViewModel(
     private val repository = Graph.repository
 
     val isEdit: Boolean = !itemId.isNullOrBlank()
+
+    /** Only the plain Add flow drafts; editing and add-here (preset parent) always start clean. */
+    private val usesDraft: Boolean = !isEdit && presetParentId.isNullOrBlank()
 
     private val _form = MutableStateFlow(ItemForm(parentId = presetParentId?.ifBlank { null }))
     val form: StateFlow<ItemForm> = _form.asStateFlow()
@@ -107,15 +120,28 @@ class ItemFormViewModel(
                     archived = entity.archived == true,
                 )
             } else {
-                // Default the entity type to the first item type when creating.
-                _form.value = _form.value.copy(entityTypeId = _itemTypes.value.firstOrNull()?.id)
+                val restored = if (usesDraft) ItemDraftStore.draft else null
+                // Restore a saved draft, otherwise default the entity type to the first item type.
+                _form.value = restored
+                    ?: _form.value.copy(entityTypeId = _itemTypes.value.firstOrNull()?.id)
             }
             _load.value = UiState.Success(Unit)
         }
     }
 
     fun update(transform: (ItemForm) -> ItemForm) {
-        _form.value = transform(_form.value)
+        setForm(transform(_form.value))
+    }
+
+    /** Applies a new form value and mirrors it into the draft store for the plain Add flow. */
+    private fun setForm(new: ItemForm) {
+        _form.value = new
+        if (usesDraft) ItemDraftStore.draft = new
+    }
+
+    /** Discards the saved draft once the item has been committed. */
+    private fun clearDraft() {
+        if (usesDraft) ItemDraftStore.draft = null
     }
 
     /** Looks up a scanned barcode; [onResult] gets the candidate products, or an error message. */
@@ -134,18 +160,22 @@ class ItemFormViewModel(
      * barcode databases often return very long titles/descriptions that would 422 on save.
      */
     fun applyBarcodeProduct(p: BarcodeProduct) {
-        _form.value = _form.value.copy(
-            name = _form.value.name.ifBlank { p.item?.name?.trim()?.take(255).orEmpty() },
-            description = _form.value.description.ifBlank { p.item?.description?.trim()?.take(1000).orEmpty() },
-            manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim()?.take(255).orEmpty() },
-            modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim()?.take(255).orEmpty() },
+        setForm(
+            _form.value.copy(
+                name = _form.value.name.ifBlank { p.item?.name?.trim()?.take(255).orEmpty() },
+                description = _form.value.description.ifBlank { p.item?.description?.trim()?.take(1000).orEmpty() },
+                manufacturer = _form.value.manufacturer.ifBlank { p.manufacturer?.trim()?.take(255).orEmpty() },
+                modelNumber = _form.value.modelNumber.ifBlank { p.modelNumber?.trim()?.take(255).orEmpty() },
+            ),
         )
     }
 
     fun toggleTag(tagId: String) {
         val current = _form.value.tagIds
-        _form.value = _form.value.copy(
-            tagIds = if (tagId in current) current - tagId else current + tagId,
+        setForm(
+            _form.value.copy(
+                tagIds = if (tagId in current) current - tagId else current + tagId,
+            ),
         )
     }
 
@@ -163,7 +193,7 @@ class ItemFormViewModel(
                 val existingId = itemId?.ifBlank { null } ?: createdId
                 if (existingId != null) {
                     repository.updateEntity(existingId, buildUpdate(f, existingId)).fold(
-                        onSuccess = { onResult(true, null) },
+                        onSuccess = { clearDraft(); onResult(true, null) },
                         onFailure = { onResult(false, it.message) },
                     )
                 } else {
@@ -176,10 +206,11 @@ class ItemFormViewModel(
                             createdId = created.id
                             val id = created.id
                             if (id == null || !needsDetailUpdate(f)) {
+                                clearDraft()
                                 onResult(true, null)
                             } else {
                                 repository.updateEntity(id, buildUpdate(f, id)).fold(
-                                    onSuccess = { onResult(true, null) },
+                                    onSuccess = { clearDraft(); onResult(true, null) },
                                     onFailure = {
                                         onResult(
                                             false,
