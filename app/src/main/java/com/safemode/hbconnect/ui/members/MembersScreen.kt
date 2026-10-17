@@ -5,22 +5,21 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,9 +28,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,13 +53,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
 import com.safemode.hbconnect.data.remote.models.GroupMember
+import com.safemode.hbconnect.ui.common.EmptyState
+import com.safemode.hbconnect.ui.common.ErrorState
+import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MembersScreen(viewModel: MembersViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val invitations by viewModel.invitations.collectAsStateWithLifecycle()
     val selfId by viewModel.selfId.collectAsStateWithLifecycle()
+    val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var showInviteDialog by remember { mutableStateOf(false) }
@@ -67,25 +73,27 @@ fun MembersScreen(viewModel: MembersViewModel = viewModel()) {
 
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
-    when (val s = state) {
-        is UiState.Loading -> Centered { CircularProgressIndicator() }
-        is UiState.NotConfigured -> Centered {
-            Text("Connect to a server under Server first.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        is UiState.Error -> Centered {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(s.message, color = MaterialTheme.colorScheme.error)
-                Button(onClick = { viewModel.load() }, modifier = Modifier.padding(top = 12.dp)) { Text("Retry") }
-            }
-        }
-        is UiState.Success -> Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(vertical = 8.dp),
+    Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.padding(padding),
         ) {
-            SectionHeader("Members")
+            when (val s = state) {
+                UiState.Loading -> LoadingState()
+                UiState.NotConfigured -> EmptyState(
+                    icon = Icons.Filled.People,
+                    title = "Not connected yet",
+                    message = "Go to More → Server to connect to your Homebox.",
+                )
+                is UiState.Error -> ErrorState(message = s.message, onRetry = viewModel::load)
+                is UiState.Success -> Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 8.dp),
+                ) {
+                    SectionHeader("Members")
             if (s.data.isEmpty()) {
                 EmptyLine("No members.")
             } else {
@@ -120,6 +128,8 @@ fun MembersScreen(viewModel: MembersViewModel = viewModel()) {
                         },
                     )
                 }
+            }
+        }
             }
         }
     }
@@ -373,11 +383,6 @@ private fun EmptyLine(text: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
-}
-
-@Composable
-private fun Centered(content: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 }
 
 /** "Expires 2026-10-20" from an ISO timestamp, or null when absent/sentinel. */

@@ -24,6 +24,7 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupUpdate
+import com.safemode.hbconnect.data.remote.models.GroupAcceptInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreate
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
@@ -223,6 +224,10 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     suspend fun deleteGroupInvitation(id: String): Result<Unit> =
         callUnit { it.deleteGroupInvitation(id) }
+
+    /** Accepts an invitation [token], joining that collection. */
+    suspend fun acceptGroupInvitation(token: String): Result<GroupAcceptInvitation> =
+        call { it.acceptGroupInvitation(token) }
 
     suspend fun currencies(): Result<List<Currency>> = call { it.currencies() }
 

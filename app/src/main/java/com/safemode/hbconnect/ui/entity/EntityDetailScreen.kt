@@ -514,7 +514,7 @@ private fun ItemImageGallery(entityId: String, imageIds: List<String>) {
     if (imageIds.size == 1) {
         AsyncImage(
             model = Graph.repository.attachmentUrl(entityId, imageIds.first()),
-            contentDescription = null,
+            contentDescription = "Item photo",
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxWidth()
@@ -532,7 +532,7 @@ private fun ItemImageGallery(entityId: String, imageIds: List<String>) {
             ) { page ->
                 AsyncImage(
                     model = Graph.repository.attachmentUrl(entityId, imageIds[page]),
-                    contentDescription = null,
+                    contentDescription = "Item photo ${page + 1} of ${imageIds.size}",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxWidth()

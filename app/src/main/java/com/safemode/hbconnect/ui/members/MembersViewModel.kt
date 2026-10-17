@@ -36,25 +36,38 @@ class MembersViewModel : ViewModel() {
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
     init {
         load()
         refreshWhenServerReachable { load() }
     }
 
     fun load() {
+        viewModelScope.launch { reload() }
+    }
+
+    fun refresh() {
         viewModelScope.launch {
-            val config = settings.config.first()
-            if (!config.isConfigured) {
-                _state.value = UiState.NotConfigured
-                return@launch
-            }
-            _selfId.value = repository.self().getOrNull()?.id
-            _invitations.value = repository.groupInvitations().getOrDefault(emptyList())
-            _state.value = repository.groupMembers().fold(
-                onSuccess = { members -> UiState.Success(members.sortedBy { it.name?.lowercase() }) },
-                onFailure = { UiState.Error(it.message ?: "Failed to load members.") },
-            )
+            _refreshing.value = true
+            reload()
+            _refreshing.value = false
         }
+    }
+
+    private suspend fun reload() {
+        val config = settings.config.first()
+        if (!config.isConfigured) {
+            _state.value = UiState.NotConfigured
+            return
+        }
+        _selfId.value = repository.self().getOrNull()?.id
+        _invitations.value = repository.groupInvitations().getOrDefault(emptyList())
+        _state.value = repository.groupMembers().fold(
+            onSuccess = { members -> UiState.Success(members.sortedBy { it.name?.lowercase() }) },
+            onFailure = { UiState.Error(it.message ?: "Failed to load members.") },
+        )
     }
 
     /**

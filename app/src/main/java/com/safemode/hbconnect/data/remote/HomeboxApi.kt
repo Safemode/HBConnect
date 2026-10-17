@@ -21,6 +21,7 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupUpdate
+import com.safemode.hbconnect.data.remote.models.GroupAcceptInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreate
 import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
@@ -116,6 +117,10 @@ interface HomeboxApi {
 
     @DELETE("api/v1/groups/invitations/{id}")
     suspend fun deleteGroupInvitation(@Path("id") id: String): Response<ResponseBody>
+
+    /** Accepts an invitation by its token, joining that collection. */
+    @POST("api/v1/groups/invitations/{token}")
+    suspend fun acceptGroupInvitation(@Path("token") token: String): Response<GroupAcceptInvitation>
 
     /** Supported currencies and their symbol/decimal metadata. */
     @GET("api/v1/currencies")
