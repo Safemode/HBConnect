@@ -33,6 +33,7 @@ import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
 import com.safemode.hbconnect.data.remote.models.ValueInsights
+import com.safemode.hbconnect.data.remote.models.ValueOverTime
 import com.safemode.hbconnect.ui.common.EmptyState
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
@@ -49,6 +50,8 @@ fun ValueBreakdownScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
+    val valueOverTime by viewModel.valueOverTime.collectAsStateWithLifecycle()
+    val range by viewModel.range.collectAsStateWithLifecycle()
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
         PullToRefreshBox(
@@ -71,7 +74,14 @@ fun ValueBreakdownScreen(
                         message = "Add some items with purchase prices to see where your value sits.",
                     )
                 } else {
-                    ValueContent(insights = s.data, currency = currency, onOpenEntity = onOpenEntity)
+                    ValueContent(
+                        insights = s.data,
+                        currency = currency,
+                        valueOverTime = valueOverTime,
+                        range = range,
+                        onRangeChange = viewModel::setRange,
+                        onOpenEntity = onOpenEntity,
+                    )
                 }
             }
         }
@@ -82,6 +92,9 @@ fun ValueBreakdownScreen(
 private fun ValueContent(
     insights: ValueInsights,
     currency: Currency?,
+    valueOverTime: ValueOverTime?,
+    range: ValueRange,
+    onRangeChange: (ValueRange) -> Unit,
     onOpenEntity: (String) -> Unit,
 ) {
     LazyColumn(
@@ -90,6 +103,16 @@ private fun ValueContent(
         modifier = Modifier.fillMaxWidth(),
     ) {
         item { SummaryCard(insights, currency) }
+        if (valueOverTime != null) {
+            item {
+                ValueOverTimeCard(
+                    data = valueOverTime,
+                    currency = currency,
+                    selectedRange = range,
+                    onRangeChange = onRangeChange,
+                )
+            }
+        }
         if (insights.mostExpensive.isNotEmpty()) {
             item { MostExpensiveCard(insights.mostExpensive, currency, onOpenEntity) }
         }
