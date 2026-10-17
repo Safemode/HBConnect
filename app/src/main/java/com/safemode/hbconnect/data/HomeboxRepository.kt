@@ -191,6 +191,16 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         )
     }.map { it.items.orEmpty().sortedWith(sortComparator(sort)) }
 
+    /** The most recently created items, newest first (for the dashboard's "Recently added"). */
+    suspend fun getRecentItems(limit: Int = 3): Result<List<EntitySummary>> = call {
+        it.getEntities(
+            pageSize = limit,
+            isLocation = false,
+            orderBy = SearchSort.CREATED.orderBy,
+            orderDirection = SearchSort.CREATED.orderDirection,
+        )
+    }.map { it.items.orEmpty() }
+
     /** All locations (location entities), sorted by name. */
     suspend fun getLocations(includeArchived: Boolean = false): Result<List<EntitySummary>> = call {
         it.getEntities(

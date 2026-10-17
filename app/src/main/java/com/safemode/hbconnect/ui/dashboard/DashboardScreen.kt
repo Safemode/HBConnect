@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudOff
@@ -242,6 +243,7 @@ fun DashboardScreen(
                             onOpenItems = onOpenItems,
                             onOpenLocations = onOpenLocations,
                             onOpenTags = onOpenTags,
+                            onOpenEntity = onOpenEntity,
                         )
                     }
                 }
@@ -357,6 +359,7 @@ private fun StatsGrid(
     onOpenItems: () -> Unit,
     onOpenLocations: () -> Unit,
     onOpenTags: () -> Unit,
+    onOpenEntity: (String) -> Unit,
 ) {
     val tiles = listOf(
         StatTile("Items", (stats.totalItems ?: 0).toString(), Icons.Filled.Inventory2, "items"),
@@ -387,14 +390,66 @@ private fun StatsGrid(
                 if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
             }
         }
-        charts.valueOverTime?.takeIf { it.hasData() }?.let { overTime ->
-            item { ValueTrendCard(overTime, currency) }
-        }
-        if (charts.byLocation.any { it.total > 0.0 }) {
-            item { BreakdownCard("Value by location", charts.byLocation, currency) }
+        if (charts.recent.isNotEmpty()) {
+            item { RecentlyAddedCard(items = charts.recent, onOpenEntity = onOpenEntity) }
         }
         if (charts.byTag.any { it.total > 0.0 }) {
             item { BreakdownCard("Value by tag", charts.byTag, currency) }
+        }
+    }
+}
+
+/** The last few items added, newest first; tapping one opens its detail page. */
+@Composable
+private fun RecentlyAddedCard(items: List<EntitySummary>, onOpenEntity: (String) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Text(
+                "Recently added",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            items.forEach { item ->
+                val id = item.id
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = id != null) { id?.let(onOpenEntity) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Inventory2,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            item.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        item.parent?.displayName?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

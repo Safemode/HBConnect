@@ -144,11 +144,11 @@ fun HBConnectRoot() {
                 }
             }
             composable(Routes.ITEMS) {
-                MainScaffold("Items") {
-                    ItemsScreen(
-                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
-                    )
-                }
+                // ItemsScreen brings its own top bar (with the archived toggle), so it isn't wrapped
+                // in MainScaffold like the other tabs.
+                ItemsScreen(
+                    onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                )
             }
             composable(Routes.LOCATIONS) {
                 MainScaffold("Locations") {

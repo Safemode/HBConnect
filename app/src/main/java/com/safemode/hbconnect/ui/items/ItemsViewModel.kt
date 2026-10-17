@@ -10,6 +10,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -32,19 +33,26 @@ class ItemsViewModel : ViewModel() {
     private val _baseUrl = MutableStateFlow<String?>(null)
     val baseUrl: StateFlow<String?> = _baseUrl.asStateFlow()
 
+    private val _showArchived = MutableStateFlow(false)
+    val showArchived: StateFlow<Boolean> = _showArchived.asStateFlow()
+
     init {
-        // Re-query as the search text settles.
+        // Re-query as the search text settles or the archived toggle flips.
         viewModelScope.launch {
-            _query
-                .debounce(300)
-                .distinctUntilChanged()
-                .collect { reload(showLoading = true) }
+            combine(
+                _query.debounce(300).distinctUntilChanged(),
+                _showArchived,
+            ) { _, _ -> }.collect { reload(showLoading = true) }
         }
         refreshWhenServerReachable { reloadSilently() }
     }
 
     fun setQuery(value: String) {
         _query.value = value
+    }
+
+    fun setShowArchived(value: Boolean) {
+        _showArchived.value = value
     }
 
     fun load() {
@@ -75,6 +83,7 @@ class ItemsViewModel : ViewModel() {
         _state.value = repository.getItems(
             query = _query.value,
             sort = config.itemSortOrder,
+            includeArchived = _showArchived.value,
         ).fold(
             onSuccess = { UiState.Success(it) },
             onFailure = { UiState.Error(it.message ?: "Failed to load items.") },

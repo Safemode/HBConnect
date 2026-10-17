@@ -45,10 +45,19 @@ class TagsViewModel : ViewModel() {
         }
     }
 
-    fun create(name: String, description: String, onResult: (Boolean, String?) -> Unit) {
+    fun create(
+        name: String,
+        description: String,
+        parentId: String?,
+        onResult: (Boolean, String?) -> Unit,
+    ) {
         viewModelScope.launch {
             repository.createTag(
-                TagCreate(name = name.trim(), description = description.trim().ifBlank { null }),
+                TagCreate(
+                    name = name.trim(),
+                    description = description.trim().ifBlank { null },
+                    parentId = parentId,
+                ),
             ).fold(
                 onSuccess = { reloadSilently(); onResult(true, null) },
                 onFailure = { onResult(false, it.message) },
@@ -56,11 +65,21 @@ class TagsViewModel : ViewModel() {
         }
     }
 
-    fun update(id: String, name: String, description: String, onResult: (Boolean, String?) -> Unit) {
+    fun update(
+        id: String,
+        name: String,
+        description: String,
+        parentId: String?,
+        onResult: (Boolean, String?) -> Unit,
+    ) {
         viewModelScope.launch {
             repository.updateTag(
                 id,
-                TagUpdate(name = name.trim(), description = description.trim().ifBlank { null }),
+                TagUpdate(
+                    name = name.trim(),
+                    description = description.trim().ifBlank { null },
+                    parentId = parentId,
+                ),
             ).fold(
                 onSuccess = { reloadSilently(); onResult(true, null) },
                 onFailure = { onResult(false, it.message) },

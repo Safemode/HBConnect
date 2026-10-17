@@ -11,7 +11,6 @@ import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
-import com.safemode.hbconnect.data.remote.models.ValueOverTime
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.FlowPreview
@@ -29,14 +28,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
-/** Dashboard breakdown data backing the charts; any piece may be absent if its request fails. */
+/** Dashboard extras below the stat tiles; any piece may be absent if its request fails. */
 data class DashboardCharts(
-    val valueOverTime: ValueOverTime? = null,
-    val byLocation: List<TotalsByOrganizer> = emptyList(),
     val byTag: List<TotalsByOrganizer> = emptyList(),
+    val recent: List<EntitySummary> = emptyList(),
 )
 
 @OptIn(FlowPreview::class)
@@ -230,19 +226,14 @@ class DashboardViewModel : ViewModel() {
         if (_state.value is UiState.Success) loadCharts()
     }
 
-    /** Fetches the breakdown stats in parallel; each piece degrades to empty if its call fails. */
+    /** Fetches the below-tiles data in parallel; each piece degrades to empty if its call fails. */
     private suspend fun loadCharts() {
-        val today = LocalDate.now()
-        val start = today.minusMonths(12).format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val end = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
         coroutineScope {
-            val overTime = async { repository.statsValueOverTime(start, end).getOrNull() }
             val breakdowns = async { repository.valueBreakdowns().getOrNull() }
-            val value = breakdowns.await()
+            val recent = async { repository.getRecentItems(limit = 3).getOrDefault(emptyList()) }
             _charts.value = DashboardCharts(
-                valueOverTime = overTime.await(),
-                byLocation = value?.byLocation.orEmpty(),
-                byTag = value?.byTag.orEmpty(),
+                byTag = breakdowns.await()?.byTag.orEmpty(),
+                recent = recent.await(),
             )
         }
     }
