@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -49,12 +48,10 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -77,7 +74,6 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -109,12 +105,8 @@ import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
-import com.safemode.hbconnect.data.remote.models.TagSummary
-import com.safemode.hbconnect.ui.common.verticalScrollbar
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
-import com.safemode.hbconnect.ui.common.Option
-import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.common.generateQrBitmap
@@ -146,14 +138,10 @@ fun EntityDetailScreen(
     val path by viewModel.path.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
-    val locations by viewModel.locations.collectAsStateWithLifecycle()
-    val tags by viewModel.tags.collectAsStateWithLifecycle()
     val showDeviceQr by viewModel.showDeviceQr.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
     var showDuplicate by remember { mutableStateOf(false) }
-    var showMove by remember { mutableStateOf(false) }
-    var showTags by remember { mutableStateOf(false) }
     var showQrLabel by remember { mutableStateOf(false) }
     var showQrCode by remember { mutableStateOf(false) }
 
@@ -257,13 +245,6 @@ fun EntityDetailScreen(
                             currency = currency,
                             onOpenMaintenance = { s.data.id?.let(onOpenMaintenance) },
                             onOpenAttachments = { s.data.id?.let(onOpenAttachments) },
-                            onSetQuantity = { qty ->
-                                viewModel.setQuantity(qty) { ok, err ->
-                                    if (!ok) Toast.makeText(context, err ?: "Update failed", Toast.LENGTH_LONG).show()
-                                }
-                            },
-                            onMove = { viewModel.loadPickers(); showMove = true },
-                            onEditTags = { viewModel.loadPickers(); showTags = true },
                         )
                     }
                 }
@@ -335,39 +316,6 @@ fun EntityDetailScreen(
         )
     }
 
-    if (showMove && entity != null) {
-        MoveDialog(
-            locations = locations,
-            currentParentId = entity.parent?.id,
-            onDismiss = { showMove = false },
-            onConfirm = { parentId ->
-                showMove = false
-                viewModel.move(parentId) { ok, err ->
-                    if (!ok) Toast.makeText(context, err ?: "Move failed", Toast.LENGTH_LONG).show()
-                }
-            },
-        )
-    }
-
-    if (showTags && entity != null) {
-        TagsDialog(
-            tags = tags,
-            selected = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
-            onCreateTag = { name, onCreated ->
-                viewModel.createTag(name) { id, err ->
-                    if (id == null) Toast.makeText(context, err ?: "Couldn't create tag", Toast.LENGTH_LONG).show()
-                    onCreated(id)
-                }
-            },
-            onDismiss = { showTags = false },
-            onConfirm = { tagIds ->
-                showTags = false
-                viewModel.setTags(tagIds) { ok, err ->
-                    if (!ok) Toast.makeText(context, err ?: "Update failed", Toast.LENGTH_LONG).show()
-                }
-            },
-        )
-    }
 }
 
 @Composable
@@ -442,9 +390,6 @@ private fun ItemDetails(
     currency: Currency?,
     onOpenMaintenance: () -> Unit,
     onOpenAttachments: () -> Unit,
-    onSetQuantity: (Double) -> Unit,
-    onMove: () -> Unit,
-    onEditTags: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -464,19 +409,18 @@ private fun ItemDetails(
             }
         }
 
-        QuickActionsCard(
-            quantity = entity.quantity?.toInt() ?: 1,
-            onSetQuantity = onSetQuantity,
-            onMove = onMove,
-            onEditTags = onEditTags,
-        )
-
         if (entity.id != null) {
             ItemImageGallery(entityId = entity.id, imageIds = entity.imageAttachmentIds())
         }
 
         if (!entity.description.isNullOrBlank()) {
-            Text(entity.description, style = MaterialTheme.typography.bodyLarge)
+            DetailCard("Description") {
+                Text(
+                    entity.description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
         }
 
         DetailCard("Overview") {
@@ -715,35 +659,6 @@ private fun ZoomableImage(url: String) {
     }
 }
 
-@Composable
-private fun QuickActionsCard(
-    quantity: Int,
-    onSetQuantity: (Double) -> Unit,
-    onMove: () -> Unit,
-    onEditTags: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Quick actions", style = MaterialTheme.typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Quantity", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = { if (quantity > 1) onSetQuantity((quantity - 1).toDouble()) },
-                    enabled = quantity > 1,
-                ) { Icon(Icons.Filled.Remove, contentDescription = "Decrease") }
-                Text(quantity.toString(), style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { onSetQuantity((quantity + 1).toDouble()) }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Increase")
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(onClick = onMove, modifier = Modifier.weight(1f)) { Text("Move") }
-                OutlinedButton(onClick = onEditTags, modifier = Modifier.weight(1f)) { Text("Edit tags") }
-            }
-        }
-    }
-}
-
 /** A tonal info callout — a rounded container with a leading info icon and supporting text. */
 @Composable
 private fun InfoCallout(text: String) {
@@ -971,117 +886,6 @@ private fun DuplicateDialog(onDismiss: () -> Unit, onConfirm: (DuplicateOptions)
                 )
             }) { Text("Duplicate") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-@Composable
-private fun MoveDialog(
-    locations: List<EntitySummary>,
-    currentParentId: String?,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var selected by remember { mutableStateOf(currentParentId) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Move to location") },
-        text = {
-            OptionDropdownField(
-                label = "Location",
-                options = locations.map { Option(it.displayName, it.id) },
-                selectedValue = selected,
-                onSelect = { selected = it.value },
-            )
-        },
-        confirmButton = {
-            TextButton(
-                enabled = !selected.isNullOrBlank() && selected != currentParentId,
-                onClick = { selected?.let(onConfirm) },
-            ) { Text("Move") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-/**
- * Multi-select tag picker for an existing item, matching the new-item form: create a tag up top
- * (added and auto-selected), toggle existing ones in a scrollable list, then Save to apply. The
- * selection is applied in one server update on Save.
- */
-@Composable
-private fun TagsDialog(
-    tags: List<TagSummary>,
-    selected: Set<String>,
-    onCreateTag: (String, (String?) -> Unit) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: (List<String>) -> Unit,
-) {
-    val current = remember { mutableStateListOf<String>().apply { addAll(selected) } }
-    var newName by remember { mutableStateOf("") }
-    val withIds = tags.filter { it.id != null }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit tags") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("New tag") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Button(
-                        enabled = newName.isNotBlank(),
-                        onClick = {
-                            onCreateTag(newName.trim()) { id -> if (id != null) current.add(id) }
-                            newName = ""
-                        },
-                    ) { Text("Add") }
-                }
-                if (withIds.isEmpty()) {
-                    Text(
-                        "No tags yet — create one above.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    val listState = rememberLazyListState()
-                    val scrollbarColor = MaterialTheme.colorScheme.outline
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp)
-                            .verticalScrollbar(listState, color = scrollbarColor),
-                    ) {
-                        items(withIds, key = { it.id!! }) { tag ->
-                            val id = tag.id!!
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { if (id in current) current.remove(id) else current.add(id) }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(
-                                    checked = id in current,
-                                    onCheckedChange = { if (id in current) current.remove(id) else current.add(id) },
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(tag.name ?: "tag", style = MaterialTheme.typography.bodyLarge)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(current.toList()) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 
 /** Editable item form. Strings are kept raw and parsed on save. */
 data class ItemForm(
@@ -47,6 +48,9 @@ data class ItemForm(
  */
 object ItemDraftStore {
     var draft: ItemForm? = null
+
+    /** Local file paths of photos taken for the draft but not yet uploaded. */
+    var photoPaths: List<String> = emptyList()
 }
 
 class ItemFormViewModel(
@@ -76,6 +80,10 @@ class ItemFormViewModel(
 
     private val _saving = MutableStateFlow(false)
     val saving: StateFlow<Boolean> = _saving.asStateFlow()
+
+    /** Local paths of photos taken on the form; uploaded as attachments once the item is saved. */
+    private val _photos = MutableStateFlow<List<String>>(emptyList())
+    val photos: StateFlow<List<String>> = _photos.asStateFlow()
 
     /**
      * The loaded entity when editing. Homebox's update does a full field replace, so fields this
@@ -107,6 +115,7 @@ class ItemFormViewModel(
                 // Restore a saved draft, otherwise default the entity type to the first item type.
                 _form.value = restored
                     ?: _form.value.copy(entityTypeId = _itemTypes.value.firstOrNull()?.id)
+                if (usesDraft) _photos.value = ItemDraftStore.photoPaths
             }
             _load.value = UiState.Success(Unit)
         }
@@ -153,6 +162,8 @@ class ItemFormViewModel(
                 parentId = presetParentId?.ifBlank { null },
                 entityTypeId = _itemTypes.value.firstOrNull()?.id,
             )
+            _photos.value.forEach { runCatching { File(it).delete() } }
+            _photos.value = emptyList()
             clearDraft()
         }
     }
@@ -163,9 +174,53 @@ class ItemFormViewModel(
         if (usesDraft) ItemDraftStore.draft = new
     }
 
-    /** Discards the saved draft once the item has been committed. */
+    /** Discards the saved draft (form text and pending photos) once the item has been committed. */
     private fun clearDraft() {
-        if (usesDraft) ItemDraftStore.draft = null
+        if (usesDraft) {
+            ItemDraftStore.draft = null
+            ItemDraftStore.photoPaths = emptyList()
+        }
+    }
+
+    /** Records a photo taken on the form, to upload after the item is saved. */
+    fun addPhoto(path: String) {
+        _photos.value = _photos.value + path
+        if (usesDraft) ItemDraftStore.photoPaths = _photos.value
+    }
+
+    /** Drops a pending photo and deletes its local file. */
+    fun removePhoto(path: String) {
+        runCatching { File(path).delete() }
+        _photos.value = _photos.value - path
+        if (usesDraft) ItemDraftStore.photoPaths = _photos.value
+    }
+
+    /** Uploads the pending photos to entity [id]; the first becomes primary when it has no image. */
+    private suspend fun uploadPendingPhotos(id: String): String? {
+        val paths = _photos.value
+        if (paths.isEmpty()) return null
+        val hasImage = original?.imageId?.isNotBlank() == true || original?.thumbnailId?.isNotBlank() == true
+        var firstError: String? = null
+        paths.forEachIndexed { index, path ->
+            val file = File(path)
+            val bytes = runCatching { file.readBytes() }.getOrNull()
+            if (bytes == null) {
+                if (firstError == null) firstError = "a photo couldn't be read"
+                return@forEachIndexed
+            }
+            repository.uploadAttachment(
+                entityId = id,
+                fileName = file.name,
+                mimeType = "image/jpeg",
+                bytes = bytes,
+                type = "photo",
+                primary = !hasImage && index == 0,
+            ).onFailure { if (firstError == null) firstError = it.message }
+            runCatching { file.delete() }
+        }
+        _photos.value = emptyList()
+        if (usesDraft) ItemDraftStore.photoPaths = emptyList()
+        return firstError
     }
 
     /** Looks up a scanned barcode; [onResult] gets the candidate products, or an error message. */
@@ -238,38 +293,47 @@ class ItemFormViewModel(
             try {
                 // itemId when editing, or createdId when completing an item made earlier this session.
                 val existingId = itemId?.ifBlank { null } ?: createdId
+                var savedId: String? = null
+                var error: String? = null
                 if (existingId != null) {
-                    repository.updateEntity(existingId, buildUpdate(f, existingId)).fold(
-                        onSuccess = { clearDraft(); onResult(true, null) },
-                        onFailure = { onResult(false, it.message) },
-                    )
+                    val result = repository.updateEntity(existingId, buildUpdate(f, existingId))
+                    if (result.isSuccess) savedId = existingId else error = result.exceptionOrNull()?.message
                 } else {
                     // The create endpoint accepts only a subset of fields; persist the rest with a
                     // follow-up update so details entered on a new item (serial, notes, purchase,
                     // warranty, insured) aren't lost.
-                    repository.createEntity(buildCreate(f)).fold(
-                        onSuccess = { created ->
-                            original = created
-                            createdId = created.id
-                            val id = created.id
-                            if (id == null || !needsDetailUpdate(f)) {
-                                clearDraft()
-                                onResult(true, null)
+                    val created = repository.createEntity(buildCreate(f))
+                    val entity = created.getOrNull()
+                    if (entity == null) {
+                        error = created.exceptionOrNull()?.message
+                    } else {
+                        original = entity
+                        createdId = entity.id
+                        val id = entity.id
+                        if (id == null || !needsDetailUpdate(f)) {
+                            savedId = id
+                        } else {
+                            val detail = repository.updateEntity(id, buildUpdate(f, id))
+                            if (detail.isSuccess) {
+                                savedId = id
                             } else {
-                                repository.updateEntity(id, buildUpdate(f, id)).fold(
-                                    onSuccess = { clearDraft(); onResult(true, null) },
-                                    onFailure = {
-                                        onResult(
-                                            false,
-                                            "Item created, but some details didn't save: " +
-                                                "${it.message}. Tap Save again to retry.",
-                                        )
-                                    },
-                                )
+                                // The item exists; keep photos pending and let the user retry.
+                                error = "Item created, but some details didn't save: " +
+                                    "${detail.exceptionOrNull()?.message}. Tap Save again to retry."
                             }
-                        },
-                        onFailure = { onResult(false, it.message) },
-                    )
+                        }
+                    }
+                }
+
+                when {
+                    savedId == null -> onResult(false, error)
+                    error != null -> onResult(false, error) // created but detail update failed
+                    else -> {
+                        clearDraft()
+                        val photoError = uploadPendingPhotos(savedId)
+                        // Entity saved; a photo failure is reported but not treated as a hard failure.
+                        onResult(true, photoError?.let { "Saved, but a photo didn't upload: $it" })
+                    }
                 }
             } finally {
                 _saving.value = false
