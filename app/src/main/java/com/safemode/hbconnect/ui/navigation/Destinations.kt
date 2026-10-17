@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Home
@@ -27,6 +28,7 @@ object Routes {
     const val MAINTENANCE_ALL = "maintenance"
     const val VALUE_BREAKDOWN = "value-breakdown"
     const val IMPORT_EXPORT = "import-export"
+    const val COLLECTIONS = "collections"
     const val SERVER = "server"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
@@ -67,6 +69,7 @@ enum class BottomTab(val route: String, val label: String, val icon: ImageVector
  * are pinned to the bottom of that screen below a divider.
  */
 enum class MoreDestination(val route: String, val label: String, val icon: ImageVector) {
+    COLLECTIONS(Routes.COLLECTIONS, "Collections", Icons.Filled.Collections),
     VALUE_BREAKDOWN(Routes.VALUE_BREAKDOWN, "Value breakdown", Icons.Filled.BarChart),
     ENTITY_TYPES(Routes.ENTITY_TYPES, "Entity types", Icons.Filled.Category),
     TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),

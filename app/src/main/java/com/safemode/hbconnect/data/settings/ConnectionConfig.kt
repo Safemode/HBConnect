@@ -70,6 +70,11 @@ data class ConnectionConfig(
     val maintenanceReminders: Boolean = false,
     /** How far ahead of the scheduled date a maintenance reminder fires. */
     val maintenanceLead: MaintenanceLead = MaintenanceLead.DUE_DAY,
+    /**
+     * The collection (group) to operate in, sent as the `X-Tenant` header. Blank means the server's
+     * default group for the signed-in user. Cleared on sign-out and on connecting to a new server.
+     */
+    val activeGroupId: String = "",
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean
@@ -88,6 +93,9 @@ data class ConnectionConfig(
         }
         return "$scheme://$h$portPart/"
     }
+
+    /** The active collection id for the `X-Tenant` header, or null to use the server default. */
+    fun tenantHeader(): String? = activeGroupId.trim().ifBlank { null }
 
     /** The Authorization header value, normalized to carry a single "Bearer " prefix. */
     fun authHeader(): String? {

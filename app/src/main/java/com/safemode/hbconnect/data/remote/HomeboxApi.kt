@@ -88,6 +88,10 @@ interface HomeboxApi {
     @GET("api/v1/groups")
     suspend fun group(): Response<Group>
 
+    /** Every collection (group) the signed-in user belongs to, for the collection switcher. */
+    @GET("api/v1/groups/all")
+    suspend fun groupsAll(): Response<List<Group>>
+
     /** Supported currencies and their symbol/decimal metadata. */
     @GET("api/v1/currencies")
     suspend fun currencies(): Response<List<Currency>>

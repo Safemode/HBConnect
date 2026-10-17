@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -90,6 +91,22 @@ object Graph {
             .onEach { apiProvider.updateConfig(it) }
             .launchIn(appScope)
 
+        // When the active collection (tenant) changes, drop cross-tenant cached responses and bounce
+        // reachability so every screen refetches the new collection's data. Skips the value present
+        // at launch via drop(1).
+        settingsRepository.config
+            .distinctUntilChanged { old, new -> old.activeGroupId == new.activeGroupId }
+            .drop(1)
+            .onEach { cfg ->
+                apiProvider.updateConfig(cfg)
+                apiProvider.clearCache()
+                serverStatus.reportChecking()
+                val reachable = withContext(Dispatchers.IO) { apiProvider.probeReachable() }
+                serverStatus.report(reachable)
+                if (reachable) loadCurrency()
+            }
+            .launchIn(appScope)
+
         // Register or cancel the periodic maintenance-reminder check as the setting changes. The
         // worker itself runs only while the setting stays on, is configured, and may post; it does
         // its own network fetch on WorkManager's schedule, independent of the app being open.
@@ -109,7 +126,9 @@ object Graph {
                     settingsRepository.config
                         .map { cfg -> cfg.takeIf { it.liveUpdates && it.isConfigured } }
                         .distinctUntilChanged { old, new ->
-                            old?.baseUrl() == new?.baseUrl() && old?.authHeader() == new?.authHeader()
+                            old?.baseUrl() == new?.baseUrl() &&
+                                old?.authHeader() == new?.authHeader() &&
+                                old?.tenantHeader() == new?.tenantHeader()
                         }
                         .collect { liveUpdates.connectTo(it) }
                 } finally {

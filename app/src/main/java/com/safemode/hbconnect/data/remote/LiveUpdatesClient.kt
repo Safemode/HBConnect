@@ -94,6 +94,8 @@ class LiveUpdatesClient(scope: CoroutineScope) {
             // The server advertises this subprotocol for its auth'd event stream.
             .addHeader("Sec-WebSocket-Protocol", SUBPROTOCOL)
         config.authHeader()?.let { requestBuilder.header("Authorization", it) }
+        // Scope the event stream to the active collection, matching the REST calls.
+        config.tenantHeader()?.let { requestBuilder.header("X-Tenant", it) }
 
         val closed = CompletableDeferred<Boolean>()
         val socket = client.newWebSocket(requestBuilder.build(), object : WebSocketListener() {

@@ -103,6 +103,7 @@ class ServerViewModel : ViewModel() {
                         token = form.apiKey.trim(),
                         tokenExpiresAt = "",
                         username = "",
+                        activeGroupId = "",
                     )
                     AuthMode.LOGIN -> {
                         // Point the API provider at the host (no token yet) so login can be issued.
@@ -124,6 +125,7 @@ class ServerViewModel : ViewModel() {
                             token = token,
                             tokenExpiresAt = login.getOrNull()?.expiresAt.orEmpty(),
                             username = form.username.trim(),
+                            activeGroupId = "",
                         )
                     }
                 }
@@ -143,7 +145,8 @@ class ServerViewModel : ViewModel() {
         viewModelScope.launch {
             _busy.value = true
             repository.clearSession()
-            val cleared = settings.config.first().copy(token = "", tokenExpiresAt = "", username = "")
+            val cleared = settings.config.first()
+                .copy(token = "", tokenExpiresAt = "", username = "", activeGroupId = "")
             settings.save(cleared)
             Graph.apiProvider.updateConfig(cleared)
             Graph.serverStatus.reportChecking()
