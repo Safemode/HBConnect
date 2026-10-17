@@ -114,7 +114,7 @@ class BackupViewModel : ViewModel() {
             _busy.value = false
             _message.value = result.fold(
                 onSuccess = { ToolMessage(true, "Backup started. It will appear below as the server builds it.") },
-                onFailure = { ToolMessage(false, it.message ?: "Couldn't start a backup.") },
+                onFailure = { ToolMessage(false, friendlyError(it.message, "Couldn't start a backup.")) },
             )
             if (result.isSuccess) reload(showLoading = false)
         }
@@ -128,7 +128,7 @@ class BackupViewModel : ViewModel() {
             _busy.value = false
             _message.value = result.fold(
                 onSuccess = { ToolMessage(true, "Backup deleted.") },
-                onFailure = { ToolMessage(false, it.message ?: "Couldn't delete backup.") },
+                onFailure = { ToolMessage(false, friendlyError(it.message, "Couldn't delete backup.")) },
             )
             if (result.isSuccess) reload(showLoading = false)
         }
@@ -148,7 +148,7 @@ class BackupViewModel : ViewModel() {
             _busy.value = false
             _message.value = result.fold(
                 onSuccess = { ToolMessage(true, "Backup downloaded.") },
-                onFailure = { ToolMessage(false, it.message ?: "Download failed.") },
+                onFailure = { ToolMessage(false, friendlyError(it.message, "Download failed.")) },
             )
         }
     }
@@ -169,7 +169,7 @@ class BackupViewModel : ViewModel() {
             _busy.value = false
             _message.value = result.fold(
                 onSuccess = { ToolMessage(true, "Restore started. The server will apply the backup.") },
-                onFailure = { ToolMessage(false, it.message ?: "Restore failed.") },
+                onFailure = { ToolMessage(false, friendlyError(it.message, "Restore failed.")) },
             )
             if (result.isSuccess) reload(showLoading = false)
         }
@@ -177,5 +177,23 @@ class BackupViewModel : ViewModel() {
 
     fun clearMessage() {
         _message.value = null
+    }
+
+    /**
+     * Translates the server's raw error into something actionable. Homebox v0.26.x has a known bug
+     * (sysadminsmedia/homebox#1592) where the export service's pubsub topic shuts down after the
+     * first backup, so every later create/delete/restore fails until the container restarts.
+     */
+    private fun friendlyError(raw: String?, fallback: String): String {
+        val message = raw.orEmpty()
+        return when {
+            message.contains("Topic has been Shutdown", ignoreCase = true) ||
+                message.contains("pubsub", ignoreCase = true) ->
+                "Homebox's backup service has stopped responding. This is a known Homebox server " +
+                    "bug (v0.26.x) where backups run only once per server restart. Restart your " +
+                    "Homebox container and try again; a fix is expected in a later Homebox release."
+            message.isBlank() -> fallback
+            else -> message
+        }
     }
 }
