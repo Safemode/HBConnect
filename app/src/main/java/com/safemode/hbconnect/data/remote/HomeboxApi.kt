@@ -234,6 +234,16 @@ interface HomeboxApi {
         @Path("attachmentId") attachmentId: String,
     ): Response<ResponseBody>
 
+    // ---- CSV import / export ----
+    /** Downloads all of the group's entities as a CSV file (text/csv). */
+    @GET("api/v1/entities/export")
+    suspend fun exportEntities(): Response<ResponseBody>
+
+    /** Uploads a Homebox CSV to create/update entities. The file part must be named "csv". */
+    @Multipart
+    @POST("api/v1/entities/import")
+    suspend fun importEntities(@Part file: MultipartBody.Part): Response<ResponseBody>
+
     // ---- Maintenance ----
     @GET("api/v1/entities/{id}/maintenance")
     suspend fun getMaintenance(

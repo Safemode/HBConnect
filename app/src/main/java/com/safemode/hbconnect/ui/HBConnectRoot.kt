@@ -52,6 +52,7 @@ import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.ServerReachability
 import com.safemode.hbconnect.ui.about.AboutScreen
 import com.safemode.hbconnect.ui.attachments.AttachmentsScreen
+import com.safemode.hbconnect.ui.backup.ImportExportScreen
 import com.safemode.hbconnect.ui.dashboard.DashboardScreen
 import com.safemode.hbconnect.ui.entity.EntityDetailScreen
 import com.safemode.hbconnect.ui.entitytypes.EntityTypesScreen
@@ -198,6 +199,11 @@ fun HBConnectRoot() {
                     ValueBreakdownScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
                     )
+                }
+            }
+            composable(Routes.IMPORT_EXPORT) {
+                SubScaffold("Import & export", onBack = { navController.popBackStack() }) {
+                    ImportExportScreen()
                 }
             }
             composable(
