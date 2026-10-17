@@ -90,7 +90,11 @@ fun HBConnectRoot() {
             }
         }
     }
-    val onAddItem: () -> Unit = { navController.navigate(Routes.itemForm()) }
+    // launchSingleTop so repeated Add taps (the bar shows on the form too) reuse the open form
+    // instead of stacking another copy on top.
+    val onAddItem: () -> Unit = {
+        navController.navigate(Routes.itemForm()) { launchSingleTop = true }
+    }
 
     val context = LocalContext.current
     var lastBackPress by remember { mutableLongStateOf(0L) }
