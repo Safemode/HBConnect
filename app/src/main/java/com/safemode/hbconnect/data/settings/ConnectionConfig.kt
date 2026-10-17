@@ -55,6 +55,10 @@ data class ConnectionConfig(
     val username: String = "",
     val cacheSize: CacheSize = CacheSize.MB_50,
     val themePreference: ThemePreference = ThemePreference.SYSTEM,
+    /** Accent colour choice, applied over the light/dark theme. */
+    val accent: AccentPreset = AccentPreset.AUTO,
+    /** The user-picked accent colour (ARGB), used when [accent] is [AccentPreset.CUSTOM]. */
+    val accentColor: Int = 0xFF1565C0.toInt(),
     val itemSortOrder: ItemSortOrder = ItemSortOrder.NAME_ASC,
     /** Whether the detail screen offers the on-device QR code action. Off by default. */
     val showDeviceQr: Boolean = false,

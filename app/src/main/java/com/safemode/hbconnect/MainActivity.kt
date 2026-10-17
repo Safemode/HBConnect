@@ -53,7 +53,11 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
 
-            HBConnectTheme(themePreference = preference) {
+            HBConnectTheme(
+                themePreference = preference,
+                accent = config.accent,
+                accentColor = config.accentColor,
+            ) {
                 HBConnectRoot()
             }
         }
