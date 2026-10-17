@@ -84,6 +84,9 @@ fun ValueOverTimeCard(
                         .fillMaxWidth()
                         .height(160.dp),
                 ) {
+                    // Map a data point to canvas pixels. x is linear across the day span; y is
+                    // inverted (canvas y grows downward, value grows upward) and inset top/bottom
+                    // so the stroke and the end marker aren't clipped at the edges.
                     val inset = 6f
                     val usableH = size.height - inset * 2
                     fun px(day: Long) = ((day - minDay) / spanDays) * size.width

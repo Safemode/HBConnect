@@ -33,6 +33,16 @@ data class DashboardCharts(
     val recent: List<EntitySummary> = emptyList(),
 )
 
+/**
+ * Backs the Dashboard: the group statistics tiles, the "recently added" list, and the server-wide
+ * search with its filter sheet.
+ *
+ * Search is reactive - the trimmed [query] (debounced 250ms so it doesn't fire on every keystroke)
+ * is combined with [filters], and any change to either re-runs the search. A blank query with no
+ * active filter collapses back to the stats view. A query starting with '#' is treated as an exact
+ * asset-tag lookup instead of a text search. Filter-sheet option lists (locations, tags, field
+ * names) are loaded once, lazily, the first time the sheet is opened.
+ */
 @OptIn(FlowPreview::class)
 class DashboardViewModel : ViewModel() {
     private val repository = Graph.repository

@@ -11,6 +11,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Backs the per-item maintenance log for one entity ([entityId]): lists its upkeep entries and
+ * creates/updates/deletes them. Entries are sorted newest-activity first (see [sortKey]). Every
+ * mutation re-fetches the list via [load] so the UI reflects the server. (The group-wide view is
+ * [com.safemode.hbconnect.ui.maintenance.AllMaintenanceViewModel].)
+ */
 class MaintenanceViewModel(private val entityId: String) : ViewModel() {
     private val repository = Graph.repository
 

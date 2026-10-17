@@ -23,6 +23,14 @@ enum class ValueRange(val label: String, val days: Long?) {
     ALL("All", null),
 }
 
+/**
+ * Backs the Value breakdown screen (under Tools). Holds two independent pieces: [state] is the
+ * in-app-computed [ValueInsights] (totals by location/tag/manufacturer/type, most expensive,
+ * insured vs uninsured), and [valueOverTime] is the server's cumulative purchase-price series for
+ * the chart. The chart has its own [range] window (6M/1Y/All); changing it refetches only the
+ * series via [setRange], not the whole breakdown. Refreshes silently on reconnect and on a live
+ * ENTITY event so the figures track changes made elsewhere.
+ */
 class ValueBreakdownViewModel : ViewModel() {
     private val repository = Graph.repository
     private val settings = Graph.settingsRepository

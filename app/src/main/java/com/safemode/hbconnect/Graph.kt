@@ -195,11 +195,6 @@ object Graph {
     }
 
     /**
-     * True when the token expires within [REFRESH_WINDOW] (or the expiry can't be parsed, so we
-     * refresh to be safe). An already-expired token also returns true - the refresh will simply
-     * fail and the user re-logs in.
-     */
-    /**
      * Caches the active group's name (for the collection indicator) and resolves its currency code
      * against the server's currency list for money formatting. Best-effort: failures leave the
      * previous values (prices then show unadorned).
@@ -213,6 +208,11 @@ object Graph {
         _currency.value = match ?: Currency(code = code)
     }
 
+    /**
+     * True when the token expires within [REFRESH_WINDOW] (or the expiry can't be parsed, so we
+     * refresh to be safe). An already-expired token also returns true - the refresh will simply
+     * fail and the user re-logs in.
+     */
     private fun tokenNeedsRefresh(expiresAt: String): Boolean {
         if (expiresAt.isBlank()) return true
         val expiry = runCatching { OffsetDateTime.parse(expiresAt) }.getOrNull() ?: return true

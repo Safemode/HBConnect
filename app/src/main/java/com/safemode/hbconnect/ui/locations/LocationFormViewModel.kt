@@ -20,6 +20,13 @@ data class LocationForm(
     val entityTypeId: String? = null,
 )
 
+/**
+ * Backs the add/edit location form. [locationId] null means "create"; non-null means "edit" (see
+ * [isEdit]). On create, [presetParentId] seeds the parent so "Add location here" lands under the
+ * right place. The parent picker excludes the location being edited so it can't be made its own
+ * parent. [load] gates the form behind a loading/error state while the existing entity and the
+ * location types are fetched; [saving] drives the save button's progress state.
+ */
 class LocationFormViewModel(
     private val locationId: String?,
     presetParentId: String?,
@@ -83,6 +90,9 @@ class LocationFormViewModel(
         viewModelScope.launch {
             _saving.value = true
             val result = if (isEdit) {
+                // The update endpoint replaces the whole entity, so carry through the fields this
+                // form doesn't expose (quantity, custom fields) from the loaded original, otherwise
+                // saving a name/parent change would wipe them.
                 val prior = original
                 repository.updateEntity(
                     locationId!!,

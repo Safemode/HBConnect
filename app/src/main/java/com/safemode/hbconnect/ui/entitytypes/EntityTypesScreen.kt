@@ -48,6 +48,10 @@ import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 
+/**
+ * Entity types screen: list and inline add/edit/delete the item and location types (each with a
+ * name, an optional icon, and an is-location flag). Backed by [EntityTypesViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EntityTypesScreen(viewModel: EntityTypesViewModel = viewModel()) {

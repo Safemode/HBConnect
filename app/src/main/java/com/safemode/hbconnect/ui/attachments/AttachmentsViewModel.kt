@@ -10,6 +10,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Backs the Attachments screen for one entity ([entityId]): lists its attachments and
+ * uploads/updates/deletes them. The attachment list is read from the full entity (the attachments
+ * come embedded in the entity payload), so every mutation just re-fetches the entity via [load].
+ * [busy] drives the upload progress indicator; [state] holds the list. An uploaded image is tagged
+ * "photo" (so it shows in the gallery) and anything else "attachment".
+ */
 class AttachmentsViewModel(private val entityId: String) : ViewModel() {
     private val repository = Graph.repository
 

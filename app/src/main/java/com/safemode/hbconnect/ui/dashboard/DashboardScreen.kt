@@ -111,6 +111,11 @@ private fun parseScan(raw: String): ScanTarget? {
     return null
 }
 
+/**
+ * Dashboard: the group statistics tiles and recently-added items, plus a server-wide search with a
+ * filter sheet and a barcode/asset scanner. When a search query or filter is active the stats view
+ * gives way to the results list. Backed by [DashboardViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(

@@ -279,9 +279,6 @@ interface HomeboxApi {
     @GET("api/v1/tags")
     suspend fun getTags(): Response<List<TagSummary>>
 
-    @GET("api/v1/tags/{id}")
-    suspend fun getTag(@Path("id") id: String): Response<TagOut>
-
     @POST("api/v1/tags")
     suspend fun createTag(@Body body: TagCreate): Response<TagOut>
 

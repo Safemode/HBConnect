@@ -41,6 +41,11 @@ import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.dashboard.BreakdownCard
 
+/**
+ * Value breakdown (under Tools): the collection's total value with breakdowns by location, tag,
+ * manufacturer and type, the most expensive items, insured vs uninsured, and a cumulative
+ * value-over-time chart. Backed by [ValueBreakdownViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ValueBreakdownScreen(

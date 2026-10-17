@@ -1,19 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Auto Backup / device-transfer rules (Android 12+). With no <exclude> entries the defaults apply:
+   the app's DataStore settings (theme, saved servers, preferences) are backed up and transferred.
+   This is intentional and safe: each server's token / API key is encrypted with a device-bound
+   Android Keystore key that is never backed up, so on a cloud restore to a different device the
+   stored blob can't be decrypted - KeystoreCrypto clears it and the user simply re-enters the
+   credential. The non-sensitive preferences still carry over.
 -->
 <data-extraction-rules>
-    <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
-    </cloud-backup>
-    <!--
-    <device-transfer>
-        <include .../>
-        <exclude .../>
-    </device-transfer>
-    -->
+    <cloud-backup />
+    <device-transfer />
 </data-extraction-rules>

@@ -37,6 +37,10 @@ import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 
+/**
+ * Group-wide maintenance view: scheduled and completed upkeep across every item, each with its
+ * name, description, cost and dates. Backed by [AllMaintenanceViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllMaintenanceScreen(

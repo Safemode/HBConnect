@@ -59,6 +59,12 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
+/**
+ * Backup & restore: lists the server-generated whole-collection backups with each one's date,
+ * status and size, and offers create, download (to device storage), delete, and restore-from-file.
+ * Backups are built on the server; nothing is downloaded until the user taps download. Backed by
+ * [BackupViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupScreen(viewModel: BackupViewModel = viewModel()) {

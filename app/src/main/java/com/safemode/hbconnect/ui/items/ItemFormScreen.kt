@@ -71,7 +71,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
@@ -95,6 +95,11 @@ private fun formFactory(itemId: String?, parentId: String?) = object : ViewModel
         ItemFormViewModel(itemId, parentId) as T
 }
 
+/**
+ * Add/edit item form: name, quantity, location, type, tags, identifiers, purchase/warranty/insured
+ * details, notes, and photos. Supports barcode lookup to prefill fields and inline tag creation.
+ * Backed by [ItemFormViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ItemFormScreen(

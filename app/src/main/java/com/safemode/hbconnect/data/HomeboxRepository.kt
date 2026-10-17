@@ -98,11 +98,6 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         }
     }
 
-    private fun <T> Response<T>.unwrap(): T {
-        if (isSuccessful) return body() ?: throw IllegalStateException("Empty response from server.")
-        throw mapError(code(), errorBody()?.string())
-    }
-
     // ---- Auth / system ----
     suspend fun status(): Result<ApiSummary> = call { it.status() }
 

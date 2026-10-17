@@ -53,6 +53,23 @@ object ItemDraftStore {
     var photoPaths: List<String> = emptyList()
 }
 
+/**
+ * Backs the add/edit item form. [itemId] null means "create", non-null means "edit" (see [isEdit]);
+ * [presetParentId] seeds the parent for the "Add item here" flow.
+ *
+ * Three Homebox quirks shape the save path:
+ *  - The create endpoint accepts only a subset of fields, so a new item with details the create
+ *    body can't carry (serial, notes, purchase, warranty, insured) is created and then updated
+ *    ([needsDetailUpdate]); the created id is remembered so a retry completes it rather than making
+ *    a duplicate.
+ *  - Update is a full-field replace, so fields this form doesn't expose (sold info, custom fields,
+ *    asset id) are carried through from the loaded [original] so a save doesn't wipe them.
+ *  - Photos taken on the form are only local files until the item exists; they're uploaded as
+ *    attachments after the save succeeds.
+ *
+ * The plain bottom-bar Add also drafts into [ItemDraftStore] so leaving and returning keeps typed
+ * input; editing and "add here" always start clean.
+ */
 class ItemFormViewModel(
     private val itemId: String?,
     private val presetParentId: String?,

@@ -1,15 +1,18 @@
 package com.safemode.hbconnect
 
 import android.app.Application
-import coil.ImageLoader
-import coil.ImageLoaderFactory
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
-import coil.request.CachePolicy
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.CachePolicy
+import coil3.request.crossfade
 import com.safemode.hbconnect.notifications.MaintenanceNotifier
 import okio.Path.Companion.toOkioPath
 
-class HBConnectApp : Application(), ImageLoaderFactory {
+class HBConnectApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         Graph.init(this)
@@ -17,19 +20,27 @@ class HBConnectApp : Application(), ImageLoaderFactory {
     }
 
     /**
-     * Coil uses this loader app-wide. Requests go through an OkHttp client carrying the Homebox
-     * bearer header, and images are cached in memory and on disk so each one is fetched from the
-     * server only once. Attachment ids are stable UUIDs, so the URL stays a safe cache key.
+     * The app-wide Coil image loader. Network images go through our own OkHttp client (which carries
+     * the Homebox bearer and X-Tenant headers and follows redirects to presigned storage URLs),
+     * supplied as an [OkHttpNetworkFetcherFactory] - Coil 3 removed `ImageLoader.Builder.okHttpClient`
+     * and no longer bundles networking in coil-core, so the client is wired through the network
+     * component instead. Adding the fetcher explicitly makes it take precedence over the default one
+     * Coil would otherwise service-load.
+     *
+     * Images are cached in memory and on disk so each is fetched from the server only once; attachment
+     * ids are stable UUIDs, so the URL is a safe cache key. Coil 3 ignores HTTP cache-control headers
+     * by default (Coil 2 needed `respectCacheHeaders(false)` for this), which is the behaviour we want.
      */
-    override fun newImageLoader(): ImageLoader =
-        ImageLoader.Builder(this)
-            .okHttpClient { Graph.apiProvider.authenticatedImageClient() }
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        ImageLoader.Builder(context)
+            .components {
+                add(OkHttpNetworkFetcherFactory(callFactory = { Graph.apiProvider.authenticatedImageClient() }))
+            }
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
-            .respectCacheHeaders(false)
             .memoryCache {
-                MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                MemoryCache.Builder()
+                    .maxSizePercent(context, 0.25)
                     .build()
             }
             .diskCache {

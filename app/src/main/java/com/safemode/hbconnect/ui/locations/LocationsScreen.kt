@@ -37,6 +37,10 @@ import com.safemode.hbconnect.ui.common.TreeNodeRow
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.flattenTree
 
+/**
+ * Locations list: every location with add/edit/delete; opening one lists the entities it contains
+ * (with an "Add item here" shortcut). Backed by [LocationsViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationsScreen(

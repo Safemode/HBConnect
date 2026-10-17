@@ -98,7 +98,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
@@ -120,6 +120,12 @@ private fun detailFactory(entityId: String) = object : ViewModelProvider.Factory
         EntityDetailViewModel(entityId) as T
 }
 
+/**
+ * Detail screen for one item or location: photo gallery, fields (quantity, purchase/warranty/sold,
+ * notes, identifiers), a location breadcrumb and - for a location - its contents, plus quick
+ * actions (move, retag, set quantity, duplicate, maintenance, attachments, QR/label). Backed by
+ * [EntityDetailViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EntityDetailScreen(
@@ -215,7 +221,7 @@ fun EntityDetailScreen(
             )
         },
         floatingActionButton = {
-            if (isLocation && entity?.id != null) {
+            if (isLocation && entity.id != null) {
                 ExtendedFloatingActionButton(
                     text = { Text("Add item here") },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },

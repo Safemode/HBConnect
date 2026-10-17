@@ -40,6 +40,17 @@ data class ServerForm(
 
 data class ServerInfo(val user: UserOut?, val version: String?)
 
+/**
+ * Backs the Server screen: the connection form, the saved-server switcher, and connect/validate.
+ *
+ * Credentials entered in the form are never stored in plaintext: in login mode the username and
+ * password are exchanged for a bearer token (the password is then cleared from the form), and in
+ * API-key mode the key is stored directly; either way the secret is persisted encrypted by the
+ * settings layer. Saving a new server adds a profile; otherwise the active profile is updated.
+ * Switching or deleting a server re-points the API provider, drops the previous server's cached
+ * data, and re-validates. [addingNew] distinguishes "drafting a new server" from "editing the
+ * active one".
+ */
 class ServerViewModel : ViewModel() {
     private val repository = Graph.repository
     private val settings = Graph.settingsRepository

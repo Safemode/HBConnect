@@ -58,6 +58,10 @@ import com.safemode.hbconnect.ui.common.Option
 import com.safemode.hbconnect.ui.common.OptionDropdownField
 import com.safemode.hbconnect.ui.common.UiState
 
+/**
+ * Templates screen: list and add/edit/delete item templates, and create a new item from a
+ * template's defaults (choosing its location and tags). Backed by [EntityTemplatesViewModel].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TemplatesScreen(
