@@ -80,13 +80,13 @@ fun HBConnectRoot() {
     val serverState by Graph.serverStatus.state.collectAsStateWithLifecycle()
     val showBanner = serverState != ServerReachability.REACHABLE
 
-    // Tabs use save/restore so each keeps its scroll position, and back always returns to Home.
+    // Tap a tab to go to its root, clearing anything above Home. No save/restore: the Add form is a
+    // plain (non-tab) destination, and saving/restoring it would strand a later tab tap on the form.
     val onSelectTab: (BottomTab) -> Unit = { tab ->
         if (currentRoute != tab.route) {
             navController.navigate(tab.route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                popUpTo(navController.graph.findStartDestination().id)
                 launchSingleTop = true
-                restoreState = true
             }
         }
     }
