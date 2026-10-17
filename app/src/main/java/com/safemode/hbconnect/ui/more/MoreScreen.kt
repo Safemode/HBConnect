@@ -1,34 +1,49 @@
 package com.safemode.hbconnect.ui.more
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.safemode.hbconnect.Graph
@@ -42,11 +57,15 @@ private val bottomItems = listOf(
     MoreDestination.SETTINGS,
 )
 
+private val RowHeight = 60.dp
+
 /**
  * The "More" tab: a hub for destinations that don't warrant a spot in the bottom bar. Collections is
- * pinned at the top; the middle entries are alphabetical by default but can be rearranged (with a
- * reset back to A-Z); server/settings/account stay pinned at the bottom.
+ * pinned at the top; the middle entries are alphabetical by default but can be rearranged by
+ * long-pressing and dragging in reorder mode (toggled from the top bar, with a reset back to A-Z);
+ * server/settings/account stay pinned at the bottom.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MoreScreen(onOpen: (String) -> Unit, viewModel: MoreViewModel = viewModel()) {
     val activeCollection by Graph.activeGroupName.collectAsStateWithLifecycle()
@@ -55,50 +74,60 @@ fun MoreScreen(onOpen: (String) -> Unit, viewModel: MoreViewModel = viewModel())
 
     val middle = remember(customOrder) { orderedMiddle(customOrder) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            MoreRow(
-                dest = topItem,
-                onOpen = onOpen,
-                subtitle = activeCollection,
-                enabled = !reordering,
-            )
-            // Small separator bar setting Collections apart from the rest.
-            HorizontalDivider(
-                thickness = 3.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            )
-
-            ReorderControls(
-                reordering = reordering,
-                onToggle = { reordering = !reordering },
-                onReset = {
-                    viewModel.resetOrder()
-                    reordering = false
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        topBar = {
+            TopAppBar(
+                title = { Text("More") },
+                actions = {
+                    if (reordering) {
+                        TextButton(onClick = viewModel::resetOrder) { Text("Reset A-Z") }
+                        IconButton(onClick = { reordering = false }) {
+                            Icon(
+                                Icons.Filled.Check,
+                                contentDescription = "Done reordering",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = { reordering = true }) {
+                            Icon(Icons.Filled.SwapVert, contentDescription = "Reorder")
+                        }
+                    }
                 },
             )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                MoreRow(
+                    dest = topItem,
+                    onOpen = onOpen,
+                    subtitle = activeCollection,
+                    enabled = !reordering,
+                )
+                // Small separator bar setting Collections apart from the rest.
+                HorizontalDivider(thickness = 3.dp, color = MaterialTheme.colorScheme.surfaceVariant)
 
-            middle.forEachIndexed { index, dest ->
                 if (reordering) {
-                    ReorderRow(
-                        dest = dest,
-                        canMoveUp = index > 0,
-                        canMoveDown = index < middle.lastIndex,
-                        onMove = { delta -> viewModel.saveOrder(moved(middle, index, delta)) },
-                    )
+                    ReorderableMoreList(items = middle, onReordered = viewModel::saveOrder)
                 } else {
-                    MoreRow(dest = dest, onOpen = onOpen)
+                    middle.forEach { dest -> MoreRow(dest, onOpen) }
                 }
             }
-        }
 
-        HorizontalDivider()
-        bottomItems.forEach { dest -> MoreRow(dest, onOpen, enabled = !reordering) }
-        Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+            bottomItems.forEach { dest -> MoreRow(dest, onOpen, enabled = !reordering) }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
     }
 }
 
@@ -112,32 +141,81 @@ private fun orderedMiddle(customOrder: List<String>): List<MoreDestination> {
     )
 }
 
-/** The current middle order with the item at [index] moved by [delta], as route ids to persist. */
-private fun moved(middle: List<MoreDestination>, index: Int, delta: Int): List<String> {
-    val ids = middle.map { it.route }.toMutableList()
-    val target = index + delta
-    if (index in ids.indices && target in ids.indices) {
-        val tmp = ids[index]
-        ids[index] = ids[target]
-        ids[target] = tmp
-    }
-    return ids
-}
-
+/**
+ * The reorderable middle section. Each row can be long-pressed and dragged to a new position; the
+ * resulting order (route ids) is reported via [onReordered] when the drag ends.
+ */
 @Composable
-private fun ReorderControls(reordering: Boolean, onToggle: () -> Unit, onReset: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (reordering) {
-            TextButton(onClick = onReset) { Text("Reset A-Z") }
-            TextButton(onClick = onToggle) { Text("Done") }
-        } else {
-            TextButton(onClick = onToggle) { Text("Reorder") }
+private fun ReorderableMoreList(
+    items: List<MoreDestination>,
+    onReordered: (List<String>) -> Unit,
+) {
+    val working = remember(items) { items.toMutableStateList() }
+    var draggingRoute by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val rowHeightPx = with(LocalDensity.current) { RowHeight.toPx() }
+
+    Column {
+        working.forEach { dest ->
+            key(dest.route) {
+                val dragging = dest.route == draggingRoute
+                Row(
+                    modifier = Modifier
+                        .zIndex(if (dragging) 1f else 0f)
+                        .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
+                        .fillMaxWidth()
+                        .height(RowHeight)
+                        .background(
+                            if (dragging) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                        )
+                        .pointerInput(dest.route) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    draggingRoute = dest.route
+                                    dragOffset = 0f
+                                },
+                                onDragEnd = {
+                                    draggingRoute = null
+                                    dragOffset = 0f
+                                    onReordered(working.map { it.route })
+                                },
+                                onDragCancel = {
+                                    draggingRoute = null
+                                    dragOffset = 0f
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragOffset += amount.y
+                                    val current = working.indexOfFirst { it.route == dest.route }
+                                    if (current < 0) return@detectDragGesturesAfterLongPress
+                                    if (dragOffset > rowHeightPx / 2 && current < working.lastIndex) {
+                                        working.add(current + 1, working.removeAt(current))
+                                        dragOffset -= rowHeightPx
+                                    } else if (dragOffset < -rowHeightPx / 2 && current > 0) {
+                                        working.add(current - 1, working.removeAt(current))
+                                        dragOffset += rowHeightPx
+                                    }
+                                },
+                            )
+                        }
+                        .padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(dest.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.width(24.dp))
+                    Text(
+                        dest.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        Icons.Filled.DragHandle,
+                        contentDescription = "Drag to reorder ${dest.label}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -175,40 +253,6 @@ private fun MoreRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun ReorderRow(
-    dest: MoreDestination,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMove: (Int) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            dest.icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.width(24.dp))
-        Text(
-            dest.label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        IconButton(onClick = { onMove(-1) }, enabled = canMoveUp) {
-            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${dest.label} up")
-        }
-        IconButton(onClick = { onMove(1) }, enabled = canMoveDown) {
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${dest.label} down")
         }
     }
 }

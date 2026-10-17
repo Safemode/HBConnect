@@ -175,9 +175,8 @@ fun HBConnectRoot() {
                 )
             }
             composable(Routes.MORE) {
-                MainScaffold("More") {
-                    MoreScreen(onOpen = { route -> navController.navigate(route) })
-                }
+                // MoreScreen owns its top bar (the reorder action), so it isn't wrapped in MainScaffold.
+                MoreScreen(onOpen = { route -> navController.navigate(route) })
             }
             composable(Routes.TAGS) {
                 // TagsScreen owns its top bar (back + expand/collapse-all), so no SubScaffold wrapper.
