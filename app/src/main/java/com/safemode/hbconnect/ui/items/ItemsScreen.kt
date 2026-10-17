@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -114,22 +115,14 @@ fun ItemsScreen(
                     },
                     title = { Text("${selection.size} selected") },
                     actions = {
-                        IconButton(onClick = { confirmDelete = true }) {
-                            Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = "Delete",
-                                tint = MaterialTheme.colorScheme.error,
-                            )
+                        IconButton(onClick = { viewModel.selectAll() }) {
+                            Icon(Icons.Filled.SelectAll, contentDescription = "Select all")
                         }
                         Box {
                             IconButton(onClick = { menuOpen = true }) {
                                 Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
                             }
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Select all") },
-                                    onClick = { menuOpen = false; viewModel.selectAll() },
-                                )
                                 DropdownMenuItem(
                                     text = { Text("Move") },
                                     onClick = { menuOpen = false; openDialog(BulkDialog.MOVE) },
@@ -141,6 +134,17 @@ fun ItemsScreen(
                                 DropdownMenuItem(
                                     text = { Text("Set quantity") },
                                     onClick = { menuOpen = false; openDialog(BulkDialog.QUANTITY) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    onClick = { menuOpen = false; confirmDelete = true },
                                 )
                             }
                         }
