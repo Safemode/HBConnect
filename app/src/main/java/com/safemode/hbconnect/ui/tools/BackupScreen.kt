@@ -49,7 +49,14 @@ import com.safemode.hbconnect.ui.common.EmptyState
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -195,7 +202,7 @@ private fun BackupRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                export.createdAt?.take(10)?.let { "Backup $it" } ?: "Backup",
+                formatDateTime(export.createdAt),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium,
@@ -238,6 +245,18 @@ private fun formatSize(bytes: Long?): String {
     val mb = kb / 1024
     if (mb < 1024) return "%.1f MB".format(Locale.getDefault(), mb)
     return "%.2f GB".format(Locale.getDefault(), mb / 1024)
+}
+
+private val dateTimeFormatter =
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
+
+/** Formats an ISO-8601 instant as a local date and time (e.g. "Oct 17, 2026, 12:05:47 PM"). */
+private fun formatDateTime(raw: String?): String {
+    val text = raw?.ifBlank { null } ?: return "Backup"
+    val instant = runCatching { OffsetDateTime.parse(text).toInstant() }.getOrNull()
+        ?: runCatching { Instant.parse(text) }.getOrNull()
+        ?: runCatching { LocalDateTime.parse(text).toInstant(ZoneOffset.UTC) }.getOrNull()
+    return instant?.let { dateTimeFormatter.format(it) } ?: text.take(10)
 }
 
 /** Best-effort human filename for a picked document; falls back to a generic zip name. */

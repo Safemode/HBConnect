@@ -111,12 +111,17 @@ class BackupViewModel : ViewModel() {
         viewModelScope.launch {
             _busy.value = true
             val result = repository.createExport()
+            // Homebox records an export row even when the enqueue fails, so always refresh the list;
+            // a failed attempt then shows up below with its own "failed" status and server message.
+            reload(showLoading = false)
             _busy.value = false
-            _message.value = result.fold(
-                onSuccess = { ToolMessage(true, "Backup started. It will appear below as the server builds it.") },
-                onFailure = { ToolMessage(false, friendlyError(it.message, "Couldn't start a backup.")) },
-            )
-            if (result.isSuccess) reload(showLoading = false)
+            _message.value = if (result.isSuccess) {
+                ToolMessage(true, "Backup started. It will appear below as the server builds it.")
+            } else {
+                val failed = (_state.value as? UiState.Success)?.data
+                    ?.firstOrNull { it.status?.lowercase() == "failed" }
+                ToolMessage(false, failed?.error?.ifBlank { null } ?: "Backup failed. Check server logs for details.")
+            }
         }
     }
 
@@ -128,7 +133,7 @@ class BackupViewModel : ViewModel() {
             _busy.value = false
             _message.value = result.fold(
                 onSuccess = { ToolMessage(true, "Backup deleted.") },
-                onFailure = { ToolMessage(false, friendlyError(it.message, "Couldn't delete backup.")) },
+                onFailure = { ToolMessage(false, serverFailureText(it.message, "Couldn't delete the backup.")) },
             )
             if (result.isSuccess) reload(showLoading = false)
         }
@@ -148,7 +153,7 @@ class BackupViewModel : ViewModel() {
             _busy.value = false
             _message.value = result.fold(
                 onSuccess = { ToolMessage(true, "Backup downloaded.") },
-                onFailure = { ToolMessage(false, friendlyError(it.message, "Download failed.")) },
+                onFailure = { ToolMessage(false, serverFailureText(it.message, "Download failed.")) },
             )
         }
     }
@@ -169,7 +174,7 @@ class BackupViewModel : ViewModel() {
             _busy.value = false
             _message.value = result.fold(
                 onSuccess = { ToolMessage(true, "Restore started. The server will apply the backup.") },
-                onFailure = { ToolMessage(false, friendlyError(it.message, "Restore failed.")) },
+                onFailure = { ToolMessage(false, serverFailureText(it.message, "Restore failed.")) },
             )
             if (result.isSuccess) reload(showLoading = false)
         }
@@ -180,20 +185,17 @@ class BackupViewModel : ViewModel() {
     }
 
     /**
-     * Translates the server's raw error into something actionable. Homebox v0.26.x has a known bug
-     * (sysadminsmedia/homebox#1592) where the export service's pubsub topic shuts down after the
-     * first backup, so every later create/delete/restore fails until the container restarts.
+     * Keeps user-facing failures readable: a blank or low-level server error (e.g. the Homebox
+     * export pubsub bug, sysadminsmedia/homebox#1592) is replaced with [fallback] plus a pointer to
+     * the server logs, rather than surfacing internal error text.
      */
-    private fun friendlyError(raw: String?, fallback: String): String {
+    private fun serverFailureText(raw: String?, fallback: String): String {
         val message = raw.orEmpty()
-        return when {
+        val lowLevel = message.isBlank() ||
+            message.contains("pubsub", ignoreCase = true) ||
             message.contains("Topic has been Shutdown", ignoreCase = true) ||
-                message.contains("pubsub", ignoreCase = true) ->
-                "Homebox's backup service has stopped responding. This is a known Homebox server " +
-                    "bug (v0.26.x) where backups run only once per server restart. Restart your " +
-                    "Homebox container and try again; a fix is expected in a later Homebox release."
-            message.isBlank() -> fallback
-            else -> message
-        }
+            message.contains("code=", ignoreCase = true) ||
+            message.startsWith("Server error", ignoreCase = true)
+        return if (lowLevel) "$fallback Check server logs for details." else message
     }
 }
