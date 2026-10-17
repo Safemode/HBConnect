@@ -12,7 +12,10 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.graphics.ColorUtils
+import com.safemode.hbconnect.data.settings.AccentPreset
 import com.safemode.hbconnect.data.settings.ThemePreference
 
 private val LightColors = lightColorScheme(
@@ -66,7 +69,8 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun HBConnectTheme(
     themePreference: ThemePreference = ThemePreference.SYSTEM,
-    dynamicColor: Boolean = true,
+    accent: AccentPreset = AccentPreset.AUTO,
+    accentColor: Int = 0xFF1565C0.toInt(),
     content: @Composable () -> Unit,
 ) {
     val darkTheme = when (themePreference) {
@@ -76,17 +80,24 @@ fun HBConnectTheme(
     }
 
     val context = LocalContext.current
-    val baseScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
+    // "Automatic" uses the wallpaper-based Material You colours on Android 12+, otherwise the brand
+    // palette. Any other accent re-tints the brand palette's accent roles from its seed colour.
+    val useDynamic = accent == AccentPreset.AUTO && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val base = when {
+        useDynamic -> if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         darkTheme -> DarkColors
         else -> LightColors
     }
 
+    val seed: Color? = when (accent) {
+        AccentPreset.AUTO, AccentPreset.HOMEBOX -> null
+        AccentPreset.CUSTOM -> Color(accentColor)
+        else -> accent.seed?.let { Color(it) }
+    }
+    val accented = if (seed != null) base.withAccent(seed, darkTheme) else base
+
     // Midnight keeps the accent colours but blacks out the large surface areas for OLED.
-    val colorScheme =
-        if (themePreference == ThemePreference.MIDNIGHT) baseScheme.toMidnight() else baseScheme
+    val colorScheme = if (themePreference == ThemePreference.MIDNIGHT) accented.toMidnight() else accented
 
     MaterialTheme(
         colorScheme = colorScheme,
@@ -100,6 +111,72 @@ fun HBConnectTheme(
             content = content,
         )
     }
+}
+
+/**
+ * Re-tints the accent roles (primary/secondary/tertiary and their on/container pairs) from [seed],
+ * following Material 3's tonal role conventions, while leaving the neutral surfaces and error roles
+ * from the base scheme intact. Tones are approximated with HSL lightness, which is close enough for
+ * an accent-colour feature without pulling in a full colour-science dependency.
+ */
+private fun ColorScheme.withAccent(seed: Color, dark: Boolean): ColorScheme {
+    val secondarySeed = seed.withSaturation(0.55f)
+    val tertiarySeed = seed.withHueShift(60f)
+    return if (dark) {
+        copy(
+            primary = seed.tone(80),
+            onPrimary = seed.tone(20),
+            primaryContainer = seed.tone(30),
+            onPrimaryContainer = seed.tone(90),
+            inversePrimary = seed.tone(40),
+            secondary = secondarySeed.tone(80),
+            onSecondary = secondarySeed.tone(20),
+            secondaryContainer = secondarySeed.tone(30),
+            onSecondaryContainer = secondarySeed.tone(90),
+            tertiary = tertiarySeed.tone(80),
+            onTertiary = tertiarySeed.tone(20),
+            tertiaryContainer = tertiarySeed.tone(30),
+            onTertiaryContainer = tertiarySeed.tone(90),
+        )
+    } else {
+        copy(
+            primary = seed.tone(40),
+            onPrimary = Color.White,
+            primaryContainer = seed.tone(90),
+            onPrimaryContainer = seed.tone(10),
+            inversePrimary = seed.tone(80),
+            secondary = secondarySeed.tone(40),
+            onSecondary = Color.White,
+            secondaryContainer = secondarySeed.tone(90),
+            onSecondaryContainer = secondarySeed.tone(10),
+            tertiary = tertiarySeed.tone(40),
+            onTertiary = Color.White,
+            tertiaryContainer = tertiarySeed.tone(90),
+            onTertiaryContainer = tertiarySeed.tone(10),
+        )
+    }
+}
+
+/** This colour at the given HSL lightness (0-100), keeping its hue and saturation. */
+private fun Color.tone(lightness: Int): Color {
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(toArgb(), hsl)
+    hsl[2] = (lightness / 100f).coerceIn(0f, 1f)
+    return Color(ColorUtils.HSLToColor(hsl))
+}
+
+private fun Color.withHueShift(degrees: Float): Color {
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(toArgb(), hsl)
+    hsl[0] = ((hsl[0] + degrees) % 360f + 360f) % 360f
+    return Color(ColorUtils.HSLToColor(hsl))
+}
+
+private fun Color.withSaturation(factor: Float): Color {
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(toArgb(), hsl)
+    hsl[1] = (hsl[1] * factor).coerceIn(0f, 1f)
+    return Color(ColorUtils.HSLToColor(hsl))
 }
 
 /**

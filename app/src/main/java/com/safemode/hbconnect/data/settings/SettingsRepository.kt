@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.Moshi
@@ -29,6 +30,8 @@ class SettingsRepository(private val context: Context) {
         // App-wide preferences.
         val CACHE_SIZE = stringPreferencesKey("cache_size")
         val THEME = stringPreferencesKey("theme_preference")
+        val ACCENT = stringPreferencesKey("accent")
+        val ACCENT_COLOR = intPreferencesKey("accent_color")
         val SORT_ORDER = stringPreferencesKey("item_sort_order")
         val SHOW_DEVICE_QR = booleanPreferencesKey("show_device_qr")
         val SWAP_SCAN_FILTER = booleanPreferencesKey("swap_scan_filter")
@@ -74,6 +77,9 @@ class SettingsRepository(private val context: Context) {
                 .getOrDefault(CacheSize.MB_50),
             themePreference = runCatching { ThemePreference.valueOf(prefs[Keys.THEME] ?: "SYSTEM") }
                 .getOrDefault(ThemePreference.SYSTEM),
+            accent = runCatching { AccentPreset.valueOf(prefs[Keys.ACCENT] ?: "AUTO") }
+                .getOrDefault(AccentPreset.AUTO),
+            accentColor = prefs[Keys.ACCENT_COLOR] ?: 0xFF1565C0.toInt(),
             itemSortOrder = runCatching { ItemSortOrder.valueOf(prefs[Keys.SORT_ORDER] ?: "NAME_ASC") }
                 .getOrDefault(ItemSortOrder.NAME_ASC),
             showDeviceQr = prefs[Keys.SHOW_DEVICE_QR] ?: false,
@@ -102,6 +108,8 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[Keys.CACHE_SIZE] = config.cacheSize.name
             prefs[Keys.THEME] = config.themePreference.name
+            prefs[Keys.ACCENT] = config.accent.name
+            prefs[Keys.ACCENT_COLOR] = config.accentColor
             prefs[Keys.SORT_ORDER] = config.itemSortOrder.name
             prefs[Keys.SHOW_DEVICE_QR] = config.showDeviceQr
             prefs[Keys.SWAP_SCAN_FILTER] = config.swapScanFilter

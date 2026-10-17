@@ -30,9 +30,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +44,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.settings.AccentPreset
 import com.safemode.hbconnect.data.settings.CacheSize
 import com.safemode.hbconnect.data.settings.ItemSortOrder
 import com.safemode.hbconnect.data.settings.MaintenanceLead
@@ -53,6 +57,7 @@ import kotlinx.coroutines.flow.first
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val config by viewModel.config.collectAsStateWithLifecycle()
     val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
+    var showColorPicker by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     // Only persist "on" once notifications are permitted, so the toggle reflects reality.
@@ -80,6 +85,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     options = ThemePreference.entries.map { it to it.label },
                     selected = config.themePreference,
                     onSelect = { v -> viewModel.updateAndSave { it.copy(themePreference = v) } },
+                )
+                Text("Accent color", style = MaterialTheme.typography.labelLarge)
+                AccentSwatches(
+                    selected = config.accent,
+                    customColor = Color(config.accentColor),
+                    onSelect = { preset -> viewModel.updateAndSave { it.copy(accent = preset) } },
+                    onEditCustom = { showColorPicker = true },
                 )
             }
 
@@ -180,6 +192,17 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
 
             AboutCard()
         }
+    }
+
+    if (showColorPicker) {
+        ColorPickerDialog(
+            initial = Color(config.accentColor),
+            onDismiss = { showColorPicker = false },
+            onConfirm = { argb ->
+                showColorPicker = false
+                viewModel.updateAndSave { it.copy(accent = AccentPreset.CUSTOM, accentColor = argb) }
+            },
+        )
     }
 }
 
