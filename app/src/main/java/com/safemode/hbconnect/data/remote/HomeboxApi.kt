@@ -38,6 +38,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Headers
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -57,6 +58,10 @@ interface HomeboxApi {
     @GET("api/v1/status")
     suspend fun status(): Response<ApiSummary>
 
+    // The server's local auth provider matches the Content-Type header exactly against
+    // "application/json", so the charset parameter Moshi would otherwise append must be suppressed
+    // by pinning the header here — otherwise login is rejected with a 401.
+    @Headers("Content-Type: application/json")
     @POST("api/v1/users/login")
     suspend fun login(@Body body: LoginForm): Response<TokenResponse>
 
