@@ -27,6 +27,7 @@ import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
+import com.safemode.hbconnect.data.remote.models.GroupCreate
 import com.safemode.hbconnect.data.remote.models.GroupUpdate
 import com.safemode.hbconnect.data.remote.models.GroupAcceptInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
@@ -136,6 +137,10 @@ interface HomeboxApi {
         @Body body: GroupUpdate,
         @Header("X-Tenant") tenant: String? = null,
     ): Response<Group>
+
+    /** Creates a new collection (group) with the given name. */
+    @POST("api/v1/groups")
+    suspend fun createGroup(@Body body: GroupCreate): Response<Group>
 
     /** Every collection (group) the signed-in user belongs to, for the collection switcher. */
     @GET("api/v1/groups/all")
