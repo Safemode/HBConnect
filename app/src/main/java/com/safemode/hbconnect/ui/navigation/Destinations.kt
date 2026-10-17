@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.outlined.Place
@@ -29,6 +30,7 @@ object Routes {
     const val VALUE_BREAKDOWN = "value-breakdown"
     const val IMPORT_EXPORT = "import-export"
     const val COLLECTIONS = "collections"
+    const val MEMBERS = "members"
     const val SERVER = "server"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
@@ -70,6 +72,7 @@ enum class BottomTab(val route: String, val label: String, val icon: ImageVector
  */
 enum class MoreDestination(val route: String, val label: String, val icon: ImageVector) {
     COLLECTIONS(Routes.COLLECTIONS, "Collections", Icons.Filled.Collections),
+    MEMBERS(Routes.MEMBERS, "Members", Icons.Filled.People),
     VALUE_BREAKDOWN(Routes.VALUE_BREAKDOWN, "Value breakdown", Icons.Filled.BarChart),
     ENTITY_TYPES(Routes.ENTITY_TYPES, "Entity types", Icons.Filled.Category),
     TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),

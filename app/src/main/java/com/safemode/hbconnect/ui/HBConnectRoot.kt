@@ -61,6 +61,7 @@ import com.safemode.hbconnect.ui.items.ItemFormScreen
 import com.safemode.hbconnect.ui.items.ItemsScreen
 import com.safemode.hbconnect.ui.locations.LocationFormScreen
 import com.safemode.hbconnect.ui.locations.LocationsScreen
+import com.safemode.hbconnect.ui.members.MembersScreen
 import com.safemode.hbconnect.ui.maintenance.AllMaintenanceScreen
 import com.safemode.hbconnect.ui.maintenance.MaintenanceScreen
 import com.safemode.hbconnect.ui.more.MoreScreen
@@ -210,6 +211,11 @@ fun HBConnectRoot() {
             composable(Routes.COLLECTIONS) {
                 SubScaffold("Collections", onBack = { navController.popBackStack() }) {
                     CollectionsScreen()
+                }
+            }
+            composable(Routes.MEMBERS) {
+                SubScaffold("Members", onBack = { navController.popBackStack() }) {
+                    MembersScreen()
                 }
             }
             composable(

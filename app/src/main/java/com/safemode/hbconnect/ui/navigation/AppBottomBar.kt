@@ -26,6 +26,7 @@ fun selectedTabFor(route: String?): BottomTab? = when (route) {
     Routes.VALUE_BREAKDOWN,
     Routes.IMPORT_EXPORT,
     Routes.COLLECTIONS,
+    Routes.MEMBERS,
     Routes.SERVER,
     Routes.SETTINGS,
     Routes.ABOUT,

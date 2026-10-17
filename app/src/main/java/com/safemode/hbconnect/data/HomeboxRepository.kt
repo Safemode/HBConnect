@@ -23,6 +23,10 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.Group
+import com.safemode.hbconnect.data.remote.models.GroupInvitation
+import com.safemode.hbconnect.data.remote.models.GroupInvitationCreate
+import com.safemode.hbconnect.data.remote.models.GroupInvitationCreated
+import com.safemode.hbconnect.data.remote.models.GroupMember
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.LoginForm
 import com.safemode.hbconnect.data.remote.models.MaintenanceEntry
@@ -199,6 +203,20 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     /** Every collection (group) the user belongs to. */
     suspend fun groupsAll(): Result<List<Group>> = call { it.groupsAll() }
+
+    // ---- Group members / invitations ----
+    suspend fun groupMembers(): Result<List<GroupMember>> = call { it.groupMembers() }
+
+    suspend fun removeGroupMember(userId: String): Result<Unit> =
+        callUnit { it.removeGroupMember(userId) }
+
+    suspend fun groupInvitations(): Result<List<GroupInvitation>> = call { it.groupInvitations() }
+
+    suspend fun createGroupInvitation(uses: Int): Result<GroupInvitationCreated> =
+        call { it.createGroupInvitation(GroupInvitationCreate(uses = uses)) }
+
+    suspend fun deleteGroupInvitation(id: String): Result<Unit> =
+        callUnit { it.deleteGroupInvitation(id) }
 
     suspend fun currencies(): Result<List<Currency>> = call { it.currencies() }
 
