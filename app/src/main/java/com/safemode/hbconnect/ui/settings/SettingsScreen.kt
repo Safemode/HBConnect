@@ -81,6 +81,17 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 )
             }
 
+            SettingCard("Live updates") {
+                SwitchRow(
+                    title = "Live updates",
+                    subtitle = "Keeps a connection open so items, locations and tags refresh " +
+                        "automatically as they change on the server. Turn off if a reverse proxy " +
+                        "in front of Homebox can't forward WebSocket connections.",
+                    checked = config.liveUpdates,
+                    onCheckedChange = { v -> viewModel.updateAndSave { it.copy(liveUpdates = v) } },
+                )
+            }
+
             SettingCard("Offline cache") {
                 Text(
                     "GET responses are cached so the app stays usable when the server is " +

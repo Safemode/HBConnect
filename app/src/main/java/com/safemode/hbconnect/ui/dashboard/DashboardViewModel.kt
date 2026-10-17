@@ -11,6 +11,8 @@ import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.data.remote.LiveEvent
+import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,6 +80,7 @@ class DashboardViewModel : ViewModel() {
     init {
         load()
         refreshWhenServerReachable { reloadSilently() }
+        refreshOnLiveEvent(LiveEvent.ENTITY) { reloadSilently() }
         // Re-run the search as the query settles or any filter changes.
         viewModelScope.launch {
             _query.debounce(250).map { it.trim() }.distinctUntilChanged()

@@ -7,6 +7,8 @@ import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.data.remote.models.TagUpdate
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.data.remote.LiveEvent
+import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +29,7 @@ class TagsViewModel : ViewModel() {
     init {
         load()
         refreshWhenServerReachable { reloadSilently() }
+        refreshOnLiveEvent(LiveEvent.TAG) { reloadSilently() }
     }
 
     fun load() {

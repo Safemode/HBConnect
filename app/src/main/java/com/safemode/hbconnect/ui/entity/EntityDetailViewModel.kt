@@ -3,6 +3,7 @@ package com.safemode.hbconnect.ui.entity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.LiveEvent
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPatch
@@ -11,6 +12,7 @@ import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +57,8 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
 
     init {
         load(showLoading = true)
+        // Refresh if this entity (or anything it shows, like its children) changes server-side.
+        refreshOnLiveEvent(LiveEvent.ENTITY) { if (!_deleted.value) load() }
     }
 
     /** Loads locations and tags for the quick-action pickers (once). */

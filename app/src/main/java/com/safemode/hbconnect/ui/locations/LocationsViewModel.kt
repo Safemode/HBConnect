@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.data.remote.LiveEvent
+import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +27,7 @@ class LocationsViewModel : ViewModel() {
     init {
         load()
         refreshWhenServerReachable { reloadSilently() }
+        refreshOnLiveEvent(LiveEvent.ENTITY) { reloadSilently() }
     }
 
     fun load() {

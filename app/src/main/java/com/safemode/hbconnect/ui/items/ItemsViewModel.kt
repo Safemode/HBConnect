@@ -7,7 +7,9 @@ import com.safemode.hbconnect.data.remote.models.EntityPatch
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
+import com.safemode.hbconnect.data.remote.LiveEvent
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,6 +68,7 @@ class ItemsViewModel : ViewModel() {
             ) { _, _ -> }.collect { reload(showLoading = true) }
         }
         refreshWhenServerReachable { reloadSilently() }
+        refreshOnLiveEvent(LiveEvent.ENTITY) { reloadSilently() }
     }
 
     fun setQuery(value: String) {

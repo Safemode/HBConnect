@@ -52,6 +52,12 @@ data class ConnectionConfig(
     val showDeviceQr: Boolean = false,
     /** When true, the dashboard search row shows the filter button before the scan button. */
     val swapScanFilter: Boolean = false,
+    /**
+     * When true, the app keeps a WebSocket open to the server's `/api/v1/ws/events` endpoint and
+     * refreshes open screens as data changes on the server. On by default; turn off if a reverse
+     * proxy in front of Homebox can't forward WebSocket upgrades.
+     */
+    val liveUpdates: Boolean = true,
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean
