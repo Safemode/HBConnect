@@ -67,7 +67,7 @@ fun LocationsScreen(
                 UiState.NotConfigured -> EmptyState(
                     icon = Icons.Outlined.Place,
                     title = "Not connected yet",
-                    message = "Open the menu and go to Server to connect to your Homebox.",
+                    message = "Go to More → Server to connect to your Homebox.",
                 )
                 is UiState.Error -> ErrorState(message = s.message, onRetry = viewModel::load)
                 is UiState.Success -> if (s.data.isEmpty()) {

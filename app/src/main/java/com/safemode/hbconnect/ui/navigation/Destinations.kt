@@ -3,11 +3,12 @@ package com.safemode.hbconnect.ui.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.outlined.Place
@@ -17,6 +18,7 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val ITEMS = "items"
     const val LOCATIONS = "locations"
+    const val MORE = "more"
     const val TAGS = "tags"
     const val ENTITY_TYPES = "entity-types"
     const val TEMPLATES = "templates"
@@ -48,16 +50,24 @@ object Routes {
     const val ATTACHMENTS = "attachments/{entityId}"
 }
 
-/** Top-level destinations shown in the navigation drawer. */
-enum class TopDestination(val route: String, val label: String, val icon: ImageVector) {
-    DASHBOARD(Routes.DASHBOARD, "Dashboard", Icons.Filled.Dashboard),
+/** The five slots of the bottom navigation bar. [ADD] is an action (opens the item form), not a tab. */
+enum class BottomTab(val route: String, val label: String, val icon: ImageVector) {
+    HOME(Routes.DASHBOARD, "Home", Icons.Filled.Home),
     ITEMS(Routes.ITEMS, "Items", Icons.Filled.Inventory2),
     LOCATIONS(Routes.LOCATIONS, "Locations", Icons.Outlined.Place),
-    TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
+    MORE(Routes.MORE, "More", Icons.Filled.MoreHoriz),
+}
+
+/**
+ * Destinations reached from the "More" hub. The management entries sit up top; server/settings/about
+ * are pinned to the bottom of that screen below a divider.
+ */
+enum class MoreDestination(val route: String, val label: String, val icon: ImageVector) {
     ENTITY_TYPES(Routes.ENTITY_TYPES, "Entity types", Icons.Filled.Category),
     TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),
+    TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
     MAINTENANCE(Routes.MAINTENANCE_ALL, "Maintenance", Icons.Filled.Build),
     SERVER(Routes.SERVER, "Server", Icons.Filled.Dns),
-    ABOUT(Routes.ABOUT, "About", Icons.Filled.Info),
     SETTINGS(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
+    ABOUT(Routes.ABOUT, "About", Icons.Filled.Info),
 }

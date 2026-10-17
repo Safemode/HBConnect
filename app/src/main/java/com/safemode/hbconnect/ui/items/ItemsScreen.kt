@@ -11,12 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,7 +37,6 @@ import com.safemode.hbconnect.ui.common.UiState
 @Composable
 fun ItemsScreen(
     onOpenEntity: (String) -> Unit,
-    onAddItem: () -> Unit,
     viewModel: ItemsViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -53,15 +50,6 @@ fun ItemsScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets.navigationBars,
-        floatingActionButton = {
-            if (state is UiState.Success) {
-                ExtendedFloatingActionButton(
-                    text = { Text("Add item") },
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    onClick = onAddItem,
-                )
-            }
-        },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             OutlinedTextField(
@@ -91,7 +79,7 @@ fun ItemsScreen(
                     UiState.NotConfigured -> EmptyState(
                         icon = Icons.Filled.Inventory2,
                         title = "Not connected yet",
-                        message = "Open the menu and go to Server to connect to your Homebox.",
+                        message = "Go to More → Server to connect to your Homebox.",
                     )
                     is UiState.Error -> ErrorState(message = s.message, onRetry = viewModel::load)
                     is UiState.Success -> if (s.data.isEmpty()) {
