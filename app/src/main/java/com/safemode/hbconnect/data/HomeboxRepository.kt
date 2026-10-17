@@ -491,6 +491,26 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         api.uploadAttachment(entityId, parts)
     }
 
+    // ---- CSV import / export ----
+    /** Downloads the group's entities as CSV bytes (text/csv). */
+    suspend fun exportCsv(): Result<ByteArray> = runCatching {
+        val response = api().exportEntities()
+        if (response.isSuccessful) {
+            (response.body() ?: throw IllegalStateException("Empty response from server."))
+                .use { it.bytes() }
+        } else {
+            throw mapError(response.code(), response.errorBody()?.string())
+        }
+    }
+
+    /** Uploads a Homebox CSV to create/update entities. */
+    suspend fun importCsv(fileName: String, bytes: ByteArray): Result<Unit> = callUnit { api ->
+        val part = MultipartBody.Part.createFormData(
+            "csv", fileName, bytes.toRequestBody("text/csv".toMediaTypeOrNull()),
+        )
+        api.importEntities(part)
+    }
+
     // ---- Maintenance ----
     suspend fun getMaintenance(entityId: String): Result<List<MaintenanceEntry>> =
         call { it.getMaintenance(entityId) }
