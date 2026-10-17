@@ -170,8 +170,8 @@ private fun SelectedBanner(currency: Currency?) {
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                if (currency == null) "—"
-                else "${currency.code ?: "?"} — ${currency.name ?: "Unknown"}",
+                if (currency == null) "-"
+                else "${currency.code ?: "?"} - ${currency.name ?: "Unknown"}",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
@@ -214,7 +214,7 @@ private fun CurrencyRow(
                 .padding(start = 8.dp),
         ) {
             Text(
-                "${currency.code ?: "?"} — ${currency.name ?: "Unknown"}",
+                "${currency.code ?: "?"} - ${currency.name ?: "Unknown"}",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,

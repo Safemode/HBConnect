@@ -75,7 +75,7 @@ class ApiProvider(
 
     /**
      * A direct, short-timeout network hit that bypasses the cache/offline interceptor, used by the
-     * background reachability check. Hits the public `/api/v1/status` endpoint. Blocking — call off
+     * background reachability check. Hits the public `/api/v1/status` endpoint. Blocking - call off
      * the main thread. Returns true if the server responds at all (any HTTP status).
      */
     fun probeReachable(): Boolean {
@@ -209,7 +209,7 @@ class OfflineInterceptor(
 
 /**
  * Rewrites response cache headers so GET responses are stored on disk, while `max-age=0` keeps
- * them immediately stale — so online requests always re-fetch fresh data and only the offline path
+ * them immediately stale - so online requests always re-fetch fresh data and only the offline path
  * (only-if-cached + max-stale) serves the stored copy.
  */
 class CacheWriteInterceptor : Interceptor {

@@ -43,7 +43,7 @@ fun BreakdownCard(
             )
             rows.forEach { row ->
                 BreakdownBar(
-                    name = row.name?.ifBlank { null } ?: "—",
+                    name = row.name?.ifBlank { null } ?: "-",
                     value = formatMoney(row.total, currency),
                     fraction = (row.total / top).toFloat().coerceIn(0f, 1f),
                 )

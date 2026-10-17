@@ -6,7 +6,7 @@ import android.net.Network
 
 /**
  * Watches device connectivity in the background via [ConnectivityManager] so the app knows
- * instantly whether a network is available — no per-request probing. When there's no network,
+ * instantly whether a network is available - no per-request probing. When there's no network,
  * requests skip the network entirely and go straight to cache (see [OfflineInterceptor]).
  *
  * Note: we only check that *a* network is connected, not that it's internet-validated, because
@@ -28,7 +28,7 @@ class NetworkMonitor(context: Context, private val status: ServerStatus) {
         cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 online = true
-                // A network appeared — unknown whether the server is reachable until we probe.
+                // A network appeared - unknown whether the server is reachable until we probe.
                 status.reportChecking()
             }
 

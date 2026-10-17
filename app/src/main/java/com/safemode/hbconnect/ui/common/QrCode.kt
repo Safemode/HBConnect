@@ -9,7 +9,7 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
 /**
  * Renders [content] as a square QR-code [Bitmap] of [size] px, or null if encoding fails
- * (e.g. the content is too long for a QR code). Pure client-side — no network.
+ * (e.g. the content is too long for a QR code). Pure client-side - no network.
  */
 fun generateQrBitmap(content: String, size: Int = 640): Bitmap? = runCatching {
     val hints = mapOf(

@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Backs the Settings screen — standalone app preferences (theme, item list order) and cache
+ * Backs the Settings screen - standalone app preferences (theme, item list order) and cache
  * management. Each change is persisted immediately; connection details live on the Server screen.
  */
 class SettingsViewModel : ViewModel() {

@@ -64,8 +64,8 @@ fun ImportExportScreen(viewModel: ImportExportViewModel = viewModel()) {
         ActionCard(
             icon = Icons.Filled.FileDownload,
             title = "Export inventory",
-            body = "Download all of your items as a CSV file and save it to this device. Use it as a " +
-                "backup or to edit in a spreadsheet.",
+            body = "Save all your items to a CSV file on this device, for backup or editing in a " +
+                "spreadsheet.",
             buttonText = "Export to CSV",
             enabled = !busy,
             onClick = { exportLauncher.launch("homebox-inventory_${LocalDate.now()}.csv") },
@@ -74,8 +74,8 @@ fun ImportExportScreen(viewModel: ImportExportViewModel = viewModel()) {
         ActionCard(
             icon = Icons.Filled.FileUpload,
             title = "Import inventory",
-            body = "Upload a Homebox CSV file from this device to the server. The server adds or " +
-                "updates items from it — use a file exported by Homebox so the columns match.",
+            body = "Upload a CSV from this device. The server adds or updates items from it; use a " +
+                "Homebox-exported file so the columns match.",
             buttonText = "Import from CSV",
             enabled = !busy,
             onClick = {

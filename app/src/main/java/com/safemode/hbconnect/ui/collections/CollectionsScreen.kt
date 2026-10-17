@@ -104,8 +104,7 @@ private fun CollectionList(
     LazyColumn(modifier = Modifier.fillMaxWidth()) {
         item(key = "header") {
             Text(
-                "Choose which collection to view. The app loads that collection's items, locations " +
-                    "and tags, and everything you add goes into it.",
+                "Pick which collection to view. New items, locations and tags go into the active one.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -172,7 +171,7 @@ private fun JoinDialog(onDismiss: () -> Unit, onJoin: (String) -> Unit) {
         text = {
             Column {
                 Text(
-                    "Paste an invite code, or the full invite link — either works.",
+                    "Paste an invite code or link.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * Invokes [onReachable] whenever the server transitions to reachable — e.g. the background probe
- * reconnected after launch or after an outage — so a screen currently showing cached data pulls
+ * Invokes [onReachable] whenever the server transitions to reachable - e.g. the background probe
+ * reconnected after launch or after an outage - so a screen currently showing cached data pulls
  * fresh data. The state at subscription time is skipped (the ViewModel's own initial load covers
  * that), so this only fires on an actual reconnect.
  */

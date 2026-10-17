@@ -367,7 +367,7 @@ private fun Breadcrumb(path: List<EntityPath>, onOpenEntity: (String) -> Unit) {
     ) {
         ancestors.forEachIndexed { index, node ->
             Text(
-                text = node.name ?: "—",
+                text = node.name ?: "-",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { node.id?.let(onOpenEntity) },
@@ -659,7 +659,7 @@ private fun ZoomableImage(url: String) {
     }
 }
 
-/** A tonal info callout — a rounded container with a leading info icon and supporting text. */
+/** A tonal info callout - a rounded container with a leading info icon and supporting text. */
 @Composable
 private fun InfoCallout(text: String) {
     Surface(

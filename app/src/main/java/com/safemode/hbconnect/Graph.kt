@@ -191,7 +191,7 @@ object Graph {
 
     /**
      * True when the token expires within [REFRESH_WINDOW] (or the expiry can't be parsed, so we
-     * refresh to be safe). An already-expired token also returns true — the refresh will simply
+     * refresh to be safe). An already-expired token also returns true - the refresh will simply
      * fail and the user re-logs in.
      */
     /**

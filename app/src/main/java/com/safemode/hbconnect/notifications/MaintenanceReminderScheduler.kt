@@ -32,7 +32,7 @@ object MaintenanceReminderScheduler {
         workManager.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
-    /** Runs the check once, now — used right after the user enables reminders for immediate feedback. */
+    /** Runs the check once, now - used right after the user enables reminders for immediate feedback. */
     fun runNow(context: Context) {
         val request = OneTimeWorkRequestBuilder<MaintenanceReminderWorker>()
             .setConstraints(networkConstraint)

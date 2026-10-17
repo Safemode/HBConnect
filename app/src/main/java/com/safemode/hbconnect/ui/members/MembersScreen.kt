@@ -241,15 +241,14 @@ private fun CreateInviteDialog(onDismiss: () -> Unit, onCreate: (Int, String?) -
         text = {
             Column {
                 Text(
-                    "Creates an invite token to share. Choose how many times it can be used and " +
-                        "when it expires.",
+                    "Choose how many times the invite can be used and when it expires.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedTextField(
                     value = uses,
                     onValueChange = { uses = it.filter(Char::isDigit).take(3) },
-                    label = { Text("Number of uses (1–100)") },
+                    label = { Text("Number of uses (1-100)") },
                     singleLine = true,
                     isError = uses.isNotEmpty() && !valid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

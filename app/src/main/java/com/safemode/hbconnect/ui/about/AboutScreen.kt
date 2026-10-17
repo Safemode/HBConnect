@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.first
 
 @Composable
 fun AboutScreen() {
-    val host by produceState(initialValue = "—") {
+    val host by produceState(initialValue = "-") {
         value = Graph.settingsRepository.config.first().baseUrl()
     }
 
@@ -34,7 +34,7 @@ fun AboutScreen() {
     val version = remember {
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "—"
+        }.getOrNull() ?: "-"
     }
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->

@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Invokes [onEvent] whenever the server announces a change in one of [events] over the live-updates
- * WebSocket — e.g. an item added or edited elsewhere — so an open screen refreshes itself. A short
+ * WebSocket - e.g. an item added or edited elsewhere - so an open screen refreshes itself. A short
  * debounce collapses the burst of signals a bulk change produces into a single refresh. Mirrors
  * [refreshWhenServerReachable], and is a no-op while live updates are off or disconnected (no events
  * arrive).

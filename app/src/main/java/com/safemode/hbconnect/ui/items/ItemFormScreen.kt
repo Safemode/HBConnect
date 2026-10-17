@@ -174,7 +174,7 @@ fun ItemFormScreen(
                 if (err != null) Toast.makeText(context, err, Toast.LENGTH_LONG).show()
                 if (addAnother) {
                     viewModel.reset()
-                    Toast.makeText(context, "Created — add another", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Created - add another", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(context, if (viewModel.isEdit) "Saved" else "Created", Toast.LENGTH_SHORT).show()
                     onBack()
@@ -573,7 +573,7 @@ private fun TagPickerDialog(
                 }
                 if (withIds.isEmpty()) {
                     Text(
-                        "No tags yet — create one above.",
+                        "No tags yet - create one above.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

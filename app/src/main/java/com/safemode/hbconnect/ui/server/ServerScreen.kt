@@ -227,15 +227,15 @@ fun ServerScreen(viewModel: ServerViewModel = viewModel()) {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Signed in", style = MaterialTheme.typography.titleMedium)
-                            InfoRow("User", s.data.user?.name ?: "—")
-                            InfoRow("Email", s.data.user?.email ?: "—")
+                            InfoRow("User", s.data.user?.name ?: "-")
+                            InfoRow("Email", s.data.user?.email ?: "-")
                             InfoRow("Superuser", if (s.data.user?.isSuperuser == true) "Yes" else "No")
                         }
                     }
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Instance", style = MaterialTheme.typography.titleMedium)
-                            InfoRow("Version", s.data.version ?: "—")
+                            InfoRow("Version", s.data.version ?: "-")
                         }
                     }
                     OutlinedButton(

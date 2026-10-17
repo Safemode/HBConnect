@@ -66,7 +66,7 @@ interface HomeboxApi {
 
     // The server's local auth provider matches the Content-Type header exactly against
     // "application/json", so the charset parameter Moshi would otherwise append must be suppressed
-    // by pinning the header here — otherwise login is rejected with a 401.
+    // by pinning the header here - otherwise login is rejected with a 401.
     @Headers("Content-Type: application/json")
     @POST("api/v1/users/login")
     suspend fun login(@Body body: LoginForm): Response<TokenResponse>

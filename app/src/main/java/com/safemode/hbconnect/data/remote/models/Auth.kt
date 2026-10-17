@@ -14,7 +14,7 @@ data class TokenResponse(
     val attachmentToken: String? = null,
 )
 
-/** GET /api/v1/status — public application info. */
+/** GET /api/v1/status - public application info. */
 data class ApiSummary(
     val health: Boolean? = null,
     val versions: List<String>? = null,
