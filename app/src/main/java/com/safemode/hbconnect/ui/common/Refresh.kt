@@ -1,8 +1,8 @@
 package com.safemode.hbconnect.ui.common
 
 import android.content.Context
-import coil.annotation.ExperimentalCoilApi
-import coil.imageLoader
+import coil3.SingletonImageLoader
+import coil3.annotation.ExperimentalCoilApi
 
 /**
  * Clears Coil's in-memory and on-disk image caches so the next image request
@@ -10,7 +10,7 @@ import coil.imageLoader
  */
 @OptIn(ExperimentalCoilApi::class)
 fun clearImageCache(context: Context) {
-    val loader = context.imageLoader
+    val loader = SingletonImageLoader.get(context)
     loader.memoryCache?.clear()
     loader.diskCache?.clear()
 }

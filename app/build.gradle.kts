@@ -84,6 +84,7 @@ dependencies {
 
     // Images
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
     // QR code generation + barcode decoding (ZXing core, no Google Play Services)
     implementation(libs.zxing.core)

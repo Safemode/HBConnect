@@ -67,7 +67,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.safemode.hbconnect.data.remote.models.ItemAttachment
 import com.safemode.hbconnect.ui.common.EmptyState
 import com.safemode.hbconnect.ui.common.ErrorState
