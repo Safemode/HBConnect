@@ -13,8 +13,8 @@ android {
         applicationId = "com.safemode.hbconnect"
         minSdk = 24
         targetSdk = 37
-        versionCode = 21
-        versionName = "0.15.1"
+        versionCode = 22
+        versionName = "0.16"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -78,6 +78,9 @@ dependencies {
 
     // Storage
     implementation(libs.androidx.datastore.preferences)
+
+    // Background work (maintenance reminder polling)
+    implementation(libs.androidx.work.runtime.ktx)
 
     // Images
     implementation(libs.coil.compose)

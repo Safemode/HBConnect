@@ -18,21 +18,41 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.safemode.hbconnect.data.settings.CacheSize
 import com.safemode.hbconnect.data.settings.ItemSortOrder
+import com.safemode.hbconnect.data.settings.MaintenanceLead
 import com.safemode.hbconnect.data.settings.ThemePreference
+import com.safemode.hbconnect.notifications.MaintenanceReminderScheduler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val config by viewModel.config.collectAsStateWithLifecycle()
     val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    // Only persist "on" once notifications are permitted, so the toggle reflects reality.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            viewModel.updateAndSave { it.copy(maintenanceReminders = true) }
+            MaintenanceReminderScheduler.runNow(context)
+        }
+    }
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
         Column(
@@ -90,6 +110,40 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     checked = config.liveUpdates,
                     onCheckedChange = { v -> viewModel.updateAndSave { it.copy(liveUpdates = v) } },
                 )
+            }
+
+            SettingCard("Maintenance reminders") {
+                SwitchRow(
+                    title = "Maintenance reminders",
+                    subtitle = "Checks your scheduled maintenance in the background and notifies " +
+                        "you when something is due. Tap a reminder to open the item.",
+                    checked = config.maintenanceReminders,
+                    onCheckedChange = { v ->
+                        if (!v) {
+                            viewModel.updateAndSave { it.copy(maintenanceReminders = false) }
+                        } else {
+                            val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                ) != PackageManager.PERMISSION_GRANTED
+                            if (needsPermission) {
+                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.updateAndSave { it.copy(maintenanceReminders = true) }
+                                MaintenanceReminderScheduler.runNow(context)
+                            }
+                        }
+                    },
+                )
+                if (config.maintenanceReminders) {
+                    Text("Remind me", style = MaterialTheme.typography.labelLarge)
+                    ChipRow(
+                        options = MaintenanceLead.entries.map { it to it.label },
+                        selected = config.maintenanceLead,
+                        onSelect = { v -> viewModel.updateAndSave { it.copy(maintenanceLead = v) } },
+                    )
+                }
             }
 
             SettingCard("Offline cache") {

@@ -1,5 +1,6 @@
 package com.safemode.hbconnect
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
         // Without this the first frame defaults to SYSTEM and the window stays the OS day/night
         // colour, which flashes white when the in-app theme is dark but the device is not.
         val initialConfig = runBlocking { Graph.settingsRepository.config.first() }
+        handleDeepLink(intent)
 
         enableEdgeToEdge()
         applyWindowBackground(initialConfig.themePreference)
@@ -57,6 +59,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    /** Routes a notification tap to the item it referenced; the UI picks this up and navigates. */
+    private fun handleDeepLink(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_ENTITY_ID)?.let { Graph.requestOpenEntity(it) }
+    }
+
     /** Paints the activity window the theme's background colour so nothing white shows before the
      *  first Compose frame, even when the chosen theme differs from the system day/night setting. */
     private fun applyWindowBackground(preference: ThemePreference) {
@@ -71,11 +84,14 @@ class MainActivity : ComponentActivity() {
         window.setBackgroundDrawable(ColorDrawable(color))
     }
 
-    private companion object {
-        val LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
-        val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+    companion object {
+        /** Intent extra carrying an entity id to open, set on a maintenance-reminder notification. */
+        const val EXTRA_ENTITY_ID = "entity_id"
+
+        private val LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+        private val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
         // Match md_background_light / md_background_dark in the Compose theme.
-        val BACKGROUND_LIGHT = Color.rgb(0xFA, 0xFD, 0xFA)
-        val BACKGROUND_DARK = Color.rgb(0x19, 0x1C, 0x1B)
+        private val BACKGROUND_LIGHT = Color.rgb(0xFA, 0xFD, 0xFA)
+        private val BACKGROUND_DARK = Color.rgb(0x19, 0x1C, 0x1B)
     }
 }

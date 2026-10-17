@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +81,14 @@ fun HBConnectRoot() {
 
     val serverState by Graph.serverStatus.state.collectAsStateWithLifecycle()
     val showBanner = serverState != ServerReachability.REACHABLE
+
+    // A maintenance-reminder tap asks to open an item; navigate once, then clear the request.
+    val pendingEntityId by Graph.pendingEntityId.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingEntityId) {
+        val id = pendingEntityId ?: return@LaunchedEffect
+        navController.navigate(Routes.entityDetail(id))
+        Graph.consumePendingEntity()
+    }
 
     // Tap a tab to go to its root, clearing anything above Home. No save/restore: the Add form is a
     // plain (non-tab) destination, and saving/restoring it would strand a later tab tap on the form.

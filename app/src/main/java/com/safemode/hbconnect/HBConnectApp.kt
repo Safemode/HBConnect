@@ -6,12 +6,14 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
+import com.safemode.hbconnect.notifications.MaintenanceNotifier
 import okio.Path.Companion.toOkioPath
 
 class HBConnectApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         Graph.init(this)
+        MaintenanceNotifier.createChannel(this)
     }
 
     /**

@@ -11,6 +11,7 @@ import com.safemode.hbconnect.data.remote.NetworkMonitor
 import com.safemode.hbconnect.data.remote.ServerReachability
 import com.safemode.hbconnect.data.remote.ServerStatus
 import com.safemode.hbconnect.data.remote.models.Currency
+import com.safemode.hbconnect.notifications.MaintenanceReminderScheduler
 import com.safemode.hbconnect.data.settings.AuthMode
 import com.safemode.hbconnect.data.settings.SettingsRepository
 import java.time.Duration
@@ -51,15 +52,32 @@ object Graph {
         private set
 
     private lateinit var networkMonitor: NetworkMonitor
+    private lateinit var appContext: Context
 
     /** The group's configured currency (symbol/decimals), resolved for money formatting; null until loaded. */
     private val _currency = MutableStateFlow<Currency?>(null)
     val currency: StateFlow<Currency?> = _currency.asStateFlow()
 
+    /**
+     * An entity id a notification asked the app to open, consumed by the UI once navigated. Set from
+     * [MainActivity] when launched from a maintenance reminder.
+     */
+    private val _pendingEntityId = MutableStateFlow<String?>(null)
+    val pendingEntityId: StateFlow<String?> = _pendingEntityId.asStateFlow()
+
+    fun requestOpenEntity(id: String?) {
+        if (!id.isNullOrBlank()) _pendingEntityId.value = id
+    }
+
+    fun consumePendingEntity() {
+        _pendingEntityId.value = null
+    }
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     fun init(context: Context) {
         val app = context.applicationContext
+        appContext = app
         settingsRepository = SettingsRepository(app)
         serverStatus = ServerStatus()
         networkMonitor = NetworkMonitor(app, serverStatus)
@@ -70,6 +88,15 @@ object Graph {
         // Keep the API provider's config in sync with saved settings.
         settingsRepository.config
             .onEach { apiProvider.updateConfig(it) }
+            .launchIn(appScope)
+
+        // Register or cancel the periodic maintenance-reminder check as the setting changes. The
+        // worker itself runs only while the setting stays on, is configured, and may post; it does
+        // its own network fetch on WorkManager's schedule, independent of the app being open.
+        settingsRepository.config
+            .map { it.maintenanceReminders }
+            .distinctUntilChanged()
+            .onEach { MaintenanceReminderScheduler.update(appContext, it) }
             .launchIn(appScope)
 
         // Drive the live-updates WebSocket from the foreground state and settings: connect only

@@ -33,6 +33,8 @@ class SettingsRepository(private val context: Context) {
         val SHOW_DEVICE_QR = booleanPreferencesKey("show_device_qr")
         val SWAP_SCAN_FILTER = booleanPreferencesKey("swap_scan_filter")
         val LIVE_UPDATES = booleanPreferencesKey("live_updates")
+        val MAINTENANCE_REMINDERS = booleanPreferencesKey("maintenance_reminders")
+        val MAINTENANCE_LEAD = stringPreferencesKey("maintenance_lead")
     }
 
     val config: Flow<ConnectionConfig> = context.dataStore.data.map { prefs ->
@@ -57,6 +59,10 @@ class SettingsRepository(private val context: Context) {
             showDeviceQr = prefs[Keys.SHOW_DEVICE_QR] ?: false,
             swapScanFilter = prefs[Keys.SWAP_SCAN_FILTER] ?: false,
             liveUpdates = prefs[Keys.LIVE_UPDATES] ?: true,
+            maintenanceReminders = prefs[Keys.MAINTENANCE_REMINDERS] ?: false,
+            maintenanceLead = runCatching {
+                MaintenanceLead.valueOf(prefs[Keys.MAINTENANCE_LEAD] ?: "DUE_DAY")
+            }.getOrDefault(MaintenanceLead.DUE_DAY),
         )
     }
 
@@ -75,6 +81,8 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.SHOW_DEVICE_QR] = config.showDeviceQr
             prefs[Keys.SWAP_SCAN_FILTER] = config.swapScanFilter
             prefs[Keys.LIVE_UPDATES] = config.liveUpdates
+            prefs[Keys.MAINTENANCE_REMINDERS] = config.maintenanceReminders
+            prefs[Keys.MAINTENANCE_LEAD] = config.maintenanceLead.name
         }
     }
 }
