@@ -68,6 +68,10 @@ private fun MoreRow(dest: MoreDestination, onOpen: (String) -> Unit) {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.width(24.dp))
-        Text(dest.label, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            dest.label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
