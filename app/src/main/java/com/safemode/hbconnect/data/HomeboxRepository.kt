@@ -34,8 +34,8 @@ import com.safemode.hbconnect.data.remote.models.TagUpdate
 import com.safemode.hbconnect.data.remote.models.TokenResponse
 import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
 import com.safemode.hbconnect.data.remote.models.TreeItem
-import com.safemode.hbconnect.data.remote.models.ValueBreakdowns
 import com.safemode.hbconnect.data.remote.models.UserOut
+import com.safemode.hbconnect.data.remote.models.ValueInsights
 import com.safemode.hbconnect.data.remote.models.ValueOverTime
 import com.safemode.hbconnect.data.settings.ItemSortOrder
 import kotlinx.coroutines.Dispatchers
@@ -110,18 +110,30 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         call { it.statsValueOverTime(start, end) }
 
     /**
-     * Value grouped by location and by tag, computed from the group's non-archived items. The
-     * server's /statistics/locations and /statistics/tags endpoints sum archived items too, which
-     * contradicts the archived-excluded totals shown elsewhere, so they are computed here instead.
+     * Value analysis for the Value breakdown screen, computed from the group's non-archived items.
+     * The server's /statistics/locations and /statistics/tags endpoints sum archived items too,
+     * which contradicts the archived-excluded totals shown elsewhere, so this is computed in-app.
+     * Grouping by manufacturer relies on that field being present on the entity list rows; items
+     * without a manufacturer simply don't contribute to that breakdown.
      */
-    suspend fun valueBreakdowns(): Result<ValueBreakdowns> = runCatching {
+    suspend fun valueInsights(): Result<ValueInsights> = runCatching {
         val items = allItems(includeArchived = false).getOrThrow()
         val locTotal = LinkedHashMap<String, Double>()
         val locName = HashMap<String, String>()
         val tagTotal = LinkedHashMap<String, Double>()
         val tagName = HashMap<String, String>()
+        val mfgTotal = LinkedHashMap<String, Double>()
+        val typeTotal = LinkedHashMap<String, Double>()
+        val typeName = HashMap<String, String>()
+        var total = 0.0
+        var priced = 0
+        var insured = 0.0
+        var uninsured = 0.0
         items.forEach { item ->
             val price = item.purchasePrice ?: 0.0
+            total += price
+            if (price > 0.0) priced++
+            if (item.insured == true) insured += price else uninsured += price
             item.parent?.id?.let { id ->
                 locName[id] = item.parent.displayName
                 locTotal[id] = (locTotal[id] ?: 0.0) + price
@@ -132,10 +144,31 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
                     tagTotal[id] = (tagTotal[id] ?: 0.0) + price
                 }
             }
+            item.manufacturer?.trim()?.ifBlank { null }?.let { m ->
+                mfgTotal[m] = (mfgTotal[m] ?: 0.0) + price
+            }
+            item.entityType?.let { type ->
+                val key = type.id ?: type.name
+                if (key != null) {
+                    typeName[key] = type.name ?: "Type"
+                    typeTotal[key] = (typeTotal[key] ?: 0.0) + price
+                }
+            }
         }
-        ValueBreakdowns(
-            byLocation = locTotal.map { (id, total) -> TotalsByOrganizer(id, locName[id], total) },
-            byTag = tagTotal.map { (id, total) -> TotalsByOrganizer(id, tagName[id], total) },
+        ValueInsights(
+            totalValue = total,
+            itemCount = items.size,
+            pricedCount = priced,
+            insuredValue = insured,
+            uninsuredValue = uninsured,
+            byLocation = locTotal.map { (id, t) -> TotalsByOrganizer(id, locName[id], t) },
+            byTag = tagTotal.map { (id, t) -> TotalsByOrganizer(id, tagName[id], t) },
+            byManufacturer = mfgTotal.map { (name, t) -> TotalsByOrganizer(name, name, t) },
+            byType = typeTotal.map { (id, t) -> TotalsByOrganizer(id, typeName[id], t) },
+            mostExpensive = items
+                .filter { (it.purchasePrice ?: 0.0) > 0.0 }
+                .sortedByDescending { it.purchasePrice ?: 0.0 }
+                .take(5),
         )
     }
 

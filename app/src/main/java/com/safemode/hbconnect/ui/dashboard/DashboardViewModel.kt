@@ -10,12 +10,9 @@ import com.safemode.hbconnect.data.SearchSort
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.TagSummary
-import com.safemode.hbconnect.data.remote.models.TotalsByOrganizer
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,9 +26,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Dashboard extras below the stat tiles; any piece may be absent if its request fails. */
+/** Dashboard extras below the stat tiles; absent if the request fails. */
 data class DashboardCharts(
-    val byTag: List<TotalsByOrganizer> = emptyList(),
     val recent: List<EntitySummary> = emptyList(),
 )
 
@@ -226,15 +222,10 @@ class DashboardViewModel : ViewModel() {
         if (_state.value is UiState.Success) loadCharts()
     }
 
-    /** Fetches the below-tiles data in parallel; each piece degrades to empty if its call fails. */
+    /** Loads the newest items shown below the tiles; degrades to empty if the call fails. */
     private suspend fun loadCharts() {
-        coroutineScope {
-            val breakdowns = async { repository.valueBreakdowns().getOrNull() }
-            val recent = async { repository.getRecentItems(limit = 3).getOrDefault(emptyList()) }
-            _charts.value = DashboardCharts(
-                byTag = breakdowns.await()?.byTag.orEmpty(),
-                recent = recent.await(),
-            )
-        }
+        _charts.value = DashboardCharts(
+            recent = repository.getRecentItems(limit = 3).getOrDefault(emptyList()),
+        )
     }
 }

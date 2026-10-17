@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -35,8 +36,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Label
@@ -55,6 +54,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -62,7 +62,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -111,6 +110,7 @@ import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TagSummary
+import com.safemode.hbconnect.ui.common.verticalScrollbar
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.Option
@@ -353,6 +353,12 @@ fun EntityDetailScreen(
         TagsDialog(
             tags = tags,
             selected = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
+            onCreateTag = { name, onCreated ->
+                viewModel.createTag(name) { id, err ->
+                    if (id == null) Toast.makeText(context, err ?: "Couldn't create tag", Toast.LENGTH_LONG).show()
+                    onCreated(id)
+                }
+            },
             onDismiss = { showTags = false },
             onConfirm = { tagIds ->
                 showTags = false
@@ -998,30 +1004,79 @@ private fun MoveDialog(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Multi-select tag picker for an existing item, matching the new-item form: create a tag up top
+ * (added and auto-selected), toggle existing ones in a scrollable list, then Save to apply. The
+ * selection is applied in one server update on Save.
+ */
 @Composable
 private fun TagsDialog(
     tags: List<TagSummary>,
     selected: Set<String>,
+    onCreateTag: (String, (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (List<String>) -> Unit,
 ) {
     val current = remember { mutableStateListOf<String>().apply { addAll(selected) } }
+    var newName by remember { mutableStateOf("") }
+    val withIds = tags.filter { it.id != null }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit tags") },
         text = {
-            if (tags.isEmpty()) {
-                Text("No tags defined yet.")
-            } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    tags.forEach { tag ->
-                        val id = tag.id ?: return@forEach
-                        FilterChip(
-                            selected = id in current,
-                            onClick = { if (id in current) current.remove(id) else current.add(id) },
-                            label = { Text(tag.name ?: "tag") },
-                        )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("New tag") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        enabled = newName.isNotBlank(),
+                        onClick = {
+                            onCreateTag(newName.trim()) { id -> if (id != null) current.add(id) }
+                            newName = ""
+                        },
+                    ) { Text("Add") }
+                }
+                if (withIds.isEmpty()) {
+                    Text(
+                        "No tags yet — create one above.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    val listState = rememberLazyListState()
+                    val scrollbarColor = MaterialTheme.colorScheme.outline
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScrollbar(listState, color = scrollbarColor),
+                    ) {
+                        items(withIds, key = { it.id!! }) { tag ->
+                            val id = tag.id!!
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { if (id in current) current.remove(id) else current.add(id) }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = id in current,
+                                    onCheckedChange = { if (id in current) current.remove(id) else current.add(id) },
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(tag.name ?: "tag", style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
                     }
                 }
             }

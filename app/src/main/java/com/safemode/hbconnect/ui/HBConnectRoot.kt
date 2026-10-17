@@ -69,6 +69,7 @@ import com.safemode.hbconnect.ui.server.ServerScreen
 import com.safemode.hbconnect.ui.settings.SettingsScreen
 import com.safemode.hbconnect.ui.tags.TagsScreen
 import com.safemode.hbconnect.ui.templates.TemplatesScreen
+import com.safemode.hbconnect.ui.value.ValueBreakdownScreen
 
 @Composable
 fun HBConnectRoot() {
@@ -151,12 +152,11 @@ fun HBConnectRoot() {
                 )
             }
             composable(Routes.LOCATIONS) {
-                MainScaffold("Locations") {
-                    LocationsScreen(
-                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
-                        onAddLocation = { navController.navigate(Routes.locationForm()) },
-                    )
-                }
+                // LocationsScreen owns its top bar (expand/collapse-all), so no MainScaffold wrapper.
+                LocationsScreen(
+                    onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                    onAddLocation = { navController.navigate(Routes.locationForm()) },
+                )
             }
             composable(Routes.MORE) {
                 MainScaffold("More") {
@@ -164,7 +164,8 @@ fun HBConnectRoot() {
                 }
             }
             composable(Routes.TAGS) {
-                SubScaffold("Tags", onBack = { navController.popBackStack() }) { TagsScreen() }
+                // TagsScreen owns its top bar (back + expand/collapse-all), so no SubScaffold wrapper.
+                TagsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.ENTITY_TYPES) {
                 SubScaffold("Entity types", onBack = { navController.popBackStack() }) { EntityTypesScreen() }
@@ -179,6 +180,13 @@ fun HBConnectRoot() {
             composable(Routes.MAINTENANCE_ALL) {
                 SubScaffold("Maintenance", onBack = { navController.popBackStack() }) {
                     AllMaintenanceScreen(
+                        onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                    )
+                }
+            }
+            composable(Routes.VALUE_BREAKDOWN) {
+                SubScaffold("Value breakdown", onBack = { navController.popBackStack() }) {
+                    ValueBreakdownScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
                     )
                 }

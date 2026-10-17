@@ -393,9 +393,6 @@ private fun StatsGrid(
         if (charts.recent.isNotEmpty()) {
             item { RecentlyAddedCard(items = charts.recent, onOpenEntity = onOpenEntity) }
         }
-        if (charts.byTag.any { it.total > 0.0 }) {
-            item { BreakdownCard("Value by tag", charts.byTag, currency) }
-        }
     }
 }
 

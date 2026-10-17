@@ -21,13 +21,21 @@ data class TotalsByOrganizer(
 )
 
 /**
- * Value-by-location and value-by-tag for the dashboard, computed client-side from non-archived
- * items. The server's /statistics/locations and /statistics/tags sum archived items too, which is
- * inconsistent with the archived-excluded totals shown everywhere else in the app.
+ * Value analysis for the More → Value breakdown screen, computed client-side from non-archived
+ * items. Computed in-app (rather than via /statistics/locations etc.) so archived items are
+ * excluded, matching the archived-excluded totals shown everywhere else in the app.
  */
-data class ValueBreakdowns(
+data class ValueInsights(
+    val totalValue: Double = 0.0,
+    val itemCount: Int = 0,
+    val pricedCount: Int = 0,
+    val insuredValue: Double = 0.0,
+    val uninsuredValue: Double = 0.0,
     val byLocation: List<TotalsByOrganizer> = emptyList(),
     val byTag: List<TotalsByOrganizer> = emptyList(),
+    val byManufacturer: List<TotalsByOrganizer> = emptyList(),
+    val byType: List<TotalsByOrganizer> = emptyList(),
+    val mostExpensive: List<EntitySummary> = emptyList(),
 )
 
 /** A single priced item's contribution, keyed by its creation date (RFC 3339). */

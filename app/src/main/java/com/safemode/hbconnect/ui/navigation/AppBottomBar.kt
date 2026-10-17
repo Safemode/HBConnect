@@ -23,6 +23,7 @@ fun selectedTabFor(route: String?): BottomTab? = when (route) {
     Routes.ENTITY_TYPES,
     Routes.TEMPLATES,
     Routes.MAINTENANCE_ALL,
+    Routes.VALUE_BREAKDOWN,
     Routes.SERVER,
     Routes.SETTINGS,
     Routes.ABOUT,
