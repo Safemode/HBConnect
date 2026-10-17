@@ -36,9 +36,10 @@ jobs:
           packages: platform-tools
 
       # compileSdk is new enough that the runner image may not ship its platform; install it so the
-      # build doesn't fail looking for android-37.
+      # build doesn't fail looking for android-37. --channel=3 includes the preview/canary channels,
+      # since a just-released API level may not be on the stable channel yet.
       - name: Install the compile SDK platform
-        run: sdkmanager "platforms;android-37"
+        run: yes | sdkmanager --channel=3 "platforms;android-37"
 
       # Configures Gradle and caches the dependency/build caches between runs.
       - name: Set up Gradle
