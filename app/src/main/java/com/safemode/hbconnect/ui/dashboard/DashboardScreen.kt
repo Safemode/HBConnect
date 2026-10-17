@@ -62,9 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
-import com.safemode.hbconnect.ui.scan.PortraitCaptureActivity
+import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
+import com.safemode.hbconnect.ui.scan.ScanMode
+import com.safemode.hbconnect.ui.scan.ScanRequest
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
@@ -141,8 +141,7 @@ fun DashboardScreen(
 
     // Scanning a Homebox-printed QR label opens the item in-app: we parse the entity id out of the
     // scanned URL ourselves and navigate, so it never hands off to a browser.
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        val raw = result.contents
+    val scanLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { raw ->
         if (raw.isNullOrBlank()) return@rememberLauncherForActivityResult
         when (val target = parseScan(raw)) {
             is ScanTarget.Entity -> onOpenEntity(target.id)
@@ -155,14 +154,7 @@ fun DashboardScreen(
     }
 
     fun launchScan() {
-        scanLauncher.launch(
-            ScanOptions()
-                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                .setPrompt("Scan a Homebox QR label")
-                .setBeepEnabled(false)
-                .setOrientationLocked(false)
-                .setCaptureActivity(PortraitCaptureActivity::class.java),
-        )
+        scanLauncher.launch(ScanRequest(ScanMode.QR, "Scan a Homebox QR label"))
     }
 
     // While a search or filter is active, back clears it (returning to the stats grid) instead of

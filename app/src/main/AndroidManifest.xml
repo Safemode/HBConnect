@@ -31,13 +31,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Portrait-locked scanner (overrides the library's sensor-oriented default). -->
+        <!-- In-app CameraX barcode/QR scanner. No screenOrientation, and configChanges so it
+             rotates with the device without restarting the camera. -->
         <activity
-            android:name=".ui.scan.PortraitCaptureActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:stateNotNeeded="true"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+            android:name=".ui.scan.BarcodeScannerActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

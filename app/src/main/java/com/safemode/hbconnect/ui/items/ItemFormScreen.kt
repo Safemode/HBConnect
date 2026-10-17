@@ -42,9 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
-import com.safemode.hbconnect.ui.scan.PortraitCaptureActivity
+import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
+import com.safemode.hbconnect.ui.scan.ScanMode
+import com.safemode.hbconnect.ui.scan.ScanRequest
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -81,8 +81,7 @@ fun ItemFormScreen(
 
     var scanning by remember { mutableStateOf(false) }
     var candidates by remember { mutableStateOf<List<BarcodeProduct>?>(null) }
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        val code = result.contents
+    val scanLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { code ->
         if (!code.isNullOrBlank()) {
             scanning = true
             viewModel.lookupBarcode(code) { products, err ->
@@ -147,12 +146,7 @@ fun ItemFormScreen(
                 OutlinedButton(
                     onClick = {
                         scanLauncher.launch(
-                            ScanOptions()
-                                .setDesiredBarcodeFormats(ScanOptions.PRODUCT_CODE_TYPES)
-                                .setPrompt("Scan a product barcode")
-                                .setBeepEnabled(false)
-                                .setOrientationLocked(false)
-                                .setCaptureActivity(PortraitCaptureActivity::class.java),
+                            ScanRequest(ScanMode.PRODUCT, "Scan a product barcode"),
                         )
                     },
                     enabled = !scanning,
