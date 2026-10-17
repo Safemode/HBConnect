@@ -12,3 +12,8 @@ data class GroupUpdate(
     val name: String,
     val currency: String,
 )
+
+/** Body for POST /api/v1/groups - creates a new collection with the given name. */
+data class GroupCreate(
+    val name: String,
+)

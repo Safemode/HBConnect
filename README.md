@@ -105,8 +105,9 @@ the cached copy instead.
 
 ### Collections, members & currency
 
-- **Collections** - switch the active collection (sent as `X-Tenant`), join another from an invite
-  code or link, and rename a collection. New items, locations and tags go into the active one.
+- **Collections** - create a new collection, switch the active one (sent as `X-Tenant`), join
+  another from an invite code or link, and rename collections. New items, locations and tags go
+  into the active one.
 - **Members** - list members, invite new ones (with a chosen use count and expiry), and remove
   members or revoke invitations.
 - **Currency** - pick the group's currency from the supported list (common currencies surfaced on

@@ -29,6 +29,7 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.ExportOut
 import com.safemode.hbconnect.data.remote.models.Group
+import com.safemode.hbconnect.data.remote.models.GroupCreate
 import com.safemode.hbconnect.data.remote.models.GroupUpdate
 import com.safemode.hbconnect.data.remote.models.GroupAcceptInvitation
 import com.safemode.hbconnect.data.remote.models.GroupInvitation
@@ -231,6 +232,10 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     /** Every collection (group) the user belongs to. */
     suspend fun groupsAll(): Result<List<Group>> = call { it.groupsAll() }
+
+    /** Creates a new collection with [name] and returns it. */
+    suspend fun createGroup(name: String): Result<Group> =
+        call { it.createGroup(GroupCreate(name = name)) }
 
     /**
      * Updates a group's name and currency (owner only). [tenant] targets a specific collection

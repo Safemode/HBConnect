@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GroupAdd
@@ -54,6 +55,7 @@ fun CollectionsScreen(viewModel: CollectionsViewModel = viewModel()) {
     val context = LocalContext.current
 
     var showJoin by remember { mutableStateOf(false) }
+    var showCreate by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Group?>(null) }
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
@@ -75,6 +77,7 @@ fun CollectionsScreen(viewModel: CollectionsViewModel = viewModel()) {
                     activeId = activeId,
                     onSelect = viewModel::select,
                     onJoin = { showJoin = true },
+                    onCreate = { showCreate = true },
                     onRename = { renameTarget = it },
                 )
             }
@@ -113,6 +116,24 @@ fun CollectionsScreen(viewModel: CollectionsViewModel = viewModel()) {
             },
         )
     }
+
+    if (showCreate) {
+        NameDialog(
+            title = "New collection",
+            confirmLabel = "Create",
+            onDismiss = { showCreate = false },
+            onConfirm = { name ->
+                showCreate = false
+                viewModel.createCollection(name) { ok, err ->
+                    Toast.makeText(
+                        context,
+                        if (ok) "Collection created." else err ?: "Couldn't create.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -121,6 +142,7 @@ private fun CollectionList(
     activeId: String?,
     onSelect: (Group) -> Unit,
     onJoin: () -> Unit,
+    onCreate: () -> Unit,
     onRename: (Group) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -132,13 +154,19 @@ private fun CollectionList(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
         }
-        item(key = "join") {
-            OutlinedButton(
-                onClick = onJoin,
+        item(key = "actions") {
+            Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Filled.GroupAdd, contentDescription = null)
-                Text("Join a collection", modifier = Modifier.padding(start = 8.dp))
+                OutlinedButton(onClick = onCreate) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text("Create", modifier = Modifier.padding(start = 8.dp))
+                }
+                OutlinedButton(onClick = onJoin) {
+                    Icon(Icons.Filled.GroupAdd, contentDescription = null)
+                    Text("Join", modifier = Modifier.padding(start = 8.dp))
+                }
             }
         }
         if (groups.isEmpty()) {
@@ -190,6 +218,33 @@ private fun CollectionRow(name: String, selected: Boolean, onClick: () -> Unit, 
             )
         }
     }
+}
+
+@Composable
+private fun NameDialog(
+    title: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Collection name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank(), onClick = { onConfirm(name) }) { Text(confirmLabel) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

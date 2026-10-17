@@ -96,6 +96,24 @@ class CollectionsViewModel : ViewModel() {
         }
     }
 
+    /** Creates a new collection named [name] and refreshes the list. */
+    fun createCollection(name: String, onResult: (Boolean, String?) -> Unit) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            onResult(false, "Enter a name.")
+            return
+        }
+        viewModelScope.launch {
+            repository.createGroup(trimmed).fold(
+                onSuccess = {
+                    reload()
+                    onResult(true, null)
+                },
+                onFailure = { onResult(false, it.message ?: "Couldn't create the collection.") },
+            )
+        }
+    }
+
     /** Switches the active collection. No-op if already active. */
     fun select(group: Group) {
         val id = group.id ?: return
