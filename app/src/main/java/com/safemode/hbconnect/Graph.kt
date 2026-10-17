@@ -6,6 +6,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.safemode.hbconnect.data.HomeboxRepository
 import com.safemode.hbconnect.data.remote.ApiProvider
+import com.safemode.hbconnect.data.remote.LiveUpdatesClient
 import com.safemode.hbconnect.data.remote.NetworkMonitor
 import com.safemode.hbconnect.data.remote.ServerReachability
 import com.safemode.hbconnect.data.remote.ServerStatus
@@ -21,8 +22,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -43,6 +47,9 @@ object Graph {
     lateinit var serverStatus: ServerStatus
         private set
 
+    lateinit var liveUpdates: LiveUpdatesClient
+        private set
+
     private lateinit var networkMonitor: NetworkMonitor
 
     /** The group's configured currency (symbol/decimals), resolved for money formatting; null until loaded. */
@@ -58,11 +65,31 @@ object Graph {
         networkMonitor = NetworkMonitor(app, serverStatus)
         apiProvider = ApiProvider(app.cacheDir, serverStatus, networkMonitor::isOnline)
         repository = HomeboxRepository(apiProvider)
+        liveUpdates = LiveUpdatesClient(appScope)
 
         // Keep the API provider's config in sync with saved settings.
         settingsRepository.config
             .onEach { apiProvider.updateConfig(it) }
             .launchIn(appScope)
+
+        // Drive the live-updates WebSocket from the foreground state and settings: connect only
+        // while the app is foregrounded, live updates are enabled, and the server is configured;
+        // reconnect when the host/credentials change; disconnect on background. Reconnects are
+        // skipped for unrelated settings changes (theme, sort, …) that don't touch the connection.
+        appScope.launch {
+            ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    settingsRepository.config
+                        .map { cfg -> cfg.takeIf { it.liveUpdates && it.isConfigured } }
+                        .distinctUntilChanged { old, new ->
+                            old?.baseUrl() == new?.baseUrl() && old?.authHeader() == new?.authHeader()
+                        }
+                        .collect { liveUpdates.connectTo(it) }
+                } finally {
+                    liveUpdates.connectTo(null)
+                }
+            }
+        }
 
         // Refresh a login token that's getting close to expiry, so the session survives. Best-effort
         // and gated to login-mode tokens; API keys and failures are left untouched.
