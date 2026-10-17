@@ -24,13 +24,17 @@ fun selectedTabFor(route: String?): BottomTab? = when (route) {
     Routes.TEMPLATES,
     Routes.MAINTENANCE_ALL,
     Routes.VALUE_BREAKDOWN,
+    Routes.TOOLS,
     Routes.IMPORT_EXPORT,
+    Routes.BILL_OF_MATERIALS,
+    Routes.BACKUP,
+    Routes.LOGS,
     Routes.COLLECTIONS,
     Routes.MEMBERS,
     Routes.CURRENCY,
+    Routes.ACCOUNT,
     Routes.SERVER,
     Routes.SETTINGS,
-    Routes.ABOUT,
     -> BottomTab.MORE
     else -> null
 }

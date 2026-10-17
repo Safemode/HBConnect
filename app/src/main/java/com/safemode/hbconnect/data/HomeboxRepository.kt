@@ -27,6 +27,7 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeCreate
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
+import com.safemode.hbconnect.data.remote.models.ExportOut
 import com.safemode.hbconnect.data.remote.models.Group
 import com.safemode.hbconnect.data.remote.models.GroupUpdate
 import com.safemode.hbconnect.data.remote.models.GroupAcceptInvitation
@@ -58,6 +59,7 @@ import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
+import java.io.OutputStream
 
 /**
  * Single entry point the UI uses to talk to Homebox. Wraps API calls in [Result] and maps
@@ -224,14 +226,18 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         acc
     }
 
-    suspend fun group(): Result<Group> = call { it.group() }
+    /** A group - the active collection, or the one named by [tenant]. */
+    suspend fun group(tenant: String? = null): Result<Group> = call { it.group(tenant) }
 
     /** Every collection (group) the user belongs to. */
     suspend fun groupsAll(): Result<List<Group>> = call { it.groupsAll() }
 
-    /** Updates the group's name and currency (owner only). */
-    suspend fun updateGroup(name: String, currency: String): Result<Group> =
-        call { it.updateGroup(GroupUpdate(name = name, currency = currency)) }
+    /**
+     * Updates a group's name and currency (owner only). [tenant] targets a specific collection
+     * instead of the active one, so a collection other than the current one can be renamed.
+     */
+    suspend fun updateGroup(name: String, currency: String, tenant: String? = null): Result<Group> =
+        call { it.updateGroup(GroupUpdate(name = name, currency = currency), tenant) }
 
     // ---- Group members / invitations ----
     suspend fun groupMembers(): Result<List<GroupMember>> = call { it.groupMembers() }
@@ -565,6 +571,50 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         )
         api.importEntities(part)
     }
+
+    /** Downloads the bill of materials for the active collection as CSV bytes (text/csv). */
+    suspend fun billOfMaterialsCsv(): Result<ByteArray> = runCatching {
+        val response = api().billOfMaterials()
+        if (response.isSuccessful) {
+            (response.body() ?: throw IllegalStateException("Empty response from server."))
+                .use { it.bytes() }
+        } else {
+            throw mapError(response.code(), response.errorBody()?.string())
+        }
+    }
+
+    // ---- Whole-collection backup (async server-side exports) ----
+    /** Every backup job for the active collection, newest first. */
+    suspend fun listExports(): Result<List<ExportOut>> =
+        call { it.listExports() }.map { result ->
+            result.items.orEmpty().sortedByDescending { it.createdAt.orEmpty() }
+        }
+
+    /** Enqueues a new backup; the archive is built on the server, nothing is downloaded here. */
+    suspend fun createExport(): Result<ExportOut> = call { it.createExport() }
+
+    suspend fun getExport(id: String): Result<ExportOut> = call { it.getExport(id) }
+
+    suspend fun deleteExport(id: String): Result<Unit> = callUnit { it.deleteExport(id) }
+
+    /** Streams a completed backup's zip bytes to [sink] (a stream the caller opens and closes). */
+    suspend fun downloadExportTo(id: String, sink: OutputStream): Result<Unit> = runCatching {
+        withContext(Dispatchers.IO) {
+            val response = api().downloadExport(id)
+            if (!response.isSuccessful) throw mapError(response.code(), response.errorBody()?.string())
+            val body = response.body() ?: throw IllegalStateException("Empty response from server.")
+            body.byteStream().use { input -> input.copyTo(sink) }
+        }
+    }
+
+    /** Restores a whole collection from a previously exported backup zip. */
+    suspend fun importCollection(fileName: String, bytes: ByteArray): Result<ExportOut> =
+        call { api ->
+            val part = MultipartBody.Part.createFormData(
+                "file", fileName, bytes.toRequestBody("application/zip".toMediaTypeOrNull()),
+            )
+            api.importCollection(part)
+        }
 
     // ---- Maintenance ----
     suspend fun getMaintenance(entityId: String): Result<List<MaintenanceEntry>> =

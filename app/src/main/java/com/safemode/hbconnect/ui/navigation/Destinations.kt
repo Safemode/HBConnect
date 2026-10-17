@@ -1,16 +1,14 @@
 package com.safemode.hbconnect.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Handyman
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.ImportExport
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.People
@@ -30,14 +28,17 @@ object Routes {
     const val TEMPLATES = "templates"
     const val MAINTENANCE_ALL = "maintenance"
     const val VALUE_BREAKDOWN = "value-breakdown"
+    const val TOOLS = "tools"
     const val IMPORT_EXPORT = "import-export"
+    const val BILL_OF_MATERIALS = "bill-of-materials"
+    const val BACKUP = "backup"
+    const val LOGS = "logs"
     const val COLLECTIONS = "collections"
     const val MEMBERS = "members"
     const val CURRENCY = "currency"
     const val ACCOUNT = "account"
     const val SERVER = "server"
     const val SETTINGS = "settings"
-    const val ABOUT = "about"
 
     /** Detail for any entity (item or location). */
     fun entityDetail(id: String) = "entity/$id"
@@ -76,16 +77,14 @@ enum class BottomTab(val route: String, val label: String, val icon: ImageVector
  */
 enum class MoreDestination(val route: String, val label: String, val icon: ImageVector) {
     COLLECTIONS(Routes.COLLECTIONS, "Collections", Icons.Filled.Collections),
-    MEMBERS(Routes.MEMBERS, "Members", Icons.Filled.People),
     CURRENCY(Routes.CURRENCY, "Currency", Icons.Filled.AttachMoney),
-    VALUE_BREAKDOWN(Routes.VALUE_BREAKDOWN, "Value breakdown", Icons.Filled.BarChart),
     ENTITY_TYPES(Routes.ENTITY_TYPES, "Entity types", Icons.Filled.Category),
-    TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),
-    TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
     MAINTENANCE(Routes.MAINTENANCE_ALL, "Maintenance", Icons.Filled.Build),
-    IMPORT_EXPORT(Routes.IMPORT_EXPORT, "Import & export", Icons.Filled.ImportExport),
+    MEMBERS(Routes.MEMBERS, "Members", Icons.Filled.People),
+    TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
+    TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),
+    TOOLS(Routes.TOOLS, "Tools", Icons.Filled.Handyman),
     ACCOUNT(Routes.ACCOUNT, "Account", Icons.Filled.Person),
     SERVER(Routes.SERVER, "Server", Icons.Filled.Dns),
     SETTINGS(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
-    ABOUT(Routes.ABOUT, "About", Icons.Filled.Info),
 }
