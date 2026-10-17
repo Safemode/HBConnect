@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,18 +21,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +86,8 @@ fun ItemsScreen(
 
     val selectionMode = selection.isNotEmpty()
     var activeDialog by remember { mutableStateOf<BulkDialog?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     LifecycleResumeEffect(Unit) {
         viewModel.reloadSilently()
@@ -111,17 +114,35 @@ fun ItemsScreen(
                     },
                     title = { Text("${selection.size} selected") },
                     actions = {
-                        IconButton(onClick = { viewModel.selectAll() }) {
-                            Icon(Icons.Filled.SelectAll, contentDescription = "Select all")
+                        IconButton(onClick = { confirmDelete = true }) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
                         }
-                        IconButton(onClick = { openDialog(BulkDialog.MOVE) }) {
-                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Move")
-                        }
-                        IconButton(onClick = { openDialog(BulkDialog.TAGS) }) {
-                            Icon(Icons.Filled.Sell, contentDescription = "Add tags")
-                        }
-                        IconButton(onClick = { openDialog(BulkDialog.QUANTITY) }) {
-                            Icon(Icons.Filled.Numbers, contentDescription = "Set quantity")
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Select all") },
+                                    onClick = { menuOpen = false; viewModel.selectAll() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Move") },
+                                    onClick = { menuOpen = false; openDialog(BulkDialog.MOVE) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Add tags") },
+                                    onClick = { menuOpen = false; openDialog(BulkDialog.TAGS) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Set quantity") },
+                                    onClick = { menuOpen = false; openDialog(BulkDialog.QUANTITY) },
+                                )
+                            }
                         }
                     },
                 )
@@ -260,6 +281,32 @@ fun ItemsScreen(
             onDismiss = { activeDialog = null },
         )
         null -> Unit
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete $count item${if (count == 1) "" else "s"}?") },
+            text = {
+                Text(
+                    if (count == 1) "This permanently removes the item from Homebox."
+                    else "This permanently removes these items from Homebox.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    viewModel.bulkDelete { ok, err ->
+                        Toast.makeText(
+                            context,
+                            if (ok) "Deleted $count item${if (count == 1) "" else "s"}" else err ?: "Delete failed",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
     }
 }
 

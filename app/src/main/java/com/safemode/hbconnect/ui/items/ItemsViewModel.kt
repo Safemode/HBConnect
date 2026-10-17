@@ -124,6 +124,10 @@ class ItemsViewModel : ViewModel() {
     fun bulkSetQuantity(quantity: Double, onResult: (Boolean, String?) -> Unit) =
         applyToSelection(onResult) { id -> repository.patchEntity(id, EntityPatch(id = id, quantity = quantity)).map {} }
 
+    /** Permanently deletes every selected item. */
+    fun bulkDelete(onResult: (Boolean, String?) -> Unit) =
+        applyToSelection(onResult) { id -> repository.deleteEntity(id) }
+
     /** Adds [tagIds] to every selected item, merging with each item's existing tags. */
     fun bulkAddTags(tagIds: List<String>, onResult: (Boolean, String?) -> Unit) {
         val byId = (_state.value as? UiState.Success)?.data.orEmpty().associateBy { it.id }
