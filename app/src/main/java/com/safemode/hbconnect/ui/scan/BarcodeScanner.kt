@@ -321,11 +321,20 @@ private class BarcodeDecoder(formats: List<BarcodeFormat>) {
     }
 
     fun decode(image: ImageProxy): String? {
-        val plane = image.planes[0]
-        val data = plane.toLuminance(image.width, image.height)
-        val source = PlanarYUVLuminanceSource(
-            data, image.width, image.height, 0, 0, image.width, image.height, false,
+        val luminance = image.planes[0].toLuminance(image.width, image.height)
+        // The analysis buffer is in sensor orientation, so upright it first (ZXing's 1D readers only
+        // scan horizontal rows). If nothing is found, try a further 90° turn so a product barcode
+        // reads whether it's horizontal or vertical on screen. QR is rotation-invariant either way.
+        val (upright, w, h) = rotateLuminance(
+            luminance, image.width, image.height, image.imageInfo.rotationDegrees,
         )
+        decodeLuminance(upright, w, h)?.let { return it }
+        val (turned, tw, th) = rotateLuminance(upright, w, h, 90)
+        return decodeLuminance(turned, tw, th)
+    }
+
+    private fun decodeLuminance(data: ByteArray, width: Int, height: Int): String? {
+        val source = PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false)
         val bitmap = BinaryBitmap(HybridBinarizer(source))
         return try {
             reader.decodeWithState(bitmap).text
@@ -333,6 +342,36 @@ private class BarcodeDecoder(formats: List<BarcodeFormat>) {
             null
         } finally {
             reader.reset()
+        }
+    }
+}
+
+/**
+ * Rotates a tightly-packed luminance buffer by [degrees] (0/90/180/270, clockwise). Returns the
+ * rotated bytes and the new width/height (swapped for 90°/270°).
+ */
+private fun rotateLuminance(src: ByteArray, width: Int, height: Int, degrees: Int): Triple<ByteArray, Int, Int> {
+    val d = ((degrees % 360) + 360) % 360
+    if (d == 0) return Triple(src, width, height)
+    val out = ByteArray(src.size)
+    when (d) {
+        90 -> {
+            for (y in 0 until height) for (x in 0 until width) {
+                out[x * height + (height - 1 - y)] = src[y * width + x]
+            }
+            return Triple(out, height, width)
+        }
+        180 -> {
+            for (y in 0 until height) for (x in 0 until width) {
+                out[(height - 1 - y) * width + (width - 1 - x)] = src[y * width + x]
+            }
+            return Triple(out, width, height)
+        }
+        else -> { // 270
+            for (y in 0 until height) for (x in 0 until width) {
+                out[(width - 1 - x) * height + y] = src[y * width + x]
+            }
+            return Triple(out, height, width)
         }
     }
 }
