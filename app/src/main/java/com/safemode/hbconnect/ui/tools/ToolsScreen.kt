@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.Icon
@@ -33,16 +34,22 @@ fun ToolsScreen(onOpen: (String) -> Unit) {
             .verticalScroll(rememberScrollState()),
     ) {
         ToolRow(
-            icon = Icons.Filled.ImportExport,
-            title = "Import & export",
-            subtitle = "Move items in or out as a CSV spreadsheet.",
-            onClick = { onOpen(Routes.IMPORT_EXPORT) },
+            icon = Icons.Filled.BarChart,
+            title = "Value breakdown",
+            subtitle = "See where your inventory's value sits, by location, tag and more.",
+            onClick = { onOpen(Routes.VALUE_BREAKDOWN) },
         )
         ToolRow(
             icon = Icons.Filled.Receipt,
             title = "Bill of materials",
             subtitle = "Download a CSV report of every item and its value.",
             onClick = { onOpen(Routes.BILL_OF_MATERIALS) },
+        )
+        ToolRow(
+            icon = Icons.Filled.ImportExport,
+            title = "Import & export",
+            subtitle = "Move items in or out as a CSV spreadsheet.",
+            onClick = { onOpen(Routes.IMPORT_EXPORT) },
         )
         ToolRow(
             icon = Icons.Filled.Backup,

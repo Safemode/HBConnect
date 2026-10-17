@@ -1,7 +1,6 @@
 package com.safemode.hbconnect.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.AttachMoney
@@ -84,7 +83,6 @@ enum class MoreDestination(val route: String, val label: String, val icon: Image
     TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
     TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),
     TOOLS(Routes.TOOLS, "Tools", Icons.Filled.Handyman),
-    VALUE_BREAKDOWN(Routes.VALUE_BREAKDOWN, "Value breakdown", Icons.Filled.BarChart),
     ACCOUNT(Routes.ACCOUNT, "Account", Icons.Filled.Person),
     SERVER(Routes.SERVER, "Server", Icons.Filled.Dns),
     SETTINGS(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
