@@ -197,6 +197,9 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
 
     suspend fun group(): Result<Group> = call { it.group() }
 
+    /** Every collection (group) the user belongs to. */
+    suspend fun groupsAll(): Result<List<Group>> = call { it.groupsAll() }
+
     suspend fun currencies(): Result<List<Currency>> = call { it.currencies() }
 
     suspend fun serverVersion(): Result<String> = status().map { s ->

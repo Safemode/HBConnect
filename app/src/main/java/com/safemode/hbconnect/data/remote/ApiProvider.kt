@@ -108,9 +108,9 @@ class ApiProvider(
      */
     fun authenticatedImageClient(): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(Interceptor { chain ->
-            val header = config.authHeader()
             val builder = chain.request().newBuilder()
-            if (header != null) builder.header("Authorization", header)
+            config.authHeader()?.let { builder.header("Authorization", it) }
+            config.tenantHeader()?.let { builder.header("X-Tenant", it) }
             chain.proceed(builder.build())
         })
         .followRedirects(true)
@@ -166,6 +166,7 @@ class AuthInterceptor(private val configProvider: () -> ConnectionConfig) : Inte
         val config = configProvider()
         val builder = chain.request().newBuilder()
         config.authHeader()?.let { builder.header("Authorization", it) }
+        config.tenantHeader()?.let { builder.header("X-Tenant", it) }
         builder.header("Accept", "application/json")
         return chain.proceed(builder.build())
     }
