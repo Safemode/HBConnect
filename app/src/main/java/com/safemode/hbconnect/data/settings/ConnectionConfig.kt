@@ -75,6 +75,11 @@ data class ConnectionConfig(
      * default group for the signed-in user. Cleared on sign-out and on connecting to a new server.
      */
     val activeGroupId: String = "",
+    /**
+     * Custom order of the reorderable "More" entries, as a list of route ids. Empty means the
+     * default alphabetical order. Set when the user rearranges More; cleared by the reset action.
+     */
+    val moreOrder: List<String> = emptyList(),
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean

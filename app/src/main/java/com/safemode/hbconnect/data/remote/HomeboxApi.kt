@@ -12,6 +12,8 @@ import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityListResult
+import com.safemode.hbconnect.data.remote.models.ExportListResult
+import com.safemode.hbconnect.data.remote.models.ExportOut
 import com.safemode.hbconnect.data.remote.models.EntityTemplateCreate
 import com.safemode.hbconnect.data.remote.models.EntityTemplateCreateItem
 import com.safemode.hbconnect.data.remote.models.EntityTemplateOut
@@ -57,6 +59,7 @@ import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 /**
  * Retrofit interface for the Homebox REST API (v0.26+, "entities" model, verified against
@@ -293,6 +296,34 @@ interface HomeboxApi {
         @Path("id") id: String,
         @Path("attachmentId") attachmentId: String,
     ): Response<ResponseBody>
+
+    // ---- Whole-collection backup (async server-side exports) ----
+    @GET("api/v1/group/exports")
+    suspend fun listExports(): Response<ExportListResult>
+
+    /** Enqueues a new backup; the server builds it asynchronously. Returns the job (202). */
+    @POST("api/v1/group/exports")
+    suspend fun createExport(): Response<ExportOut>
+
+    @GET("api/v1/group/exports/{id}")
+    suspend fun getExport(@Path("id") id: String): Response<ExportOut>
+
+    @Streaming
+    @GET("api/v1/group/exports/{id}/download")
+    suspend fun downloadExport(@Path("id") id: String): Response<ResponseBody>
+
+    @DELETE("api/v1/group/exports/{id}")
+    suspend fun deleteExport(@Path("id") id: String): Response<ResponseBody>
+
+    /** Restores a whole collection from a previously exported backup zip. The part is named "file". */
+    @Multipart
+    @POST("api/v1/group/import")
+    suspend fun importCollection(@Part file: MultipartBody.Part): Response<ExportOut>
+
+    // ---- Reporting ----
+    /** Bill of materials for the active collection, as a CSV file (text/csv). */
+    @GET("api/v1/reporting/bill-of-materials")
+    suspend fun billOfMaterials(): Response<ResponseBody>
 
     // ---- CSV import / export ----
     /** Downloads all of the group's entities as a CSV file (text/csv). */

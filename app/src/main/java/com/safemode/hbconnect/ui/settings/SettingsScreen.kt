@@ -1,5 +1,6 @@
 package com.safemode.hbconnect.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,10 +11,14 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -25,17 +30,23 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.settings.CacheSize
 import com.safemode.hbconnect.data.settings.ItemSortOrder
 import com.safemode.hbconnect.data.settings.MaintenanceLead
 import com.safemode.hbconnect.data.settings.ThemePreference
 import com.safemode.hbconnect.notifications.MaintenanceReminderScheduler
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,7 +177,76 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Clear cache") }
             }
+
+            AboutCard()
         }
+    }
+}
+
+@Composable
+private fun AboutCard() {
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val version = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "-"
+    }
+    val host by produceState(initialValue = "-") {
+        value = Graph.settingsRepository.config.first().baseUrl()
+    }
+
+    SettingCard("About") {
+        Text(
+            "HBConnect",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            "A Material Design 3 Android client for a self-hosted Homebox instance. Built against " +
+                "the Homebox v0.26+ API.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AboutRow("Version", version)
+        AboutRow("Connected host", host)
+        AboutRow("Developer", "Safemode")
+
+        HorizontalDivider()
+        LinkRow("GitHub") { uriHandler.openUri("https://github.com/Safemode/HBConnect") }
+        LinkRow("Report an issue") { uriHandler.openUri("https://github.com/Safemode/HBConnect/issues") }
+        LinkRow("Developer profile") { uriHandler.openUri("https://github.com/Safemode") }
+    }
+}
+
+@Composable
+private fun AboutRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun LinkRow(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.Filled.OpenInNew,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 

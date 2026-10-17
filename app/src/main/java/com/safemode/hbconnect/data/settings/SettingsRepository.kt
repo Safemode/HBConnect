@@ -36,6 +36,7 @@ class SettingsRepository(private val context: Context) {
         val MAINTENANCE_REMINDERS = booleanPreferencesKey("maintenance_reminders")
         val MAINTENANCE_LEAD = stringPreferencesKey("maintenance_lead")
         val ACTIVE_GROUP_ID = stringPreferencesKey("active_group_id")
+        val MORE_ORDER = stringPreferencesKey("more_order")
     }
 
     val config: Flow<ConnectionConfig> = context.dataStore.data.map { prefs ->
@@ -65,6 +66,7 @@ class SettingsRepository(private val context: Context) {
                 MaintenanceLead.valueOf(prefs[Keys.MAINTENANCE_LEAD] ?: "DUE_DAY")
             }.getOrDefault(MaintenanceLead.DUE_DAY),
             activeGroupId = prefs[Keys.ACTIVE_GROUP_ID] ?: "",
+            moreOrder = prefs[Keys.MORE_ORDER]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
         )
     }
 
@@ -86,6 +88,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.MAINTENANCE_REMINDERS] = config.maintenanceReminders
             prefs[Keys.MAINTENANCE_LEAD] = config.maintenanceLead.name
             prefs[Keys.ACTIVE_GROUP_ID] = config.activeGroupId
+            prefs[Keys.MORE_ORDER] = config.moreOrder.joinToString(",")
         }
     }
 }

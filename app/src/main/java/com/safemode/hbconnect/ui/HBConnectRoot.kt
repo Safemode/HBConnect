@@ -50,7 +50,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.ServerReachability
-import com.safemode.hbconnect.ui.about.AboutScreen
 import com.safemode.hbconnect.ui.account.AccountScreen
 import com.safemode.hbconnect.ui.attachments.AttachmentsScreen
 import com.safemode.hbconnect.ui.backup.ImportExportScreen
@@ -73,6 +72,9 @@ import com.safemode.hbconnect.ui.navigation.Routes
 import com.safemode.hbconnect.ui.navigation.selectedTabFor
 import com.safemode.hbconnect.ui.server.ServerScreen
 import com.safemode.hbconnect.ui.settings.SettingsScreen
+import com.safemode.hbconnect.ui.tools.BackupScreen
+import com.safemode.hbconnect.ui.tools.BillOfMaterialsScreen
+import com.safemode.hbconnect.ui.tools.ToolsScreen
 import com.safemode.hbconnect.ui.tags.TagsScreen
 import com.safemode.hbconnect.ui.templates.TemplatesScreen
 import com.safemode.hbconnect.ui.value.ValueBreakdownScreen
@@ -205,9 +207,24 @@ fun HBConnectRoot() {
                     )
                 }
             }
+            composable(Routes.TOOLS) {
+                SubScaffold("Tools", onBack = { navController.popBackStack() }) {
+                    ToolsScreen(onOpen = { route -> navController.navigate(route) })
+                }
+            }
             composable(Routes.IMPORT_EXPORT) {
                 SubScaffold("Import & export", onBack = { navController.popBackStack() }) {
                     ImportExportScreen()
+                }
+            }
+            composable(Routes.BILL_OF_MATERIALS) {
+                SubScaffold("Bill of materials", onBack = { navController.popBackStack() }) {
+                    BillOfMaterialsScreen()
+                }
+            }
+            composable(Routes.BACKUP) {
+                SubScaffold("Backup & restore", onBack = { navController.popBackStack() }) {
+                    BackupScreen()
                 }
             }
             composable(Routes.COLLECTIONS) {
@@ -294,9 +311,6 @@ fun HBConnectRoot() {
             }
             composable(Routes.SERVER) {
                 SubScaffold("Server", onBack = { navController.popBackStack() }) { ServerScreen() }
-            }
-            composable(Routes.ABOUT) {
-                SubScaffold("About", onBack = { navController.popBackStack() }) { AboutScreen() }
             }
             composable(Routes.SETTINGS) {
                 SubScaffold("Settings", onBack = { navController.popBackStack() }) { SettingsScreen() }
