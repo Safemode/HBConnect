@@ -144,6 +144,8 @@ class ApiProvider(
         }
         return OkHttpClient.Builder()
             .cache(httpCache)
+            // Outermost: records each request's final outcome in the in-app diagnostic log.
+            .addInterceptor(DiagnosticLogInterceptor())
             .addInterceptor(AuthInterceptor { config })
             // Reports reachability and falls back to cached data when the server is down.
             .addInterceptor(OfflineInterceptor(serverStatus, isOnline))
@@ -157,6 +159,38 @@ class ApiProvider(
 
     private companion object {
         const val HTTP_CACHE_DIR = "http-cache"
+    }
+}
+
+/**
+ * Records each request's outcome in the [DiagnosticLog]: the request at DBG, a 2xx/3xx response at
+ * INF, a 4xx at WARN, and a 5xx or network failure at ERR. Only the method, path and timing are
+ * logged - never headers - so credentials never reach the log.
+ */
+class DiagnosticLogInterceptor : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val path = request.url.encodedPath + (request.url.encodedQuery?.let { "?$it" } ?: "")
+        DiagnosticLog.log(DiagnosticLog.Level.DBG, "-> ${request.method} $path")
+        val startNs = System.nanoTime()
+        return try {
+            val response = chain.proceed(request)
+            val ms = (System.nanoTime() - startNs) / 1_000_000
+            val level = when {
+                response.code >= 500 -> DiagnosticLog.Level.ERR
+                response.code >= 400 -> DiagnosticLog.Level.WARN
+                else -> DiagnosticLog.Level.INF
+            }
+            DiagnosticLog.log(level, "<- ${response.code} ${request.method} $path (${ms}ms)")
+            response
+        } catch (e: IOException) {
+            val ms = (System.nanoTime() - startNs) / 1_000_000
+            DiagnosticLog.log(
+                DiagnosticLog.Level.ERR,
+                "x ${request.method} $path failed after ${ms}ms: ${e.message ?: "network error"}",
+            )
+            throw e
+        }
     }
 }
 

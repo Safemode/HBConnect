@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -56,6 +57,12 @@ fun ToolsScreen(onOpen: (String) -> Unit) {
             title = "Backup & restore",
             subtitle = "Generate full backups on the server, then download or restore them.",
             onClick = { onOpen(Routes.BACKUP) },
+        )
+        ToolRow(
+            icon = Icons.Filled.Terminal,
+            title = "Logs",
+            subtitle = "The app's recent activity, for troubleshooting connectivity.",
+            onClick = { onOpen(Routes.LOGS) },
         )
     }
 }

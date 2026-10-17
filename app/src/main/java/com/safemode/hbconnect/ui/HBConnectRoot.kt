@@ -74,6 +74,7 @@ import com.safemode.hbconnect.ui.server.ServerScreen
 import com.safemode.hbconnect.ui.settings.SettingsScreen
 import com.safemode.hbconnect.ui.tools.BackupScreen
 import com.safemode.hbconnect.ui.tools.BillOfMaterialsScreen
+import com.safemode.hbconnect.ui.tools.LogsScreen
 import com.safemode.hbconnect.ui.tools.ToolsScreen
 import com.safemode.hbconnect.ui.tags.TagsScreen
 import com.safemode.hbconnect.ui.templates.TemplatesScreen
@@ -224,6 +225,11 @@ fun HBConnectRoot() {
             composable(Routes.BACKUP) {
                 SubScaffold("Backup & restore", onBack = { navController.popBackStack() }) {
                     BackupScreen()
+                }
+            }
+            composable(Routes.LOGS) {
+                SubScaffold("Logs", onBack = { navController.popBackStack() }) {
+                    LogsScreen()
                 }
             }
             composable(Routes.COLLECTIONS) {

@@ -32,6 +32,7 @@ object Routes {
     const val IMPORT_EXPORT = "import-export"
     const val BILL_OF_MATERIALS = "bill-of-materials"
     const val BACKUP = "backup"
+    const val LOGS = "logs"
     const val COLLECTIONS = "collections"
     const val MEMBERS = "members"
     const val CURRENCY = "currency"
