@@ -2,8 +2,13 @@ package com.safemode.hbconnect.data
 
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.HomeboxApi
+import com.safemode.hbconnect.data.remote.models.ApiKeyCreate
+import com.safemode.hbconnect.data.remote.models.ApiKeyCreatedOut
+import com.safemode.hbconnect.data.remote.models.ApiKeyOut
 import com.safemode.hbconnect.data.remote.models.ApiSummary
 import com.safemode.hbconnect.data.remote.models.AttachmentUpdate
+import com.safemode.hbconnect.data.remote.models.ChangePassword
+import com.safemode.hbconnect.data.remote.models.UserUpdate
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
@@ -109,6 +114,24 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         call { it.self() }.mapCatching {
             it.item ?: throw IllegalStateException("No user returned.")
         }
+
+    suspend fun logoutAll(): Result<Unit> = callUnit { it.logoutAll() }
+
+    /** Updates the signed-in user's name and email. */
+    suspend fun updateSelf(name: String, email: String): Result<Unit> =
+        callUnit { it.updateSelf(UserUpdate(name = name, email = email)) }
+
+    suspend fun changePassword(current: String, new: String): Result<Unit> =
+        callUnit { it.changePassword(ChangePassword(current = current, new = new)) }
+
+    // ---- Personal API keys ----
+    suspend fun getApiKeys(): Result<List<ApiKeyOut>> = call { it.getApiKeys() }
+
+    /** Creates an API key; [expiresAt] is an ISO-8601 instant, or null for a key that never expires. */
+    suspend fun createApiKey(name: String, expiresAt: String?): Result<ApiKeyCreatedOut> =
+        call { it.createApiKey(ApiKeyCreate(name = name, expiresAt = expiresAt)) }
+
+    suspend fun deleteApiKey(id: String): Result<Unit> = callUnit { it.deleteApiKey(id) }
 
     suspend fun statistics(): Result<GroupStatistics> = call { it.statistics() }
 

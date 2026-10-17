@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.outlined.Place
@@ -33,6 +34,7 @@ object Routes {
     const val COLLECTIONS = "collections"
     const val MEMBERS = "members"
     const val CURRENCY = "currency"
+    const val ACCOUNT = "account"
     const val SERVER = "server"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
@@ -82,6 +84,7 @@ enum class MoreDestination(val route: String, val label: String, val icon: Image
     TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
     MAINTENANCE(Routes.MAINTENANCE_ALL, "Maintenance", Icons.Filled.Build),
     IMPORT_EXPORT(Routes.IMPORT_EXPORT, "Import & export", Icons.Filled.ImportExport),
+    ACCOUNT(Routes.ACCOUNT, "Account", Icons.Filled.Person),
     SERVER(Routes.SERVER, "Server", Icons.Filled.Dns),
     SETTINGS(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
     ABOUT(Routes.ABOUT, "About", Icons.Filled.Info),

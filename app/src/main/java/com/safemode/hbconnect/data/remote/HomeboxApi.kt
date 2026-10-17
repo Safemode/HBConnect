@@ -1,7 +1,12 @@
 package com.safemode.hbconnect.data.remote
 
+import com.safemode.hbconnect.data.remote.models.ApiKeyCreate
+import com.safemode.hbconnect.data.remote.models.ApiKeyCreatedOut
+import com.safemode.hbconnect.data.remote.models.ApiKeyOut
 import com.safemode.hbconnect.data.remote.models.ApiSummary
 import com.safemode.hbconnect.data.remote.models.AttachmentUpdate
+import com.safemode.hbconnect.data.remote.models.ChangePassword
+import com.safemode.hbconnect.data.remote.models.UserUpdate
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
@@ -77,8 +82,29 @@ interface HomeboxApi {
     @POST("api/v1/users/logout")
     suspend fun logout(): Response<ResponseBody>
 
+    /** Invalidates every login session for the signed-in user (not API keys). */
+    @POST("api/v1/users/logout/all")
+    suspend fun logoutAll(): Response<ResponseBody>
+
     @GET("api/v1/users/self")
     suspend fun self(): Response<UserSelfResponse>
+
+    /** Updates the signed-in user's name and email. */
+    @PUT("api/v1/users/self")
+    suspend fun updateSelf(@Body body: UserUpdate): Response<ResponseBody>
+
+    @PUT("api/v1/users/self/change-password")
+    suspend fun changePassword(@Body body: ChangePassword): Response<ResponseBody>
+
+    // ---- Personal API keys ----
+    @GET("api/v1/users/self/api-keys")
+    suspend fun getApiKeys(): Response<List<ApiKeyOut>>
+
+    @POST("api/v1/users/self/api-keys")
+    suspend fun createApiKey(@Body body: ApiKeyCreate): Response<ApiKeyCreatedOut>
+
+    @DELETE("api/v1/users/self/api-keys/{id}")
+    suspend fun deleteApiKey(@Path("id") id: String): Response<ResponseBody>
 
     @GET("api/v1/groups/statistics")
     suspend fun statistics(): Response<GroupStatistics>

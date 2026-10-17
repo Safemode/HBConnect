@@ -51,6 +51,7 @@ import androidx.navigation.navArgument
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.ServerReachability
 import com.safemode.hbconnect.ui.about.AboutScreen
+import com.safemode.hbconnect.ui.account.AccountScreen
 import com.safemode.hbconnect.ui.attachments.AttachmentsScreen
 import com.safemode.hbconnect.ui.backup.ImportExportScreen
 import com.safemode.hbconnect.ui.collections.CollectionsScreen
@@ -287,6 +288,9 @@ fun HBConnectRoot() {
                     parentId = parentId,
                     onBack = { navController.popBackStack() },
                 )
+            }
+            composable(Routes.ACCOUNT) {
+                SubScaffold("Account", onBack = { navController.popBackStack() }) { AccountScreen() }
             }
             composable(Routes.SERVER) {
                 SubScaffold("Server", onBack = { navController.popBackStack() }) { ServerScreen() }
