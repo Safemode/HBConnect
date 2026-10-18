@@ -154,7 +154,10 @@ fun HBConnectRoot() {
                 .consumeWindowInsets(WindowInsets.navigationBars),
         ) {
             composable(Routes.DASHBOARD) {
-                MainScaffold("HBConnect", actions = { SyncStatusIndicator() }) {
+                MainScaffold(
+                    "HBConnect",
+                    actions = { SyncStatusIndicator(onClick = { navController.navigate(Routes.QUEUE) }) },
+                ) {
                     DashboardScreen(
                         onOpenItems = { navController.navigate(Routes.ITEMS) },
                         onOpenLocations = { navController.navigate(Routes.LOCATIONS) },

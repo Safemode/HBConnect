@@ -1,10 +1,13 @@
 package com.safemode.hbconnect.ui.common
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -35,7 +38,7 @@ import com.safemode.hbconnect.data.remote.ServerReachability
  *    local copy is up to date, just not confirmed against a live server.
  */
 @Composable
-fun SyncStatusIndicator(modifier: Modifier = Modifier) {
+fun SyncStatusIndicator(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     val state by Graph.serverStatus.state.collectAsStateWithLifecycle()
     val pending by Graph.uploadQueue.count.collectAsStateWithLifecycle(initialValue = 0)
 
@@ -50,7 +53,11 @@ fun SyncStatusIndicator(modifier: Modifier = Modifier) {
     }
 
     Row(
-        modifier = modifier.padding(end = 12.dp),
+        modifier = modifier
+            .padding(end = 4.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(info.icon, contentDescription = info.label, tint = info.tint, modifier = Modifier.size(18.dp))
