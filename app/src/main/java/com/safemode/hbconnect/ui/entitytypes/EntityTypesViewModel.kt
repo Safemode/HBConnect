@@ -6,6 +6,8 @@ import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.EntityTypeCreate
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeUpdate
+import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,41 +57,52 @@ class EntityTypesViewModel : ViewModel() {
     }
 
     fun create(name: String, icon: String, isLocation: Boolean, onResult: (Boolean, String?) -> Unit) {
+        val body = EntityTypeCreate(
+            name = name.trim(),
+            icon = icon.trim().ifBlank { null },
+            isLocation = isLocation,
+        )
         viewModelScope.launch {
-            repository.createEntityType(
-                EntityTypeCreate(
-                    name = name.trim(),
-                    icon = icon.trim().ifBlank { null },
-                    isLocation = isLocation,
-                ),
-            ).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.CREATE_TYPE,
+                payload = body,
+                label = "New type: ${body.name}",
+                direct = { repository.createEntityType(body).map {} },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }
 
     fun update(id: String, name: String, icon: String, isLocation: Boolean, onResult: (Boolean, String?) -> Unit) {
+        val body = EntityTypeUpdate(
+            name = name.trim(),
+            icon = icon.trim().ifBlank { null },
+            isLocation = isLocation,
+        )
         viewModelScope.launch {
-            repository.updateEntityType(
-                id,
-                EntityTypeUpdate(
-                    name = name.trim(),
-                    icon = icon.trim().ifBlank { null },
-                    isLocation = isLocation,
-                ),
-            ).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.UPDATE_TYPE,
+                payload = body,
+                targetId = id,
+                label = "Edit type: ${body.name}",
+                direct = { repository.updateEntityType(id, body).map {} },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }
 
     fun delete(id: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.deleteEntityType(id).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.DELETE_TYPE,
+                payload = null,
+                targetId = id,
+                label = "Delete type",
+                direct = { repository.deleteEntityType(id) },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }

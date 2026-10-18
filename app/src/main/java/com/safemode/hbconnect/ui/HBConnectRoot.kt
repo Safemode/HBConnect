@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,9 +67,11 @@ import com.safemode.hbconnect.ui.members.MembersScreen
 import com.safemode.hbconnect.ui.maintenance.AllMaintenanceScreen
 import com.safemode.hbconnect.ui.maintenance.MaintenanceScreen
 import com.safemode.hbconnect.ui.more.MoreScreen
+import com.safemode.hbconnect.ui.queue.QueueScreen
 import com.safemode.hbconnect.ui.navigation.AppBottomBar
 import com.safemode.hbconnect.ui.navigation.BottomTab
 import com.safemode.hbconnect.ui.navigation.Routes
+import com.safemode.hbconnect.ui.common.SyncStatusIndicator
 import com.safemode.hbconnect.ui.navigation.selectedTabFor
 import com.safemode.hbconnect.ui.server.ServerScreen
 import com.safemode.hbconnect.ui.settings.SettingsScreen
@@ -151,7 +154,10 @@ fun HBConnectRoot() {
                 .consumeWindowInsets(WindowInsets.navigationBars),
         ) {
             composable(Routes.DASHBOARD) {
-                MainScaffold("HBConnect") {
+                MainScaffold(
+                    "HBConnect",
+                    actions = { SyncStatusIndicator(onClick = { navController.navigate(Routes.QUEUE) }) },
+                ) {
                     DashboardScreen(
                         onOpenItems = { navController.navigate(Routes.ITEMS) },
                         onOpenLocations = { navController.navigate(Routes.LOCATIONS) },
@@ -245,6 +251,11 @@ fun HBConnectRoot() {
             composable(Routes.CURRENCY) {
                 SubScaffold("Currency", onBack = { navController.popBackStack() }) {
                     CurrencyScreen()
+                }
+            }
+            composable(Routes.QUEUE) {
+                SubScaffold("Upload queue", onBack = { navController.popBackStack() }) {
+                    QueueScreen()
                 }
             }
             composable(
@@ -384,9 +395,13 @@ private fun ConnectivityBar(
  * live inside the NavHost so they animate together with their screen during transitions.
  */
 @Composable
-private fun MainScaffold(title: String, content: @Composable () -> Unit) {
+private fun MainScaffold(
+    title: String,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable () -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize()) {
-        TopBar(title = title)
+        TopBar(title = title, actions = actions)
         Box(modifier = Modifier.weight(1f)) { content() }
     }
 }
@@ -402,7 +417,11 @@ private fun SubScaffold(title: String, onBack: () -> Unit, content: @Composable 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(title: String, onBack: (() -> Unit)? = null) {
+private fun TopBar(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
     TopAppBar(
         title = { Text(title) },
         navigationIcon = {
@@ -412,6 +431,7 @@ private fun TopBar(title: String, onBack: (() -> Unit)? = null) {
                 }
             }
         },
+        actions = actions,
     )
 }
 

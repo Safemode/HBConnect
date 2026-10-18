@@ -5,6 +5,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.safemode.hbconnect.data.HomeboxRepository
+import com.safemode.hbconnect.data.local.AppDatabase
+import com.safemode.hbconnect.data.queue.UploadQueueManager
+import com.safemode.hbconnect.data.sync.SyncManager
+import com.safemode.hbconnect.notifications.QueueNotifier
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.LiveUpdatesClient
 import com.safemode.hbconnect.data.remote.NetworkMonitor
@@ -14,12 +18,12 @@ import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.notifications.MaintenanceReminderScheduler
 import com.safemode.hbconnect.data.settings.AuthMode
 import com.safemode.hbconnect.data.settings.SettingsRepository
+import java.io.File
 import java.time.Duration
 import java.time.OffsetDateTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +37,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Manual dependency container. Initialized once from [HBConnectApp]. */
 object Graph {
@@ -50,6 +55,10 @@ object Graph {
         private set
 
     lateinit var liveUpdates: LiveUpdatesClient
+        private set
+
+    /** The offline write queue (outbox): persists writes made while the server is unreachable. */
+    lateinit var uploadQueue: UploadQueueManager
         private set
 
     private lateinit var networkMonitor: NetworkMonitor
@@ -92,8 +101,20 @@ object Graph {
         serverStatus = ServerStatus()
         networkMonitor = NetworkMonitor(app, serverStatus)
         apiProvider = ApiProvider(app.cacheDir, serverStatus, networkMonitor::isOnline)
-        repository = HomeboxRepository(apiProvider)
+        val db = AppDatabase.build(app)
+        repository = HomeboxRepository(apiProvider, db.cachedEntities(), db.cachedDetails())
         liveUpdates = LiveUpdatesClient(appScope)
+        val syncManager = SyncManager(repository, app, serverStatus, networkMonitor::isOnline, appScope)
+        uploadQueue = UploadQueueManager(
+            dao = db.queuedOps(),
+            repository = repository,
+            queueDir = File(app.filesDir, "upload_queue"),
+            serverStatus = serverStatus,
+            isOnline = networkMonitor::isOnline,
+            activeTenant = { settingsRepository.config.first().activeGroupId },
+            notificationsEnabled = { settingsRepository.config.first().queueUploadNotifications },
+            notifier = QueueNotifier(app),
+        )
 
         // Keep the API provider's config in sync with saved settings.
         settingsRepository.config
@@ -176,6 +197,21 @@ object Graph {
                 runReachabilityLoop()
             }
         }
+
+        // Flush the offline write queue whenever the server is reachable and the app is foregrounded.
+        // serverStatus.state is a StateFlow, so REACHABLE arrives once per reconnect; drain() is a
+        // no-op when the queue is empty and self-guards against overlapping runs.
+        appScope.launch {
+            ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                serverStatus.state.collect { state ->
+                    if (state == ServerReachability.REACHABLE) {
+                        uploadQueue.drain()
+                        // Refresh the offline cache (all text + thumbnails) in the background.
+                        syncManager.requestSync()
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun runReachabilityLoop() = withContext(Dispatchers.IO) {
@@ -188,7 +224,14 @@ object Graph {
                 backoffMs = PROBE_MIN_BACKOFF_MS
                 serverStatus.state.first { it != ServerReachability.REACHABLE }
             } else {
-                delay(backoffMs)
+                // Wait out the backoff, but wake at once if the network returns - NetworkMonitor flips
+                // the state to CHECKING on reconnect. Without this the loop could sit in a delay of up
+                // to a minute, so the "Connecting..." banner lingered and screens didn't refresh until
+                // the next request. Waking here re-probes immediately, clearing the banner and letting
+                // refreshWhenServerReachable reload the current screen.
+                withTimeoutOrNull(backoffMs) {
+                    serverStatus.state.first { it == ServerReachability.CHECKING }
+                }
                 backoffMs = (backoffMs * 2).coerceAtMost(PROBE_MAX_BACKOFF_MS)
             }
         }

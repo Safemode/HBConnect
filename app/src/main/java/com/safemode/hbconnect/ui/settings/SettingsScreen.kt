@@ -75,6 +75,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             MaintenanceReminderScheduler.runNow(context)
         }
     }
+    // Only persist the queue-notifications toggle "on" once notifications are permitted.
+    val queueNotificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) viewModel.updateAndSave { it.copy(queueUploadNotifications = true) }
+    }
 
     Scaffold(contentWindowInsets = WindowInsets.navigationBars) { padding ->
         Column(
@@ -173,6 +179,32 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                         onSelect = { v -> viewModel.updateAndSave { it.copy(maintenanceLead = v) } },
                     )
                 }
+            }
+
+            SettingCard("Upload queue") {
+                SwitchRow(
+                    title = "Notify when offline uploads finish",
+                    subtitle = "When changes you saved while offline finish uploading, post a " +
+                        "notification. Only fires for queued (offline) changes - never for edits " +
+                        "that went straight to the server.",
+                    checked = config.queueUploadNotifications,
+                    onCheckedChange = { v ->
+                        if (!v) {
+                            viewModel.updateAndSave { it.copy(queueUploadNotifications = false) }
+                        } else {
+                            val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                ) != PackageManager.PERMISSION_GRANTED
+                            if (needsPermission) {
+                                queueNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.updateAndSave { it.copy(queueUploadNotifications = true) }
+                            }
+                        }
+                    },
+                )
             }
 
             SettingCard("Offline cache") {

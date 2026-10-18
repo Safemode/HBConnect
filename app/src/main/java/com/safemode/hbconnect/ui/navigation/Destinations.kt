@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dns
@@ -39,6 +40,7 @@ object Routes {
     const val ACCOUNT = "account"
     const val SERVER = "server"
     const val SETTINGS = "settings"
+    const val QUEUE = "queue"
 
     /** Detail for any entity (item or location). */
     fun entityDetail(id: String) = "entity/$id"
@@ -81,6 +83,7 @@ enum class MoreDestination(val route: String, val label: String, val icon: Image
     ENTITY_TYPES(Routes.ENTITY_TYPES, "Entity types", Icons.Filled.Category),
     MAINTENANCE(Routes.MAINTENANCE_ALL, "Maintenance", Icons.Filled.Build),
     MEMBERS(Routes.MEMBERS, "Members", Icons.Filled.People),
+    QUEUE(Routes.QUEUE, "Queue", Icons.Filled.CloudUpload),
     TAGS(Routes.TAGS, "Tags", Icons.Filled.Sell),
     TEMPLATES(Routes.TEMPLATES, "Templates", Icons.Filled.Description),
     TOOLS(Routes.TOOLS, "Tools", Icons.Filled.Handyman),

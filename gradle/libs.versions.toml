@@ -22,6 +22,9 @@ moshi = "1.15.2"
 
 # Storage
 datastore = "1.2.1"
+room = "2.8.5"
+# KSP uses standalone versioning (decoupled from the Kotlin version); this is the current release.
+ksp = "2.3.12"
 
 # Background work (maintenance reminder polling)
 work = "2.10.1"
@@ -71,6 +74,11 @@ moshi-kotlin = { group = "com.squareup.moshi", name = "moshi-kotlin", version.re
 # Storage
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
+# Local database (Room): durable offline write queue + cached inventory for offline reads
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
 # Background work
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
@@ -99,3 +107,4 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 android-application = { id = "com.android.application", version.ref = "agp" }
 # AGP 9 compiles Kotlin itself, so the kotlin-android plugin is no longer applied.
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

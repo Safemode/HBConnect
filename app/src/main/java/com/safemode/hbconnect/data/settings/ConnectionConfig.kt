@@ -72,6 +72,11 @@ data class ConnectionConfig(
     val liveUpdates: Boolean = true,
     /** When true, a background worker checks scheduled maintenance and posts due reminders. */
     val maintenanceReminders: Boolean = false,
+    /**
+     * When true, a notification is posted once the offline upload queue finishes draining. Only
+     * fires for changes that were saved offline (ordinary online writes never enter the queue).
+     */
+    val queueUploadNotifications: Boolean = false,
     /** How far ahead of the scheduled date a maintenance reminder fires. */
     val maintenanceLead: MaintenanceLead = MaintenanceLead.DUE_DAY,
     /**

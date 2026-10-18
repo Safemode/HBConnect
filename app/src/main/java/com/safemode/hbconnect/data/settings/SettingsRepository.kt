@@ -38,6 +38,7 @@ class SettingsRepository(private val context: Context) {
         val LIVE_UPDATES = booleanPreferencesKey("live_updates")
         val MAINTENANCE_REMINDERS = booleanPreferencesKey("maintenance_reminders")
         val MAINTENANCE_LEAD = stringPreferencesKey("maintenance_lead")
+        val QUEUE_UPLOAD_NOTIFICATIONS = booleanPreferencesKey("queue_upload_notifications")
         val MORE_ORDER = stringPreferencesKey("more_order")
 
         // Servers.
@@ -86,6 +87,7 @@ class SettingsRepository(private val context: Context) {
             swapScanFilter = prefs[Keys.SWAP_SCAN_FILTER] ?: false,
             liveUpdates = prefs[Keys.LIVE_UPDATES] ?: true,
             maintenanceReminders = prefs[Keys.MAINTENANCE_REMINDERS] ?: false,
+            queueUploadNotifications = prefs[Keys.QUEUE_UPLOAD_NOTIFICATIONS] ?: false,
             maintenanceLead = runCatching { MaintenanceLead.valueOf(prefs[Keys.MAINTENANCE_LEAD] ?: "DUE_DAY") }
                 .getOrDefault(MaintenanceLead.DUE_DAY),
             moreOrder = prefs[Keys.MORE_ORDER]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
@@ -116,6 +118,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.LIVE_UPDATES] = config.liveUpdates
             prefs[Keys.MAINTENANCE_REMINDERS] = config.maintenanceReminders
             prefs[Keys.MAINTENANCE_LEAD] = config.maintenanceLead.name
+            prefs[Keys.QUEUE_UPLOAD_NOTIFICATIONS] = config.queueUploadNotifications
             prefs[Keys.MORE_ORDER] = config.moreOrder.joinToString(",")
 
             val servers = readServers(prefs).toMutableList()
