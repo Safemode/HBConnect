@@ -123,6 +123,7 @@ fun DashboardScreen(
     onOpenItems: () -> Unit,
     onOpenLocations: () -> Unit,
     onOpenTags: () -> Unit,
+    onOpenValue: () -> Unit,
     onOpenServer: () -> Unit,
     onOpenEntity: (String) -> Unit,
     viewModel: DashboardViewModel = viewModel(),
@@ -283,6 +284,7 @@ fun DashboardScreen(
                                 onOpenItems = onOpenItems,
                                 onOpenLocations = onOpenLocations,
                                 onOpenTags = onOpenTags,
+                                onOpenValue = onOpenValue,
                                 onOpenEntity = onOpenEntity,
                                 onEnterEdit = { viewModel.setEditing(true) },
                             )
@@ -414,7 +416,7 @@ private fun statTileFor(id: DashboardTileId, stats: GroupStatistics, currency: C
         DashboardTileId.WARRANTY ->
             StatTile("With warranty", (stats.totalWithWarranty ?: 0).toString(), Icons.Filled.VerifiedUser, null)
         DashboardTileId.VALUE ->
-            StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, null)
+            StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, "value")
         DashboardTileId.RECENT -> null
     }
 
@@ -446,6 +448,7 @@ private fun StatsDashboard(
     onOpenItems: () -> Unit,
     onOpenLocations: () -> Unit,
     onOpenTags: () -> Unit,
+    onOpenValue: () -> Unit,
     onOpenEntity: (String) -> Unit,
     onEnterEdit: () -> Unit,
 ) {
@@ -493,6 +496,7 @@ private fun StatsDashboard(
                                     "items" -> onOpenItems
                                     "locations" -> onOpenLocations
                                     "tags" -> onOpenTags
+                                    "value" -> onOpenValue
                                     else -> null
                                 }
                                 StatCard(

@@ -185,6 +185,7 @@ fun HBConnectRoot() {
                         onOpenItems = { navController.navigate(Routes.ITEMS) },
                         onOpenLocations = { navController.navigate(Routes.LOCATIONS) },
                         onOpenTags = { navController.navigate(Routes.TAGS) },
+                        onOpenValue = { navController.navigate(Routes.VALUE_BREAKDOWN) },
                         onOpenServer = { navController.navigate(Routes.SERVER) },
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
                         viewModel = dashboardVm,
