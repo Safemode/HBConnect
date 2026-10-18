@@ -7,6 +7,9 @@ import com.safemode.hbconnect.data.EntityFilters
 import com.safemode.hbconnect.data.FieldFilter
 import com.safemode.hbconnect.data.PhotoFilter
 import com.safemode.hbconnect.data.SearchSort
+import com.safemode.hbconnect.data.settings.DashboardTilePref
+import com.safemode.hbconnect.data.settings.MAX_RECENT_ROWS
+import com.safemode.hbconnect.data.settings.defaultDashboardLayout
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
 import com.safemode.hbconnect.data.remote.models.TagSummary
@@ -84,6 +87,32 @@ class DashboardViewModel : ViewModel() {
     val swapScanFilter: StateFlow<Boolean> = settings.config
         .map { it.swapScanFilter }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** The saved home dashboard tile layout (placement, sizing, visibility). */
+    val dashboardLayout: StateFlow<List<DashboardTilePref>> = settings.config
+        .map { it.dashboardLayout }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), defaultDashboardLayout())
+
+    // ---- Dashboard edit mode (shared by the screen and the top-bar Edit button) ----
+    private val _editing = MutableStateFlow(false)
+    val editing: StateFlow<Boolean> = _editing.asStateFlow()
+
+    /**
+     * Whether the dashboard can be edited right now: the stats grid is showing (connected, with no
+     * active search or filter). The top-bar Edit button hides when this is false.
+     */
+    val canEdit: StateFlow<Boolean> = combine(_state, _query, _filters) { s, q, f ->
+        s is UiState.Success && q.isBlank() && !f.isActive
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setEditing(value: Boolean) {
+        _editing.value = value
+    }
+
+    /** Persists a new dashboard layout after the user edits it. */
+    fun saveDashboardLayout(layout: List<DashboardTilePref>) {
+        viewModelScope.launch { settings.saveDashboardLayout(layout) }
+    }
 
     private var optionsLoaded = false
 
@@ -235,10 +264,14 @@ class DashboardViewModel : ViewModel() {
         if (_state.value is UiState.Success) loadCharts()
     }
 
-    /** Loads the newest items shown below the tiles; degrades to empty if the call fails. */
+    /**
+     * Loads the newest items shown below the tiles; degrades to empty if the call fails. Pulls the
+     * largest number the "Recently added" tile can display so resizing it never needs a reload - the
+     * tile just shows more or fewer of the already-fetched items.
+     */
     private suspend fun loadCharts() {
         _charts.value = DashboardCharts(
-            recent = repository.getRecentItems(limit = 3).getOrDefault(emptyList()),
+            recent = repository.getRecentItems(limit = MAX_RECENT_ROWS).getOrDefault(emptyList()),
         )
     }
 }
