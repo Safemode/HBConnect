@@ -1,5 +1,7 @@
 package com.safemode.hbconnect.data
 
+import com.safemode.hbconnect.data.local.CachedDetail
+import com.safemode.hbconnect.data.local.CachedDetailDao
 import com.safemode.hbconnect.data.local.CachedEntity
 import com.safemode.hbconnect.data.local.CachedEntityDao
 import com.safemode.hbconnect.data.remote.ApiProvider
@@ -73,6 +75,7 @@ import java.io.OutputStream
 class HomeboxRepository(
     private val apiProvider: ApiProvider,
     private val entityCache: CachedEntityDao? = null,
+    private val detailCache: CachedDetailDao? = null,
 ) {
 
     private fun api(): HomeboxApi = apiProvider.apiOrNull()
@@ -81,6 +84,7 @@ class HomeboxRepository(
     // Used to (de)serialize entity summaries into the local cache for offline reads/search.
     private val cacheMoshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val summaryAdapter = cacheMoshi.adapter(EntitySummary::class.java)
+    private val detailAdapter = cacheMoshi.adapter(EntityOut::class.java)
 
     /** The collection the cache rows belong to (blank = the server's default group). */
     private fun cacheTenant(): String = apiProvider.currentConfig().activeGroupId
@@ -97,11 +101,31 @@ class HomeboxRepository(
                 isLocation = s.isLocation,
                 name = s.displayName,
                 archived = s.archived == true,
+                parentId = s.parent?.id,
                 updatedAt = s.updatedAt.orEmpty(),
                 summaryJson = summaryAdapter.toJson(s),
             )
         }
         if (rows.isNotEmpty()) runCatching { dao.upsertAll(rows) }
+    }
+
+    /** Stores an entity's full detail for offline detail screens. */
+    private suspend fun cacheDetail(entity: EntityOut) {
+        val dao = detailCache ?: return
+        val id = entity.id ?: return
+        runCatching { dao.upsert(CachedDetail(id, entity.updatedAt.orEmpty(), detailAdapter.toJson(entity))) }
+    }
+
+    private suspend fun cachedDetail(id: String): EntityOut? {
+        val dao = detailCache ?: return null
+        val json = dao.detail(id) ?: return null
+        return runCatching { detailAdapter.fromJson(json) }.getOrNull()
+    }
+
+    private suspend fun cachedChildren(parentId: String, includeArchived: Boolean): List<EntitySummary> {
+        val dao = entityCache ?: return emptyList()
+        return dao.childrenOf(cacheTenant(), parentId, includeArchived)
+            .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
     }
 
     private suspend fun cachedList(isLocation: Boolean, includeArchived: Boolean): List<EntitySummary> {
@@ -463,12 +487,63 @@ class HomeboxRepository(
                 includeArchived = includeArchived.takeIf { v -> v },
             )
         }.map { it.items.orEmpty().sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
-        // Feed children into the cache too, so offline search covers nested items.
-        result.getOrNull()?.let { cacheEntities(it) }
-        return result
+        return result.fold(
+            // Feed children into the cache too, so a location's contents are browsable offline.
+            onSuccess = { children -> cacheEntities(children); Result.success(children) },
+            onFailure = { e ->
+                val cached = cachedChildren(parentId, includeArchived)
+                if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
+            },
+        )
     }
 
-    suspend fun getEntity(id: String): Result<EntityOut> = call { it.getEntity(id) }
+    /**
+     * Caches the whole collection's text for offline use: every item and location (summaries, with
+     * parent links so a location's contents list offline), plus the full detail of anything whose
+     * detail isn't already current. Incremental - only entities whose updatedAt changed are
+     * re-fetched - so only the first run is heavy. [onEntitySynced] fires for each entity whose
+     * detail was (re)fetched, so the caller can warm its thumbnail. Best-effort and silent; a no-op
+     * when the cache isn't wired.
+     */
+    suspend fun syncOfflineCache(onEntitySynced: suspend (EntitySummary) -> Unit = {}) {
+        val details = detailCache ?: return
+        val all = ArrayList<EntitySummary>()
+        var page = 1
+        while (page <= 200) {
+            val result = call {
+                it.getEntities(page = page, pageSize = 200, isLocation = false, includeArchived = true)
+            }.getOrNull() ?: break
+            val batch = result.items.orEmpty()
+            all += batch
+            val total = result.total ?: all.size
+            if (batch.size < 200 || all.size >= total) break
+            page++
+        }
+        call { it.getEntities(pageSize = 500, isLocation = true, includeArchived = true) }
+            .getOrNull()?.items?.let { all += it }
+        if (all.isEmpty()) return
+        cacheEntities(all)
+        for (summary in all) {
+            val id = summary.id ?: continue
+            val stamp = details.stamp(id)
+            if (stamp == null || stamp != summary.updatedAt.orEmpty()) {
+                val entity = call { it.getEntity(id) }.getOrNull()
+                if (entity != null) {
+                    cacheDetail(entity)
+                    runCatching { onEntitySynced(summary) }
+                }
+            }
+        }
+    }
+
+    suspend fun getEntity(id: String): Result<EntityOut> {
+        val result = call { it.getEntity(id) }
+        return result.fold(
+            onSuccess = { entity -> cacheDetail(entity); Result.success(entity) },
+            // Offline: show the last-synced detail instead of a 504.
+            onFailure = { e -> cachedDetail(id)?.let { Result.success(it) } ?: Result.failure(e) },
+        )
+    }
 
     suspend fun createEntity(body: EntityCreate): Result<EntityOut> = call { it.createEntity(body) }
 

@@ -19,6 +19,20 @@ data class CachedEntity(
     val isLocation: Boolean,
     val name: String,
     val archived: Boolean,
+    /** The containing entity's id, so a location's contents can be listed offline. */
+    val parentId: String?,
     val updatedAt: String,
     val summaryJson: String,
+)
+
+/**
+ * A cached full entity ([com.safemode.hbconnect.data.remote.models.EntityOut] as JSON) for offline
+ * detail screens. Kept in its own table so refreshing the lighter summary list never clobbers it.
+ * [updatedAt] lets the background sync skip entities whose detail is already current.
+ */
+@Entity(tableName = "cached_detail")
+data class CachedDetail(
+    @PrimaryKey val id: String,
+    val updatedAt: String,
+    val detailJson: String,
 )

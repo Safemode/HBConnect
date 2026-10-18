@@ -7,6 +7,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.safemode.hbconnect.data.HomeboxRepository
 import com.safemode.hbconnect.data.local.AppDatabase
 import com.safemode.hbconnect.data.queue.UploadQueueManager
+import com.safemode.hbconnect.data.sync.SyncManager
 import com.safemode.hbconnect.notifications.QueueNotifier
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.LiveUpdatesClient
@@ -101,8 +102,9 @@ object Graph {
         networkMonitor = NetworkMonitor(app, serverStatus)
         apiProvider = ApiProvider(app.cacheDir, serverStatus, networkMonitor::isOnline)
         val db = AppDatabase.build(app)
-        repository = HomeboxRepository(apiProvider, db.cachedEntities())
+        repository = HomeboxRepository(apiProvider, db.cachedEntities(), db.cachedDetails())
         liveUpdates = LiveUpdatesClient(appScope)
+        val syncManager = SyncManager(repository, app, serverStatus, networkMonitor::isOnline, appScope)
         uploadQueue = UploadQueueManager(
             dao = db.queuedOps(),
             repository = repository,
@@ -202,7 +204,11 @@ object Graph {
         appScope.launch {
             ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 serverStatus.state.collect { state ->
-                    if (state == ServerReachability.REACHABLE) uploadQueue.drain()
+                    if (state == ServerReachability.REACHABLE) {
+                        uploadQueue.drain()
+                        // Refresh the offline cache (all text + thumbnails) in the background.
+                        syncManager.requestSync()
+                    }
                 }
             }
         }

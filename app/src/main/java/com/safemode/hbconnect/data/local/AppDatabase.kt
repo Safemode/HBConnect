@@ -12,13 +12,14 @@ import androidx.room.RoomDatabase
  * truth that must survive a schema change, since the server is authoritative and the queue is small.
  */
 @Database(
-    entities = [QueuedOpEntity::class, CachedEntity::class],
-    version = 1,
+    entities = [QueuedOpEntity::class, CachedEntity::class, CachedDetail::class],
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun queuedOps(): QueuedOpDao
     abstract fun cachedEntities(): CachedEntityDao
+    abstract fun cachedDetails(): CachedDetailDao
 
     companion object {
         fun build(context: Context): AppDatabase =
