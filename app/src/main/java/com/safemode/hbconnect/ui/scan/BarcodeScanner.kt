@@ -85,6 +85,29 @@ enum class ScanMode(val formats: List<BarcodeFormat>) {
             BarcodeFormat.CODE_39,
         ),
     ),
+
+    /**
+     * Any common 1D or 2D symbology - used to read a model or serial number printed on a box. The
+     * decoded text is dropped straight into the field, so this casts a wide net rather than assuming
+     * a product code.
+     */
+    IDENTIFIER(
+        listOf(
+            BarcodeFormat.CODE_128,
+            BarcodeFormat.CODE_39,
+            BarcodeFormat.CODE_93,
+            BarcodeFormat.CODABAR,
+            BarcodeFormat.ITF,
+            BarcodeFormat.UPC_A,
+            BarcodeFormat.UPC_E,
+            BarcodeFormat.EAN_8,
+            BarcodeFormat.EAN_13,
+            BarcodeFormat.QR_CODE,
+            BarcodeFormat.DATA_MATRIX,
+            BarcodeFormat.AZTEC,
+            BarcodeFormat.PDF_417,
+        ),
+    ),
 }
 
 /**

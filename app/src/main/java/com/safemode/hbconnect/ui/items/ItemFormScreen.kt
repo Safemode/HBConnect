@@ -152,6 +152,15 @@ fun ItemFormScreen(
         if (granted) launchCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
     }
 
+    // Inline scanners for the identifier fields: the decoded code goes straight into the field, with
+    // no product lookup. One launcher per field so the result lands in the right place.
+    val scanModelLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { code ->
+        if (!code.isNullOrBlank()) viewModel.update { it.copy(modelNumber = code.trim()) }
+    }
+    val scanSerialLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { code ->
+        if (!code.isNullOrBlank()) viewModel.update { it.copy(serialNumber = code.trim()) }
+    }
+
     val scanLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { code ->
         if (!code.isNullOrBlank()) {
             scanning = true
@@ -297,6 +306,15 @@ fun ItemFormScreen(
                             onValueChange = { v -> viewModel.update { it.copy(modelNumber = v) } },
                             label = { Text("Model number") },
                             singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    scanModelLauncher.launch(
+                                        ScanRequest(ScanMode.IDENTIFIER, "Scan the model number barcode"),
+                                    )
+                                }) {
+                                    Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan model number")
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
@@ -304,6 +322,15 @@ fun ItemFormScreen(
                             onValueChange = { v -> viewModel.update { it.copy(serialNumber = v) } },
                             label = { Text("Serial number") },
                             singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    scanSerialLauncher.launch(
+                                        ScanRequest(ScanMode.IDENTIFIER, "Scan the serial number barcode"),
+                                    )
+                                }) {
+                                    Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan serial number")
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
