@@ -40,6 +40,12 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="false" />
 
+        <!-- AR overlay scanner: live camera that floats item cards over recognized Homebox labels. -->
+        <activity
+            android:name=".ui.ar.ArScannerActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

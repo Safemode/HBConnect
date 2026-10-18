@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -61,9 +62,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.safemode.hbconnect.ui.ar.ArScanContract
 import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
 import com.safemode.hbconnect.ui.scan.ScanMode
 import com.safemode.hbconnect.ui.scan.ScanRequest
+import com.safemode.hbconnect.ui.scan.ScanTarget
+import com.safemode.hbconnect.ui.scan.parseHomeboxLabel
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
@@ -76,40 +80,6 @@ import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
 
 private data class StatTile(val label: String, val value: String, val icon: ImageVector, val route: String?)
-
-private val UUID_REGEX =
-    Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-
-/** The `.../a/{assetId}` segment of an asset label's URL; the id is digits, often grouped (000-001). */
-private val ASSET_PATH_REGEX = Regex("/a/([0-9][0-9-]*)")
-
-/** A bare asset tag typed/encoded on its own, e.g. "000-001" or "42". */
-private val ASSET_BARE_REGEX = Regex("[0-9][0-9-]*")
-
-/** What a scanned Homebox label resolves to. */
-private sealed interface ScanTarget {
-    /** An item or location, opened directly by its UUID. */
-    data class Entity(val id: String) : ScanTarget
-
-    /** An asset tag, resolved to its item via a lookup. */
-    data class Asset(val assetId: String) : ScanTarget
-}
-
-/**
- * Resolves a scanned Homebox label, or null if it isn't one. Printed labels encode the entity's web
- * URL: item/location labels use `.../item/{uuid}` or `.../location/{uuid}` (we take the UUID), while
- * an asset label uses `.../a/{assetId}` (e.g. 000-001) which we resolve by asset tag. The host is
- * ignored on purpose, so a label pointing at a public hostname still resolves on a LAN connection. A
- * bare UUID or asset tag is accepted too. The UUID is checked first so an item/location URL never
- * falls through to the asset branch.
- */
-private fun parseScan(raw: String): ScanTarget? {
-    val s = raw.trim()
-    UUID_REGEX.find(s)?.let { return ScanTarget.Entity(it.value) }
-    ASSET_PATH_REGEX.find(s)?.let { return ScanTarget.Asset(it.groupValues[1]) }
-    if (s.matches(ASSET_BARE_REGEX)) return ScanTarget.Asset(s)
-    return null
-}
 
 /**
  * Dashboard: the group statistics tiles and recently-added items, plus a server-wide search with a
@@ -146,7 +116,7 @@ fun DashboardScreen(
     // scanned URL ourselves and navigate, so it never hands off to a browser.
     val scanLauncher = rememberLauncherForActivityResult(ScanBarcodeContract()) { raw ->
         if (raw.isNullOrBlank()) return@rememberLauncherForActivityResult
-        when (val target = parseScan(raw)) {
+        when (val target = parseHomeboxLabel(raw)) {
             is ScanTarget.Entity -> onOpenEntity(target.id)
             is ScanTarget.Asset -> viewModel.findByAssetId(target.assetId) { id, err ->
                 if (id != null) onOpenEntity(id)
@@ -158,6 +128,12 @@ fun DashboardScreen(
 
     fun launchScan() {
         scanLauncher.launch(ScanRequest(ScanMode.QR, "Scan a Homebox QR label"))
+    }
+
+    // The AR scanner keeps the camera live and floats item cards over any labels in view; tapping a
+    // card returns its entity id, which we open just like a one-shot scan.
+    val arLauncher = rememberLauncherForActivityResult(ArScanContract()) { id ->
+        if (!id.isNullOrBlank()) onOpenEntity(id)
     }
 
     // While a search or filter is active, back clears it (returning to the stats grid) instead of
@@ -214,6 +190,7 @@ fun DashboardScreen(
                         showFilters = true
                     },
                     onScan = { launchScan() },
+                    onArScan = { arLauncher.launch(Unit) },
                     swapScanFilter = swapScanFilter,
                 )
             }
@@ -266,6 +243,7 @@ private fun SearchField(
     activeFilterCount: Int,
     onOpenFilters: () -> Unit,
     onScan: () -> Unit,
+    onArScan: () -> Unit,
     swapScanFilter: Boolean,
 ) {
     // When the keyboard is dismissed, drop focus from the field so its cursor stops blinking.
@@ -301,6 +279,10 @@ private fun SearchField(
             IconButton(onClick = onScan) {
                 Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
             }
+        }
+        // AR scanner sits first: a live camera that overlays item cards on the labels it sees.
+        IconButton(onClick = onArScan) {
+            Icon(Icons.Filled.ViewInAr, contentDescription = "AR label scanner")
         }
         val filterButton: @Composable () -> Unit = {
             BadgedBox(

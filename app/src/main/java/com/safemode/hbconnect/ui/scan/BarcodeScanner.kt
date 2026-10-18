@@ -14,10 +14,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.FocusMeteringAction
-import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,16 +57,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.zxing.BarcodeFormat
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.DecodeHintType
-import com.google.zxing.MultiFormatReader
-import com.google.zxing.NotFoundException
-import com.google.zxing.PlanarYUVLuminanceSource
-import com.google.zxing.common.HybridBinarizer
 import com.safemode.hbconnect.ui.theme.HBConnectTheme
 import java.util.concurrent.Executors
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
 /** Which symbologies the scanner should look for. */
 enum class ScanMode(val formats: List<BarcodeFormat>) {
@@ -194,7 +184,7 @@ private fun BarcodeScannerScreen(
         val decoder = BarcodeDecoder(mode.formats)
         analysis.setAnalyzer(analysisExecutor) { proxy ->
             val text = try {
-                decoder.decode(proxy)
+                decoder.decode(proxy)?.text
             } catch (_: Throwable) {
                 null
             } finally {
@@ -308,101 +298,3 @@ private fun PermissionPrompt(onCancel: () -> Unit) {
         }
     }
 }
-
-/** Decodes a camera frame's luminance with ZXing core. Reused across frames on the analysis thread. */
-private class BarcodeDecoder(formats: List<BarcodeFormat>) {
-    private val reader = MultiFormatReader().apply {
-        setHints(
-            mapOf(
-                DecodeHintType.POSSIBLE_FORMATS to formats,
-                DecodeHintType.TRY_HARDER to true,
-            ),
-        )
-    }
-
-    fun decode(image: ImageProxy): String? {
-        val luminance = image.planes[0].toLuminance(image.width, image.height)
-        // The analysis buffer is in sensor orientation, so upright it first (ZXing's 1D readers only
-        // scan horizontal rows). If nothing is found, try a further 90° turn so a product barcode
-        // reads whether it's horizontal or vertical on screen. QR is rotation-invariant either way.
-        val (upright, w, h) = rotateLuminance(
-            luminance, image.width, image.height, image.imageInfo.rotationDegrees,
-        )
-        decodeLuminance(upright, w, h)?.let { return it }
-        val (turned, tw, th) = rotateLuminance(upright, w, h, 90)
-        return decodeLuminance(turned, tw, th)
-    }
-
-    private fun decodeLuminance(data: ByteArray, width: Int, height: Int): String? {
-        val source = PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false)
-        val bitmap = BinaryBitmap(HybridBinarizer(source))
-        return try {
-            reader.decodeWithState(bitmap).text
-        } catch (_: NotFoundException) {
-            null
-        } finally {
-            reader.reset()
-        }
-    }
-}
-
-/**
- * Rotates a tightly-packed luminance buffer by [degrees] (0/90/180/270, clockwise). Returns the
- * rotated bytes and the new width/height (swapped for 90°/270°).
- */
-private fun rotateLuminance(src: ByteArray, width: Int, height: Int, degrees: Int): Triple<ByteArray, Int, Int> {
-    val d = ((degrees % 360) + 360) % 360
-    if (d == 0) return Triple(src, width, height)
-    val out = ByteArray(src.size)
-    when (d) {
-        90 -> {
-            for (y in 0 until height) for (x in 0 until width) {
-                out[x * height + (height - 1 - y)] = src[y * width + x]
-            }
-            return Triple(out, height, width)
-        }
-        180 -> {
-            for (y in 0 until height) for (x in 0 until width) {
-                out[(height - 1 - y) * width + (width - 1 - x)] = src[y * width + x]
-            }
-            return Triple(out, width, height)
-        }
-        else -> { // 270
-            for (y in 0 until height) for (x in 0 until width) {
-                out[(width - 1 - x) * height + y] = src[y * width + x]
-            }
-            return Triple(out, height, width)
-        }
-    }
-}
-
-/** Copies the Y (luminance) plane into a tightly-packed width*height byte array, honoring strides. */
-private fun ImageProxy.PlaneProxy.toLuminance(width: Int, height: Int): ByteArray {
-    val buffer = buffer.also { it.rewind() }
-    val out = ByteArray(width * height)
-    if (pixelStride == 1 && rowStride == width) {
-        buffer.get(out, 0, width * height)
-        return out
-    }
-    val rowBytes = ByteArray(rowStride)
-    var outPos = 0
-    for (row in 0 until height) {
-        buffer.position(row * rowStride)
-        val available = minOf(rowStride, buffer.remaining())
-        buffer.get(rowBytes, 0, available)
-        if (pixelStride == 1) {
-            System.arraycopy(rowBytes, 0, out, outPos, width)
-        } else {
-            for (col in 0 until width) out[outPos + col] = rowBytes[col * pixelStride]
-        }
-        outPos += width
-    }
-    return out
-}
-
-/** Awaits the CameraX provider without blocking the main thread. */
-private suspend fun Context.awaitCameraProvider(): ProcessCameraProvider =
-    suspendCoroutine { cont ->
-        val future = ProcessCameraProvider.getInstance(this)
-        future.addListener({ cont.resume(future.get()) }, ContextCompat.getMainExecutor(this))
-    }
