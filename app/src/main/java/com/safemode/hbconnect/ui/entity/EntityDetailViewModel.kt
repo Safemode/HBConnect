@@ -17,6 +17,7 @@ import com.safemode.hbconnect.data.queue.UploadQueueManager
 import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
+import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +73,8 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
         load(showLoading = true)
         // Refresh if this entity (or anything it shows, like its children) changes server-side.
         refreshOnLiveEvent(LiveEvent.ENTITY) { if (!_deleted.value) load() }
+        // And when the server comes back after an outage, so a detail left open offline fills in.
+        refreshWhenServerReachable { if (!_deleted.value) load() }
     }
 
     /** Loads locations and tags for the quick-action pickers (once). */
