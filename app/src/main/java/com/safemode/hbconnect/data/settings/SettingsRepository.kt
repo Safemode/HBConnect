@@ -40,6 +40,7 @@ class SettingsRepository(private val context: Context) {
         val MAINTENANCE_LEAD = stringPreferencesKey("maintenance_lead")
         val QUEUE_UPLOAD_NOTIFICATIONS = booleanPreferencesKey("queue_upload_notifications")
         val MORE_ORDER = stringPreferencesKey("more_order")
+        val DASHBOARD_LAYOUT = stringPreferencesKey("dashboard_layout")
 
         // Servers.
         val SERVERS_BLOB = stringPreferencesKey("servers_blob")
@@ -91,6 +92,7 @@ class SettingsRepository(private val context: Context) {
             maintenanceLead = runCatching { MaintenanceLead.valueOf(prefs[Keys.MAINTENANCE_LEAD] ?: "DUE_DAY") }
                 .getOrDefault(MaintenanceLead.DUE_DAY),
             moreOrder = prefs[Keys.MORE_ORDER]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
+            dashboardLayout = decodeDashboardLayout(prefs[Keys.DASHBOARD_LAYOUT]),
         )
     }
 
@@ -120,6 +122,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.MAINTENANCE_LEAD] = config.maintenanceLead.name
             prefs[Keys.QUEUE_UPLOAD_NOTIFICATIONS] = config.queueUploadNotifications
             prefs[Keys.MORE_ORDER] = config.moreOrder.joinToString(",")
+            prefs[Keys.DASHBOARD_LAYOUT] = encodeDashboardLayout(config.dashboardLayout)
 
             val servers = readServers(prefs).toMutableList()
             val activeId = readActiveId(prefs, servers)
@@ -144,6 +147,13 @@ class SettingsRepository(private val context: Context) {
                 prefs[Keys.ACTIVE_SERVER_ID] = profile.id
                 writeServers(prefs, servers)
             }
+        }
+    }
+
+    /** Persists just the home dashboard tile layout, leaving every other preference untouched. */
+    suspend fun saveDashboardLayout(layout: List<DashboardTilePref>) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DASHBOARD_LAYOUT] = encodeDashboardLayout(layout)
         }
     }
 

@@ -89,6 +89,8 @@ data class ConnectionConfig(
      * default alphabetical order. Set when the user rearranges More; cleared by the reset action.
      */
     val moreOrder: List<String> = emptyList(),
+    /** Home dashboard tile placement, sizing and visibility. Defaults to [defaultDashboardLayout]. */
+    val dashboardLayout: List<DashboardTilePref> = defaultDashboardLayout(),
 ) {
     /** True once there is a server and a credential to attempt a connection. */
     val isConfigured: Boolean

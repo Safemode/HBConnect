@@ -3,7 +3,10 @@ package com.safemode.hbconnect.ui.dashboard
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,22 +22,33 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.DashboardCustomize
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,40 +64,58 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
-import com.safemode.hbconnect.ui.scan.ScanMode
-import com.safemode.hbconnect.ui.scan.ScanRequest
-import com.safemode.hbconnect.ui.scan.ScanTarget
-import com.safemode.hbconnect.ui.scan.parseHomeboxLabel
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.GroupStatistics
+import com.safemode.hbconnect.data.settings.DashboardTileId
+import com.safemode.hbconnect.data.settings.DashboardTilePref
+import com.safemode.hbconnect.data.settings.MAX_RECENT_ROWS
+import com.safemode.hbconnect.data.settings.MIN_RECENT_ROWS
+import com.safemode.hbconnect.data.settings.defaultDashboardLayout
 import com.safemode.hbconnect.ui.common.EmptyState
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.formatMoney
 import com.safemode.hbconnect.ui.items.EntityRow
+import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
+import com.safemode.hbconnect.ui.scan.ScanMode
+import com.safemode.hbconnect.ui.scan.ScanRequest
+import com.safemode.hbconnect.ui.scan.ScanTarget
+import com.safemode.hbconnect.ui.scan.parseHomeboxLabel
 
 private data class StatTile(val label: String, val value: String, val icon: ImageVector, val route: String?)
 
 /**
  * Dashboard: the group statistics tiles and recently-added items, plus a server-wide search with a
  * filter sheet and a barcode/asset scanner. When a search query or filter is active the stats view
- * gives way to the results list. Backed by [DashboardViewModel].
+ * gives way to the results list.
+ *
+ * Long-pressing a tile enters edit mode, where tiles can be dragged to reorder, switched between
+ * half and full width, hidden/shown, and - for "Recently added" - sized to list more or fewer items.
+ * While editing, the scan/filter buttons are replaced by a Save button. Layout is persisted via
+ * [DashboardViewModel.saveDashboardLayout]. Backed by [DashboardViewModel].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,10 +138,22 @@ fun DashboardScreen(
     val fieldNames by viewModel.fieldNames.collectAsStateWithLifecycle()
     val fieldValues by viewModel.fieldValues.collectAsStateWithLifecycle()
     val swapScanFilter by viewModel.swapScanFilter.collectAsStateWithLifecycle()
+    val savedLayout by viewModel.dashboardLayout.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var showFilters by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+
+    // The working copy the editor mutates; seeded from the saved layout each time editing begins and
+    // committed back only on Save, so leaving edit mode by Back discards changes.
+    val working = remember { defaultDashboardLayout().toMutableStateList() }
+    LaunchedEffect(editing) {
+        if (editing) {
+            working.clear()
+            working.addAll(savedLayout)
+        }
+    }
 
     // Scanning a Homebox-printed QR label opens the item in-app: we parse the entity id out of the
     // scanned URL ourselves and navigate, so it never hands off to a browser.
@@ -135,6 +180,8 @@ fun DashboardScreen(
     BackHandler(enabled = query.isNotBlank() || filters.isActive) {
         viewModel.resetSearch()
     }
+    // In edit mode, Back leaves editing without saving.
+    BackHandler(enabled = editing) { editing = false }
 
     LifecycleResumeEffect(Unit) {
         viewModel.reloadSilently()
@@ -173,6 +220,7 @@ fun DashboardScreen(
                 .fillMaxSize(),
         ) {
             // The search bar appears once connected; searching spans items + locations server-wide.
+            // While editing the dashboard, its scan/filter controls give way to a Save button.
             if (state is UiState.Success) {
                 SearchField(
                     query = query,
@@ -185,6 +233,11 @@ fun DashboardScreen(
                     },
                     onScan = { launchScan() },
                     swapScanFilter = swapScanFilter,
+                    editing = editing,
+                    onSave = {
+                        viewModel.saveDashboardLayout(working.toList())
+                        editing = false
+                    },
                 )
             }
 
@@ -211,15 +264,40 @@ fun DashboardScreen(
                             onAction = onOpenServer,
                         )
                         is UiState.Error -> ErrorState(message = s.message, onRetry = viewModel::load)
-                        is UiState.Success -> StatsGrid(
-                            stats = s.data,
-                            charts = charts,
-                            currency = currency,
-                            onOpenItems = onOpenItems,
-                            onOpenLocations = onOpenLocations,
-                            onOpenTags = onOpenTags,
-                            onOpenEntity = onOpenEntity,
-                        )
+                        is UiState.Success -> if (editing) {
+                            DashboardEditor(
+                                working = working,
+                                stats = s.data,
+                                recent = charts.recent,
+                                currency = currency,
+                                onUpdate = { id, transform ->
+                                    val i = working.indexOfFirst { it.id == id }
+                                    if (i >= 0) working[i] = transform(working[i])
+                                },
+                                onReorder = { order ->
+                                    val byId = working.associateBy { it.id }
+                                    val reordered = order.mapNotNull { byId[it] }
+                                    working.clear()
+                                    working.addAll(reordered)
+                                },
+                                onReset = {
+                                    working.clear()
+                                    working.addAll(defaultDashboardLayout())
+                                },
+                            )
+                        } else {
+                            StatsDashboard(
+                                layout = savedLayout,
+                                stats = s.data,
+                                recent = charts.recent,
+                                currency = currency,
+                                onOpenItems = onOpenItems,
+                                onOpenLocations = onOpenLocations,
+                                onOpenTags = onOpenTags,
+                                onOpenEntity = onOpenEntity,
+                                onEnterEdit = { editing = true },
+                            )
+                        }
                     }
                 }
             }
@@ -237,6 +315,8 @@ private fun SearchField(
     onOpenFilters: () -> Unit,
     onScan: () -> Unit,
     swapScanFilter: Boolean,
+    editing: Boolean,
+    onSave: () -> Unit,
 ) {
     // When the keyboard is dismissed, drop focus from the field so its cursor stops blinking.
     val focusManager = LocalFocusManager.current
@@ -257,6 +337,7 @@ private fun SearchField(
             label = { Text("Search", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             placeholder = { Text("Items, locations, or #asset tag", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             singleLine = true,
+            enabled = !editing,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -267,27 +348,33 @@ private fun SearchField(
             },
             modifier = Modifier.weight(1f),
         )
-        val scanButton: @Composable () -> Unit = {
-            IconButton(onClick = onScan) {
-                Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
-            }
-        }
-        val filterButton: @Composable () -> Unit = {
-            BadgedBox(
-                badge = { if (activeFilterCount > 0) Badge { Text(activeFilterCount.toString()) } },
-            ) {
-                IconButton(onClick = onOpenFilters) {
-                    Icon(Icons.Filled.FilterList, contentDescription = "Filters")
+        if (editing) {
+            // Editing the dashboard: the scan/filter buttons step aside for Save until the user
+            // commits the layout, at which point they return.
+            TextButton(onClick = onSave) { Text("Save") }
+        } else {
+            val scanButton: @Composable () -> Unit = {
+                IconButton(onClick = onScan) {
+                    Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
                 }
             }
-        }
-        // Default order is scan then filter; the Settings toggle swaps them.
-        if (swapScanFilter) {
-            filterButton()
-            scanButton()
-        } else {
-            scanButton()
-            filterButton()
+            val filterButton: @Composable () -> Unit = {
+                BadgedBox(
+                    badge = { if (activeFilterCount > 0) Badge { Text(activeFilterCount.toString()) } },
+                ) {
+                    IconButton(onClick = onOpenFilters) {
+                        Icon(Icons.Filled.FilterList, contentDescription = "Filters")
+                    }
+                }
+            }
+            // Default order is scan then filter; the Settings toggle swaps them.
+            if (swapScanFilter) {
+                filterButton()
+                scanButton()
+            } else {
+                scanButton()
+                filterButton()
+            }
         }
     }
 }
@@ -326,55 +413,373 @@ private fun SearchResults(
     }
 }
 
+/** Resolves a stat tile's label/value/icon/route; null for the recently-added tile, which is special. */
+private fun statTileFor(id: DashboardTileId, stats: GroupStatistics, currency: Currency?): StatTile? =
+    when (id) {
+        DashboardTileId.ITEMS ->
+            StatTile("Items", (stats.totalItems ?: 0).toString(), Icons.Filled.Inventory2, "items")
+        DashboardTileId.LOCATIONS ->
+            StatTile("Locations", (stats.totalLocations ?: 0).toString(), Icons.Outlined.Place, "locations")
+        DashboardTileId.TAGS ->
+            StatTile("Tags", (stats.totalTags ?: 0).toString(), Icons.Filled.Sell, "tags")
+        DashboardTileId.WARRANTY ->
+            StatTile("With warranty", (stats.totalWithWarranty ?: 0).toString(), Icons.Filled.VerifiedUser, null)
+        DashboardTileId.VALUE ->
+            StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, null)
+        DashboardTileId.RECENT -> null
+    }
+
+/**
+ * Groups an ordered tile list into display rows: a full-width tile takes its own row, and half-width
+ * tiles pair up two-per-row in order. Preserves order, so moving a tile also moves where it lands.
+ */
+private fun buildRows(prefs: List<DashboardTilePref>): List<List<DashboardTilePref>> {
+    val rows = mutableListOf<MutableList<DashboardTilePref>>()
+    for (p in prefs) {
+        val last = rows.lastOrNull()
+        if (!p.fullWidth && last != null && last.size == 1 && !last[0].fullWidth) {
+            last.add(p)
+        } else {
+            rows.add(mutableListOf(p))
+        }
+    }
+    return rows
+}
+
+/** The live (non-editing) dashboard. Long-pressing any tile enters edit mode. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun StatsGrid(
+private fun StatsDashboard(
+    layout: List<DashboardTilePref>,
     stats: GroupStatistics,
-    charts: DashboardCharts,
+    recent: List<EntitySummary>,
     currency: Currency?,
     onOpenItems: () -> Unit,
     onOpenLocations: () -> Unit,
     onOpenTags: () -> Unit,
     onOpenEntity: (String) -> Unit,
+    onEnterEdit: () -> Unit,
 ) {
-    val tiles = listOf(
-        StatTile("Items", (stats.totalItems ?: 0).toString(), Icons.Filled.Inventory2, "items"),
-        StatTile("Locations", (stats.totalLocations ?: 0).toString(), Icons.Outlined.Place, "locations"),
-        StatTile("Tags", (stats.totalTags ?: 0).toString(), Icons.Filled.Sell, "tags"),
-        StatTile("With warranty", (stats.totalWithWarranty ?: 0).toString(), Icons.Filled.VerifiedUser, null),
-        StatTile("Total value", formatMoney(stats.totalItemPrice ?: 0.0, currency), Icons.Filled.AttachMoney, null),
-    )
+    // Drop the recently-added tile when there's nothing to show, matching the old behaviour.
+    val visible = layout.filter { it.visible && !(it.id == DashboardTileId.RECENT && recent.isEmpty()) }
+    val rows = buildRows(visible)
+
+    // If every tile is hidden there's nothing to long-press, so offer a way back into edit mode.
+    if (visible.isEmpty()) {
+        EmptyState(
+            icon = Icons.Filled.DashboardCustomize,
+            title = "No tiles shown",
+            message = "All dashboard tiles are hidden.",
+            actionLabel = "Edit dashboard",
+            onAction = onEnterEdit,
+        )
+        return
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        items(tiles.chunked(2)) { row ->
+        items(rows) { row ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                row.forEach { tile ->
-                    val onClick: (() -> Unit)? = when (tile.route) {
-                        "items" -> onOpenItems
-                        "locations" -> onOpenLocations
-                        "tags" -> onOpenTags
-                        else -> null
+                row.forEach { pref ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (pref.id == DashboardTileId.RECENT) {
+                            RecentlyAddedCard(
+                                items = recent.take(pref.rows.coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS)),
+                                onOpenEntity = onOpenEntity,
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClick = onEnterEdit,
+                                ),
+                            )
+                        } else {
+                            val tile = statTileFor(pref.id, stats, currency)
+                            if (tile != null) {
+                                val onClick: (() -> Unit)? = when (tile.route) {
+                                    "items" -> onOpenItems
+                                    "locations" -> onOpenLocations
+                                    "tags" -> onOpenTags
+                                    else -> null
+                                }
+                                StatCard(
+                                    tile = tile,
+                                    modifier = Modifier.combinedClickable(
+                                        onClick = { onClick?.invoke() },
+                                        onLongClick = onEnterEdit,
+                                    ),
+                                )
+                            }
+                        }
                     }
-                    Box(modifier = Modifier.weight(1f)) { StatCard(tile, onClick) }
                 }
-                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                if (row.size == 1 && !row[0].fullWidth) Spacer(modifier = Modifier.weight(1f))
             }
         }
-        if (charts.recent.isNotEmpty()) {
-            item { RecentlyAddedCard(items = charts.recent, onOpenEntity = onOpenEntity) }
+    }
+}
+
+/**
+ * Edit mode: the same tiles, in place, with controls to resize, hide and reorder. Long-press a tile
+ * to drag it to a new spot; reordering settles on drop against the tiles' resting positions, so the
+ * grid doesn't churn under the finger. Hidden tiles collect in a strip at the bottom to bring back.
+ */
+@Composable
+private fun DashboardEditor(
+    working: List<DashboardTilePref>,
+    stats: GroupStatistics,
+    recent: List<EntitySummary>,
+    currency: Currency?,
+    onUpdate: (DashboardTileId, (DashboardTilePref) -> DashboardTilePref) -> Unit,
+    onReorder: (List<DashboardTileId>) -> Unit,
+    onReset: () -> Unit,
+) {
+    val visible = working.filter { it.visible }
+    val hidden = working.filter { !it.visible }
+    val rows = buildRows(visible)
+
+    // Resting bounds (window coords) of every visible tile, used to resolve a drop to a position.
+    val bounds = remember { mutableMapOf<DashboardTileId, Rect>() }
+    var dragging by remember { mutableStateOf<DashboardTileId?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var dragStartCenter by remember { mutableStateOf(Offset.Zero) }
+
+    fun dropReorder() {
+        val id = dragging ?: return
+        val floatingCenter = dragStartCenter + dragOffset
+        val nearest = bounds.entries
+            .filter { it.key != id && working.any { p -> p.id == it.key && p.visible } }
+            .minByOrNull { (it.value.center - floatingCenter).getDistance() }
+        if (nearest != null) {
+            val order = working.map { it.id }.toMutableList()
+            order.remove(id)
+            val ni = order.indexOf(nearest.key)
+            if (ni >= 0) {
+                val r = nearest.value
+                val after = floatingCenter.y > r.center.y + r.height / 4 ||
+                    (floatingCenter.y >= r.top && floatingCenter.y <= r.bottom && floatingCenter.x > r.center.x)
+                val insertAt = (if (after) ni + 1 else ni).coerceIn(0, order.size)
+                order.add(insertAt, id)
+                onReorder(order)
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "Long-press a tile to move it. Use the icons to resize, hide or show. Tap Save when done.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        rows.forEach { row ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                row.forEach { pref ->
+                    val isDragging = pref.id == dragging
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer {
+                                if (isDragging) {
+                                    translationX = dragOffset.x
+                                    translationY = dragOffset.y
+                                    scaleX = 1.03f
+                                    scaleY = 1.03f
+                                    shadowElevation = 16f
+                                }
+                            }
+                            .onGloballyPositioned { if (!isDragging) bounds[pref.id] = it.boundsInWindow() }
+                            .pointerInput(pref.id) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        dragging = pref.id
+                                        dragOffset = Offset.Zero
+                                        dragStartCenter = bounds[pref.id]?.center ?: Offset.Zero
+                                    },
+                                    onDragEnd = {
+                                        dropReorder()
+                                        dragging = null
+                                        dragOffset = Offset.Zero
+                                    },
+                                    onDragCancel = {
+                                        dragging = null
+                                        dragOffset = Offset.Zero
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragOffset += amount
+                                    },
+                                )
+                            },
+                    ) {
+                        EditableTile(
+                            pref = pref,
+                            stats = stats,
+                            recent = recent,
+                            currency = currency,
+                            onToggleWidth = { onUpdate(pref.id) { it.copy(fullWidth = !it.fullWidth) } },
+                            onHide = { onUpdate(pref.id) { it.copy(visible = false) } },
+                            onRowsChange = { delta ->
+                                onUpdate(pref.id) {
+                                    it.copy(rows = (it.rows + delta).coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS))
+                                }
+                            },
+                        )
+                    }
+                }
+                if (row.size == 1 && !row[0].fullWidth) Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+
+        if (hidden.isNotEmpty()) {
+            Text(
+                "Hidden tiles",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            hidden.forEach { pref ->
+                HiddenTileRow(
+                    pref = pref,
+                    stats = stats,
+                    currency = currency,
+                    onShow = { onUpdate(pref.id) { it.copy(visible = true) } },
+                )
+            }
+        }
+
+        TextButton(
+            onClick = onReset,
+            modifier = Modifier.padding(top = 4.dp),
+        ) { Text("Reset to default layout") }
+    }
+}
+
+/** A tile as shown in edit mode: its normal content plus a control strip for size/visibility. */
+@Composable
+private fun EditableTile(
+    pref: DashboardTilePref,
+    stats: GroupStatistics,
+    recent: List<EntitySummary>,
+    currency: Currency?,
+    onToggleWidth: () -> Unit,
+    onHide: () -> Unit,
+    onRowsChange: (Int) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.DragIndicator,
+                    contentDescription = "Drag to move",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                if (pref.id == DashboardTileId.RECENT) {
+                    IconButton(onClick = { onRowsChange(-1) }, enabled = pref.rows > MIN_RECENT_ROWS) {
+                        Icon(Icons.Filled.Remove, contentDescription = "Fewer items")
+                    }
+                    Text(
+                        pref.rows.coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS).toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    IconButton(onClick = { onRowsChange(1) }, enabled = pref.rows < MAX_RECENT_ROWS) {
+                        Icon(Icons.Filled.Add, contentDescription = "More items")
+                    }
+                }
+                IconButton(onClick = onToggleWidth) {
+                    Icon(
+                        if (pref.fullWidth) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                        contentDescription = if (pref.fullWidth) "Make half width" else "Make full width",
+                    )
+                }
+                IconButton(onClick = onHide) {
+                    Icon(Icons.Filled.VisibilityOff, contentDescription = "Hide tile")
+                }
+            }
+            if (pref.id == DashboardTileId.RECENT) {
+                val shown = recent.take(pref.rows.coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS))
+                if (shown.isEmpty()) {
+                    Text(
+                        "Recently added (no items yet)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                } else {
+                    RecentlyAddedList(items = shown, onOpenEntity = {})
+                }
+            } else {
+                val tile = statTileFor(pref.id, stats, currency)
+                if (tile != null) StatCardContent(tile)
+            }
+        }
+    }
+}
+
+/** A hidden tile's compact row in the editor, with a button to bring it back onto the dashboard. */
+@Composable
+private fun HiddenTileRow(
+    pref: DashboardTilePref,
+    stats: GroupStatistics,
+    currency: Currency?,
+    onShow: () -> Unit,
+) {
+    val label = when (pref.id) {
+        DashboardTileId.RECENT -> "Recently added"
+        else -> statTileFor(pref.id, stats, currency)?.label ?: pref.id.name
+    }
+    val icon = when (pref.id) {
+        DashboardTileId.RECENT -> Icons.Filled.Inventory2
+        else -> statTileFor(pref.id, stats, currency)?.icon ?: Icons.Filled.Inventory2
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onShow)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onShow) {
+            Icon(Icons.Filled.Visibility, contentDescription = "Show $label")
         }
     }
 }
 
 /** The last few items added, newest first; tapping one opens its detail page. */
 @Composable
-private fun RecentlyAddedCard(items: List<EntitySummary>, onOpenEntity: (String) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun RecentlyAddedCard(
+    items: List<EntitySummary>,
+    onOpenEntity: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             Text(
                 "Recently added",
@@ -382,83 +787,91 @@ private fun RecentlyAddedCard(items: List<EntitySummary>, onOpenEntity: (String)
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            items.forEach { item ->
-                val id = item.id
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = id != null) { id?.let(onOpenEntity) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.Inventory2,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            item.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        item.parent?.displayName?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            RecentlyAddedList(items = items, onOpenEntity = onOpenEntity)
         }
     }
 }
 
+/** Rows of recently-added items. Each item's text is kept to a single line and ellipsized. */
 @Composable
-private fun StatCard(tile: StatTile, onClick: (() -> Unit)?) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-    ) {
-        Column(
+private fun RecentlyAddedList(items: List<EntitySummary>, onOpenEntity: (String) -> Unit) {
+    items.forEach { item ->
+        val id = item.id
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .clickable(enabled = id != null) { id?.let(onOpenEntity) }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(
-                    tile.icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp),
-                )
+            Icon(
+                Icons.Filled.Inventory2,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    tile.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    item.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                item.parent?.displayName?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            Text(
-                tile.value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
+@Composable
+private fun StatCard(tile: StatTile, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        StatCardContent(tile)
+    }
+}
+
+@Composable
+private fun StatCardContent(tile: StatTile) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(
+                tile.icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                tile.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            tile.value,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
