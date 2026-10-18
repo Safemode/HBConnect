@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -62,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.safemode.hbconnect.ui.ar.ArScanContract
 import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
 import com.safemode.hbconnect.ui.scan.ScanMode
 import com.safemode.hbconnect.ui.scan.ScanRequest
@@ -126,14 +124,10 @@ fun DashboardScreen(
         }
     }
 
+    // The scanner opens in classic one-shot mode; an in-scanner toggle switches to the AR overlay,
+    // where tapping a floating card returns that item's id - handled by the same callback above.
     fun launchScan() {
-        scanLauncher.launch(ScanRequest(ScanMode.QR, "Scan a Homebox QR label"))
-    }
-
-    // The AR scanner keeps the camera live and floats item cards over any labels in view; tapping a
-    // card returns its entity id, which we open just like a one-shot scan.
-    val arLauncher = rememberLauncherForActivityResult(ArScanContract()) { id ->
-        if (!id.isNullOrBlank()) onOpenEntity(id)
+        scanLauncher.launch(ScanRequest(ScanMode.QR, "Scan a Homebox QR label", allowAr = true))
     }
 
     // While a search or filter is active, back clears it (returning to the stats grid) instead of
@@ -190,7 +184,6 @@ fun DashboardScreen(
                         showFilters = true
                     },
                     onScan = { launchScan() },
-                    onArScan = { arLauncher.launch(Unit) },
                     swapScanFilter = swapScanFilter,
                 )
             }
@@ -243,7 +236,6 @@ private fun SearchField(
     activeFilterCount: Int,
     onOpenFilters: () -> Unit,
     onScan: () -> Unit,
-    onArScan: () -> Unit,
     swapScanFilter: Boolean,
 ) {
     // When the keyboard is dismissed, drop focus from the field so its cursor stops blinking.
@@ -279,10 +271,6 @@ private fun SearchField(
             IconButton(onClick = onScan) {
                 Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR label")
             }
-        }
-        // AR scanner sits first: a live camera that overlays item cards on the labels it sees.
-        IconButton(onClick = onArScan) {
-            Icon(Icons.Filled.ViewInAr, contentDescription = "AR label scanner")
         }
         val filterButton: @Composable () -> Unit = {
             BadgedBox(
