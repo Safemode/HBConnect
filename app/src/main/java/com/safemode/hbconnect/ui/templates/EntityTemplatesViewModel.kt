@@ -9,6 +9,8 @@ import com.safemode.hbconnect.data.remote.models.EntityTemplateCreateItem
 import com.safemode.hbconnect.data.remote.models.EntityTemplateOut
 import com.safemode.hbconnect.data.remote.models.EntityTemplateSummary
 import com.safemode.hbconnect.data.remote.models.EntityTemplateUpdate
+import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,27 +77,41 @@ class EntityTemplatesViewModel : ViewModel() {
 
     fun create(body: EntityTemplateCreate, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.createTemplate(body).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.CREATE_TEMPLATE,
+                payload = body,
+                label = "New template: ${body.name}",
+                direct = { repository.createTemplate(body).map {} },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }
 
     fun update(id: String, body: EntityTemplateUpdate, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.updateTemplate(id, body).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.UPDATE_TEMPLATE,
+                payload = body,
+                targetId = id,
+                label = "Edit template: ${body.name}",
+                direct = { repository.updateTemplate(id, body).map {} },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }
 
     fun delete(id: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.deleteTemplate(id).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.DELETE_TEMPLATE,
+                payload = null,
+                targetId = id,
+                label = "Delete template",
+                direct = { repository.deleteTemplate(id) },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }

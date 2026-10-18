@@ -10,6 +10,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.safemode.hbconnect.notifications.MaintenanceNotifier
+import com.safemode.hbconnect.notifications.QueueNotifier
 import okio.Path.Companion.toOkioPath
 
 class HBConnectApp : Application(), SingletonImageLoader.Factory {
@@ -17,6 +18,7 @@ class HBConnectApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         Graph.init(this)
         MaintenanceNotifier.createChannel(this)
+        QueueNotifier.createChannel(this)
     }
 
     /**

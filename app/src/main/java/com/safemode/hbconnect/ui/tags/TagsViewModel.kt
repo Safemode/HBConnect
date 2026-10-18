@@ -6,6 +6,8 @@ import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.data.remote.models.TagUpdate
+import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.data.remote.LiveEvent
 import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
@@ -60,16 +62,19 @@ class TagsViewModel : ViewModel() {
         parentId: String?,
         onResult: (Boolean, String?) -> Unit,
     ) {
+        val body = TagCreate(
+            name = name.trim(),
+            description = description.trim().ifBlank { null },
+            parentId = parentId,
+        )
         viewModelScope.launch {
-            repository.createTag(
-                TagCreate(
-                    name = name.trim(),
-                    description = description.trim().ifBlank { null },
-                    parentId = parentId,
-                ),
-            ).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.CREATE_TAG,
+                payload = body,
+                label = "New tag: ${body.name}",
+                direct = { repository.createTag(body).map {} },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }
@@ -81,26 +86,34 @@ class TagsViewModel : ViewModel() {
         parentId: String?,
         onResult: (Boolean, String?) -> Unit,
     ) {
+        val body = TagUpdate(
+            name = name.trim(),
+            description = description.trim().ifBlank { null },
+            parentId = parentId,
+        )
         viewModelScope.launch {
-            repository.updateTag(
-                id,
-                TagUpdate(
-                    name = name.trim(),
-                    description = description.trim().ifBlank { null },
-                    parentId = parentId,
-                ),
-            ).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.UPDATE_TAG,
+                payload = body,
+                targetId = id,
+                label = "Edit tag: ${body.name}",
+                direct = { repository.updateTag(id, body).map {} },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }
 
     fun delete(id: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.deleteTag(id).fold(
-                onSuccess = { reloadSilently(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.DELETE_TAG,
+                payload = null,
+                targetId = id,
+                label = "Delete tag",
+                direct = { repository.deleteTag(id) },
+                onSent = { reloadSilently() },
+                onResult = onResult,
             )
         }
     }

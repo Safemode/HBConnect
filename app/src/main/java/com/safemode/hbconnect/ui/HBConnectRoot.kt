@@ -66,6 +66,7 @@ import com.safemode.hbconnect.ui.members.MembersScreen
 import com.safemode.hbconnect.ui.maintenance.AllMaintenanceScreen
 import com.safemode.hbconnect.ui.maintenance.MaintenanceScreen
 import com.safemode.hbconnect.ui.more.MoreScreen
+import com.safemode.hbconnect.ui.queue.QueueScreen
 import com.safemode.hbconnect.ui.navigation.AppBottomBar
 import com.safemode.hbconnect.ui.navigation.BottomTab
 import com.safemode.hbconnect.ui.navigation.Routes
@@ -245,6 +246,11 @@ fun HBConnectRoot() {
             composable(Routes.CURRENCY) {
                 SubScaffold("Currency", onBack = { navController.popBackStack() }) {
                     CurrencyScreen()
+                }
+            }
+            composable(Routes.QUEUE) {
+                SubScaffold("Upload queue", onBack = { navController.popBackStack() }) {
+                    QueueScreen()
                 }
             }
             composable(

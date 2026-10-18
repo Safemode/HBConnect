@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.MaintenanceEntry
 import com.safemode.hbconnect.data.remote.models.MaintenanceEntryRequest
+import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,27 +52,42 @@ class MaintenanceViewModel(private val entityId: String) : ViewModel() {
 
     fun create(body: MaintenanceEntryRequest, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.createMaintenance(entityId, body).fold(
-                onSuccess = { load(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.CREATE_MAINTENANCE,
+                payload = body,
+                targetId = entityId,
+                label = "New maintenance: ${body.name}",
+                direct = { repository.createMaintenance(entityId, body) },
+                onSent = { load() },
+                onResult = onResult,
             )
         }
     }
 
     fun update(id: String, body: MaintenanceEntryRequest, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.updateMaintenance(id, body).fold(
-                onSuccess = { load(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.UPDATE_MAINTENANCE,
+                payload = body,
+                targetId = id,
+                label = "Edit maintenance: ${body.name}",
+                direct = { repository.updateMaintenance(id, body) },
+                onSent = { load() },
+                onResult = onResult,
             )
         }
     }
 
     fun delete(id: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.deleteMaintenance(id).fold(
-                onSuccess = { load(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.DELETE_MAINTENANCE,
+                payload = null,
+                targetId = id,
+                label = "Delete maintenance",
+                direct = { repository.deleteMaintenance(id) },
+                onSent = { load() },
+                onResult = onResult,
             )
         }
     }

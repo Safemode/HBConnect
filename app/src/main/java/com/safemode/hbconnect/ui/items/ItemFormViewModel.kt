@@ -11,6 +11,8 @@ import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
+import com.safemode.hbconnect.data.queue.OFFLINE_SAVED_MESSAGE
+import com.safemode.hbconnect.data.queue.OpKind
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -310,6 +312,31 @@ class ItemFormViewModel(
             try {
                 // itemId when editing, or createdId when completing an item made earlier this session.
                 val existingId = itemId?.ifBlank { null } ?: createdId
+
+                // Offline: save to the upload queue instead of hitting the server. A new item (with
+                // its photos) goes in as one create op that carries the full field set; an edit goes
+                // in as an update op plus a photo-upload op for any new photos.
+                if (!Graph.uploadQueue.online()) {
+                    if (existingId != null) {
+                        Graph.uploadQueue.enqueue(
+                            kind = OpKind.UPDATE_ENTITY,
+                            payload = buildUpdate(f, existingId),
+                            targetId = existingId,
+                            label = "Edit item: ${f.name.trim()}",
+                        )
+                        if (_photos.value.isNotEmpty()) {
+                            Graph.uploadQueue.enqueueUploadPhotos(existingId, _photos.value, "Photos for ${f.name.trim()}")
+                        }
+                    } else {
+                        Graph.uploadQueue.enqueueCreateEntity(buildUpdate(f, ""), _photos.value, "New item: ${f.name.trim()}")
+                    }
+                    clearDraft()
+                    _photos.value.forEach { runCatching { File(it).delete() } }
+                    _photos.value = emptyList()
+                    _saving.value = false
+                    onResult(true, OFFLINE_SAVED_MESSAGE)
+                    return@launch
+                }
                 var savedId: String? = null
                 var error: String? = null
                 if (existingId != null) {

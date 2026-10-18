@@ -1,7 +1,11 @@
 package com.safemode.hbconnect.data
 
+import com.safemode.hbconnect.data.local.CachedEntity
+import com.safemode.hbconnect.data.local.CachedEntityDao
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.HomeboxApi
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.safemode.hbconnect.data.remote.models.ApiKeyCreate
 import com.safemode.hbconnect.data.remote.models.ApiKeyCreatedOut
 import com.safemode.hbconnect.data.remote.models.ApiKeyOut
@@ -66,10 +70,51 @@ import java.io.OutputStream
  * Single entry point the UI uses to talk to Homebox. Wraps API calls in [Result] and maps
  * transport errors onto readable messages.
  */
-class HomeboxRepository(private val apiProvider: ApiProvider) {
+class HomeboxRepository(
+    private val apiProvider: ApiProvider,
+    private val entityCache: CachedEntityDao? = null,
+) {
 
     private fun api(): HomeboxApi = apiProvider.apiOrNull()
         ?: throw IllegalStateException("Connection not configured. Add your server details under Server.")
+
+    // Used to (de)serialize entity summaries into the local cache for offline reads/search.
+    private val cacheMoshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+    private val summaryAdapter = cacheMoshi.adapter(EntitySummary::class.java)
+
+    /** The collection the cache rows belong to (blank = the server's default group). */
+    private fun cacheTenant(): String = apiProvider.currentConfig().activeGroupId
+
+    /** Upserts fetched entities into the local cache so the lists and search keep working offline. */
+    private suspend fun cacheEntities(entities: List<EntitySummary>) {
+        val dao = entityCache ?: return
+        val tenant = cacheTenant()
+        val rows = entities.mapNotNull { s ->
+            val id = s.id ?: return@mapNotNull null
+            CachedEntity(
+                id = id,
+                tenant = tenant,
+                isLocation = s.isLocation,
+                name = s.displayName,
+                archived = s.archived == true,
+                updatedAt = s.updatedAt.orEmpty(),
+                summaryJson = summaryAdapter.toJson(s),
+            )
+        }
+        if (rows.isNotEmpty()) runCatching { dao.upsertAll(rows) }
+    }
+
+    private suspend fun cachedList(isLocation: Boolean, includeArchived: Boolean): List<EntitySummary> {
+        val dao = entityCache ?: return emptyList()
+        return dao.list(cacheTenant(), isLocation, includeArchived)
+            .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
+    }
+
+    private suspend fun cachedSearch(query: String, includeArchived: Boolean, limit: Int): List<EntitySummary> {
+        val dao = entityCache ?: return emptyList()
+        return dao.search(cacheTenant(), query, includeArchived, limit)
+            .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
+    }
 
     private suspend fun <T> call(block: suspend (HomeboxApi) -> Response<T>): Result<T> =
         runCatching {
@@ -275,15 +320,29 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         includeArchived: Boolean = false,
         page: Int = 1,
         pageSize: Int = 200,
-    ): Result<List<EntitySummary>> = call {
-        it.getEntities(
-            q = query?.ifBlank { null },
-            page = page,
-            pageSize = pageSize,
-            isLocation = false,
-            includeArchived = includeArchived.takeIf { v -> v },
+    ): Result<List<EntitySummary>> {
+        val result = call {
+            it.getEntities(
+                q = query?.ifBlank { null },
+                page = page,
+                pageSize = pageSize,
+                isLocation = false,
+                includeArchived = includeArchived.takeIf { v -> v },
+            )
+        }.map { it.items.orEmpty().sortedWith(sortComparator(sort)) }
+        return result.fold(
+            onSuccess = { items -> cacheEntities(items); Result.success(items) },
+            onFailure = { e ->
+                // Offline: serve the last-synced copy from the local cache (search when a query is set).
+                val cached = if (!query.isNullOrBlank()) {
+                    cachedSearch(query, includeArchived, pageSize).filterNot { it.isLocation }
+                } else {
+                    cachedList(isLocation = false, includeArchived = includeArchived)
+                }
+                if (cached.isNotEmpty()) Result.success(cached.sortedWith(sortComparator(sort))) else Result.failure(e)
+            },
         )
-    }.map { it.items.orEmpty().sortedWith(sortComparator(sort)) }
+    }
 
     /** The most recently created items, newest first (for the dashboard's "Recently added"). */
     suspend fun getRecentItems(limit: Int = 3): Result<List<EntitySummary>> = call {
@@ -296,13 +355,22 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     }.map { it.items.orEmpty() }
 
     /** All locations (location entities), sorted by name. */
-    suspend fun getLocations(includeArchived: Boolean = false): Result<List<EntitySummary>> = call {
-        it.getEntities(
-            pageSize = 500,
-            isLocation = true,
-            includeArchived = includeArchived.takeIf { v -> v },
+    suspend fun getLocations(includeArchived: Boolean = false): Result<List<EntitySummary>> {
+        val result = call {
+            it.getEntities(
+                pageSize = 500,
+                isLocation = true,
+                includeArchived = includeArchived.takeIf { v -> v },
+            )
+        }.map { it.items.orEmpty().sortedBy { l -> l.displayName.lowercase() } }
+        return result.fold(
+            onSuccess = { locations -> cacheEntities(locations); Result.success(locations) },
+            onFailure = { e ->
+                val cached = cachedList(isLocation = true, includeArchived = includeArchived)
+                if (cached.isNotEmpty()) Result.success(cached.sortedBy { it.displayName.lowercase() }) else Result.failure(e)
+            },
         )
-    }.map { it.items.orEmpty().sortedBy { l -> l.displayName.lowercase() } }
+    }
 
     /**
      * Server-wide search across items and (when sensible) locations for the dashboard search. The
@@ -333,7 +401,7 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
         val orderBy = filters.sort.orderBy
         val orderDirection = filters.sort.orderDirection
 
-        return runCatching {
+        val result = runCatching {
             coroutineScope {
                 val items = async {
                     call {
@@ -365,6 +433,14 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
                 (items.await() + locations.await()).distinctBy { it.id }.sortedWith(comparator)
             }
         }
+        return result.fold(
+            onSuccess = { merged -> cacheEntities(merged); Result.success(merged) },
+            onFailure = { e ->
+                // Offline: fall back to a local name search over the cached entities.
+                val cached = if (q != null) cachedSearch(q, filters.includeArchived, limit) else emptyList()
+                if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
+            },
+        )
     }
 
     /** Distinct custom-field names across the group's entities (for the search field selector). */
@@ -379,13 +455,18 @@ class HomeboxRepository(private val apiProvider: ApiProvider) {
     suspend fun getChildren(
         parentId: String,
         includeArchived: Boolean = false,
-    ): Result<List<EntitySummary>> = call {
-        it.getEntities(
-            parentIds = listOf(parentId),
-            pageSize = 500,
-            includeArchived = includeArchived.takeIf { v -> v },
-        )
-    }.map { it.items.orEmpty().sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
+    ): Result<List<EntitySummary>> {
+        val result = call {
+            it.getEntities(
+                parentIds = listOf(parentId),
+                pageSize = 500,
+                includeArchived = includeArchived.takeIf { v -> v },
+            )
+        }.map { it.items.orEmpty().sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
+        // Feed children into the cache too, so offline search covers nested items.
+        result.getOrNull()?.let { cacheEntities(it) }
+        return result
+    }
 
     suspend fun getEntity(id: String): Result<EntityOut> = call { it.getEntity(id) }
 

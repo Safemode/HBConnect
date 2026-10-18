@@ -7,6 +7,8 @@ import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
+import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,39 +91,54 @@ class LocationFormViewModel(
         }
         viewModelScope.launch {
             _saving.value = true
-            val result = if (isEdit) {
+            val done: (Boolean, String?) -> Unit = { ok, message -> _saving.value = false; onResult(ok, message) }
+            if (isEdit) {
                 // The update endpoint replaces the whole entity, so carry through the fields this
                 // form doesn't expose (quantity, custom fields) from the loaded original, otherwise
                 // saving a name/parent change would wipe them.
                 val prior = original
-                repository.updateEntity(
-                    locationId!!,
-                    EntityUpdate(
-                        id = locationId,
-                        name = f.name.trim(),
-                        description = f.description.trim().ifBlank { null },
-                        entityTypeId = f.entityTypeId,
-                        parentId = f.parentId,
-                        quantity = prior?.quantity?.toInt(),
-                        syncChildEntityLocations = false,
-                        fields = prior?.fields,
-                    ),
-                ).map { }
+                val update = EntityUpdate(
+                    id = locationId!!,
+                    name = f.name.trim(),
+                    description = f.description.trim().ifBlank { null },
+                    entityTypeId = f.entityTypeId,
+                    parentId = f.parentId,
+                    quantity = prior?.quantity?.toInt(),
+                    syncChildEntityLocations = false,
+                    fields = prior?.fields,
+                )
+                Graph.uploadQueue.submitWrite(
+                    kind = OpKind.UPDATE_ENTITY,
+                    payload = update,
+                    targetId = locationId,
+                    label = "Edit location: ${update.name}",
+                    direct = { repository.updateEntity(locationId, update).map {} },
+                    onResult = done,
+                )
             } else {
-                repository.createEntity(
-                    EntityCreate(
-                        name = f.name.trim(),
-                        description = f.description.trim().ifBlank { null },
-                        entityTypeId = f.entityTypeId,
-                        parentId = f.parentId,
-                    ),
-                ).map { }
+                val create = EntityCreate(
+                    name = f.name.trim(),
+                    description = f.description.trim().ifBlank { null },
+                    entityTypeId = f.entityTypeId,
+                    parentId = f.parentId,
+                )
+                // CREATE_ENTITY carries a full EntityUpdate (blank id) so the offline replay can
+                // recreate the location exactly; the online path just uses the create body directly.
+                val full = EntityUpdate(
+                    id = "",
+                    name = create.name,
+                    description = create.description,
+                    entityTypeId = create.entityTypeId,
+                    parentId = create.parentId,
+                )
+                Graph.uploadQueue.submitWrite(
+                    kind = OpKind.CREATE_ENTITY,
+                    payload = full,
+                    label = "New location: ${create.name}",
+                    direct = { repository.createEntity(create).map {} },
+                    onResult = done,
+                )
             }
-            _saving.value = false
-            result.fold(
-                onSuccess = { onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
-            )
         }
     }
 }

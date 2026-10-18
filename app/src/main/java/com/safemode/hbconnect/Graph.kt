@@ -5,6 +5,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.safemode.hbconnect.data.HomeboxRepository
+import com.safemode.hbconnect.data.local.AppDatabase
+import com.safemode.hbconnect.data.queue.UploadQueueManager
+import com.safemode.hbconnect.notifications.QueueNotifier
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.LiveUpdatesClient
 import com.safemode.hbconnect.data.remote.NetworkMonitor
@@ -14,6 +17,7 @@ import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.notifications.MaintenanceReminderScheduler
 import com.safemode.hbconnect.data.settings.AuthMode
 import com.safemode.hbconnect.data.settings.SettingsRepository
+import java.io.File
 import java.time.Duration
 import java.time.OffsetDateTime
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +54,10 @@ object Graph {
         private set
 
     lateinit var liveUpdates: LiveUpdatesClient
+        private set
+
+    /** The offline write queue (outbox): persists writes made while the server is unreachable. */
+    lateinit var uploadQueue: UploadQueueManager
         private set
 
     private lateinit var networkMonitor: NetworkMonitor
@@ -92,8 +100,19 @@ object Graph {
         serverStatus = ServerStatus()
         networkMonitor = NetworkMonitor(app, serverStatus)
         apiProvider = ApiProvider(app.cacheDir, serverStatus, networkMonitor::isOnline)
-        repository = HomeboxRepository(apiProvider)
+        val db = AppDatabase.build(app)
+        repository = HomeboxRepository(apiProvider, db.cachedEntities())
         liveUpdates = LiveUpdatesClient(appScope)
+        uploadQueue = UploadQueueManager(
+            dao = db.queuedOps(),
+            repository = repository,
+            queueDir = File(app.filesDir, "upload_queue"),
+            serverStatus = serverStatus,
+            isOnline = networkMonitor::isOnline,
+            activeTenant = { settingsRepository.config.first().activeGroupId },
+            notificationsEnabled = { settingsRepository.config.first().queueUploadNotifications },
+            notifier = QueueNotifier(app),
+        )
 
         // Keep the API provider's config in sync with saved settings.
         settingsRepository.config
@@ -174,6 +193,17 @@ object Graph {
         appScope.launch {
             ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 runReachabilityLoop()
+            }
+        }
+
+        // Flush the offline write queue whenever the server is reachable and the app is foregrounded.
+        // serverStatus.state is a StateFlow, so REACHABLE arrives once per reconnect; drain() is a
+        // no-op when the queue is empty and self-guards against overlapping runs.
+        appScope.launch {
+            ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                serverStatus.state.collect { state ->
+                    if (state == ServerReachability.REACHABLE) uploadQueue.drain()
+                }
             }
         }
     }

@@ -11,6 +11,10 @@ import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
+import com.safemode.hbconnect.data.queue.OFFLINE_SAVED_MESSAGE
+import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.UploadQueueManager
+import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -113,12 +117,21 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
 
     private fun patch(body: EntityPatch, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.patchEntity(entityId, body).fold(
-                onSuccess = { load(showLoading = false); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.PATCH_ENTITY,
+                payload = body,
+                targetId = entityId,
+                label = "Edit ${entityLabel()}",
+                direct = { repository.patchEntity(entityId, body).map {} },
+                onSent = { load(showLoading = false) },
+                onResult = onResult,
             )
         }
     }
+
+    /** A short human name for the current entity, for queue labels. */
+    private fun entityLabel(): String =
+        (_state.value as? UiState.Success)?.data?.displayName?.takeIf { it.isNotBlank() } ?: "item"
 
     /** The Homebox web URL for this entity, encoded into the on-device QR code. */
     fun entityWebUrl(isLocation: Boolean): String = repository.entityWebUrl(entityId, isLocation)
@@ -173,13 +186,19 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
 
     fun delete(onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.deleteEntity(entityId).fold(
-                onSuccess = {
-                    _deleted.value = true
-                    onDone(true, null)
-                },
-                onFailure = { onDone(false, it.message) },
+            val dispatch = Graph.uploadQueue.submit(
+                kind = OpKind.DELETE_ENTITY,
+                payload = null,
+                targetId = entityId,
+                label = "Delete ${entityLabel()}",
+                direct = { repository.deleteEntity(entityId) },
             )
+            when (dispatch) {
+                // Leave the detail screen in both cases: deleted now, or queued to delete on reconnect.
+                UploadQueueManager.Dispatch.Sent -> { _deleted.value = true; onDone(true, null) }
+                UploadQueueManager.Dispatch.Queued -> { _deleted.value = true; onDone(true, OFFLINE_SAVED_MESSAGE) }
+                is UploadQueueManager.Dispatch.Failed -> onDone(false, dispatch.message)
+            }
         }
     }
 }

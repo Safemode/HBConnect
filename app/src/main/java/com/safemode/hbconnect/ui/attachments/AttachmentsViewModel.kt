@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.ItemAttachment
+import com.safemode.hbconnect.data.queue.AttachmentRef
+import com.safemode.hbconnect.data.queue.OFFLINE_SAVED_MESSAGE
+import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,12 +48,19 @@ class AttachmentsViewModel(private val entityId: String) : ViewModel() {
         viewModelScope.launch {
             _busy.value = true
             val type = if (mimeType?.startsWith("image/") == true) "photo" else "attachment"
-            val result = repository.uploadAttachment(entityId, fileName, mimeType, bytes, type = type)
-            _busy.value = false
-            result.fold(
-                onSuccess = { load(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
-            )
+            if (Graph.uploadQueue.online()) {
+                val result = repository.uploadAttachment(entityId, fileName, mimeType, bytes, type = type)
+                _busy.value = false
+                result.fold(
+                    onSuccess = { load(); onResult(true, null) },
+                    onFailure = { onResult(false, it.message) },
+                )
+            } else {
+                // Offline: stash the bytes in the outbox to upload on reconnect.
+                Graph.uploadQueue.enqueueUploadBytes(entityId, fileName, mimeType, type, bytes, "Upload $fileName")
+                _busy.value = false
+                onResult(true, OFFLINE_SAVED_MESSAGE)
+            }
         }
     }
 
@@ -70,9 +81,14 @@ class AttachmentsViewModel(private val entityId: String) : ViewModel() {
 
     fun delete(attachmentId: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            repository.deleteAttachment(entityId, attachmentId).fold(
-                onSuccess = { load(); onResult(true, null) },
-                onFailure = { onResult(false, it.message) },
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.DELETE_ATTACHMENT,
+                payload = AttachmentRef(entityId = entityId, attachmentId = attachmentId),
+                targetId = entityId,
+                label = "Delete attachment",
+                direct = { repository.deleteAttachment(entityId, attachmentId) },
+                onSent = { load() },
+                onResult = onResult,
             )
         }
     }
