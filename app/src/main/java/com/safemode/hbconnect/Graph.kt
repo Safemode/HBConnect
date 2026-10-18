@@ -23,7 +23,6 @@ import java.time.OffsetDateTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +36,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Manual dependency container. Initialized once from [HBConnectApp]. */
 object Graph {
@@ -218,7 +218,14 @@ object Graph {
                 backoffMs = PROBE_MIN_BACKOFF_MS
                 serverStatus.state.first { it != ServerReachability.REACHABLE }
             } else {
-                delay(backoffMs)
+                // Wait out the backoff, but wake at once if the network returns - NetworkMonitor flips
+                // the state to CHECKING on reconnect. Without this the loop could sit in a delay of up
+                // to a minute, so the "Connecting..." banner lingered and screens didn't refresh until
+                // the next request. Waking here re-probes immediately, clearing the banner and letting
+                // refreshWhenServerReachable reload the current screen.
+                withTimeoutOrNull(backoffMs) {
+                    serverStatus.state.first { it == ServerReachability.CHECKING }
+                }
                 backoffMs = (backoffMs * 2).coerceAtMost(PROBE_MAX_BACKOFF_MS)
             }
         }
