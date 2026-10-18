@@ -36,6 +36,7 @@ fun OptionDropdownField(
     selectedValue: String?,
     onSelect: (Option) -> Unit,
     modifier: Modifier = Modifier,
+    isError: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.value == selectedValue }?.label ?: ""
@@ -48,6 +49,7 @@ fun OptionDropdownField(
             value = selectedLabel,
             onValueChange = {},
             readOnly = true,
+            isError = isError,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier

@@ -307,6 +307,10 @@ class ItemFormViewModel(
             onResult(false, "Name is required.")
             return
         }
+        if (f.parentId.isNullOrBlank()) {
+            onResult(false, "Location is required.")
+            return
+        }
         viewModelScope.launch {
             _saving.value = true
             try {

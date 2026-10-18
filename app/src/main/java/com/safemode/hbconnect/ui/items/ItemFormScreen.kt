@@ -254,6 +254,7 @@ fun ItemFormScreen(
                         onValueChange = { v -> viewModel.update { it.copy(name = v) } },
                         label = { Text("Name *") },
                         singleLine = true,
+                        isError = form.name.isBlank(),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
@@ -271,11 +272,12 @@ fun ItemFormScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OptionDropdownField(
-                        label = "Location",
+                        label = "Location *",
                         options = listOf(Option("(None)", null)) +
                             locations.map { Option(it.displayName, it.id) },
                         selectedValue = form.parentId,
                         onSelect = { opt -> viewModel.update { it.copy(parentId = opt.value) } },
+                        isError = form.parentId.isNullOrBlank(),
                     )
 
                     val selectedTagNames = tags
