@@ -377,10 +377,14 @@ private suspend fun resolveAsset(assetId: String): Resolution {
     }
 }
 
-/** Builds a location card, fetching its direct contents to count sub-locations and preview items. */
+/**
+ * Builds a location card. The entities endpoint returns items and sub-locations from separate
+ * queries (items by default, locations only when isLocation=true is asked for), so we fetch both:
+ * [getChildren] for the items and [getChildLocations] for the sub-locations.
+ */
 private suspend fun locationCard(id: String, name: String): ArCard.Location {
-    val children = Graph.repository.getChildren(id).getOrDefault(emptyList())
-    val (subLocations, items) = children.partition { it.isLocation }
+    val items = Graph.repository.getChildren(id).getOrDefault(emptyList()).filter { !it.isLocation }
+    val subLocations = Graph.repository.getChildLocations(id).getOrDefault(emptyList())
     return ArCard.Location(
         id = id,
         name = name,

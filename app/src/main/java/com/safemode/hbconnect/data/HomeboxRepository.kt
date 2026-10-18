@@ -491,7 +491,33 @@ class HomeboxRepository(
             // Feed children into the cache too, so a location's contents are browsable offline.
             onSuccess = { children -> cacheEntities(children); Result.success(children) },
             onFailure = { e ->
-                val cached = cachedChildren(parentId, includeArchived)
+                val cached = cachedChildren(parentId, includeArchived).filter { !it.isLocation }
+                if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
+            },
+        )
+    }
+
+    /**
+     * Direct sub-locations of a location. A separate call from [getChildren] because the entities
+     * endpoint returns items only unless isLocation=true is passed, so a location's child locations
+     * never come back with its items. Offline, both kinds are in the cache, so we filter there.
+     */
+    suspend fun getChildLocations(
+        parentId: String,
+        includeArchived: Boolean = false,
+    ): Result<List<EntitySummary>> {
+        val result = call {
+            it.getEntities(
+                parentIds = listOf(parentId),
+                isLocation = true,
+                pageSize = 500,
+                includeArchived = includeArchived.takeIf { v -> v },
+            )
+        }.map { it.items.orEmpty().sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
+        return result.fold(
+            onSuccess = { children -> cacheEntities(children); Result.success(children) },
+            onFailure = { e ->
+                val cached = cachedChildren(parentId, includeArchived).filter { it.isLocation }
                 if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
             },
         )
