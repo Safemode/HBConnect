@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -57,6 +60,7 @@ import com.safemode.hbconnect.ui.backup.ImportExportScreen
 import com.safemode.hbconnect.ui.collections.CollectionsScreen
 import com.safemode.hbconnect.ui.currency.CurrencyScreen
 import com.safemode.hbconnect.ui.dashboard.DashboardScreen
+import com.safemode.hbconnect.ui.dashboard.DashboardViewModel
 import com.safemode.hbconnect.ui.entity.EntityDetailScreen
 import com.safemode.hbconnect.ui.entitytypes.EntityTypesScreen
 import com.safemode.hbconnect.ui.items.ItemFormScreen
@@ -153,10 +157,29 @@ fun HBConnectRoot() {
                 .weight(1f)
                 .consumeWindowInsets(WindowInsets.navigationBars),
         ) {
-            composable(Routes.DASHBOARD) {
+            composable(Routes.DASHBOARD) { entry ->
+                // One shared ViewModel so the top-bar Edit button and the dashboard body agree on
+                // whether editing is active (same nav entry, so viewModel() returns one instance).
+                val dashboardVm: DashboardViewModel = viewModel(viewModelStoreOwner = entry)
                 MainScaffold(
                     "HBConnect",
-                    actions = { SyncStatusIndicator(onClick = { navController.navigate(Routes.QUEUE) }) },
+                    actions = {
+                        val editing by dashboardVm.editing.collectAsStateWithLifecycle()
+                        val canEdit by dashboardVm.canEdit.collectAsStateWithLifecycle()
+                        // Sits to the left of the sync status, out of the tiles and search bar. Only
+                        // offered when the grid is showing; while editing, Save (in the search row)
+                        // or Back ends the session, so the top bar shows a Close that cancels.
+                        if (editing) {
+                            IconButton(onClick = { dashboardVm.setEditing(false) }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Cancel editing")
+                            }
+                        } else if (canEdit) {
+                            IconButton(onClick = { dashboardVm.setEditing(true) }) {
+                                Icon(Icons.Filled.DashboardCustomize, contentDescription = "Edit dashboard")
+                            }
+                        }
+                        SyncStatusIndicator(onClick = { navController.navigate(Routes.QUEUE) })
+                    },
                 ) {
                     DashboardScreen(
                         onOpenItems = { navController.navigate(Routes.ITEMS) },
@@ -164,6 +187,7 @@ fun HBConnectRoot() {
                         onOpenTags = { navController.navigate(Routes.TAGS) },
                         onOpenServer = { navController.navigate(Routes.SERVER) },
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
+                        viewModel = dashboardVm,
                     )
                 }
             }

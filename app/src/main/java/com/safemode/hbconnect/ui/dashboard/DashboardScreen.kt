@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -61,19 +62,18 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -139,11 +139,11 @@ fun DashboardScreen(
     val fieldValues by viewModel.fieldValues.collectAsStateWithLifecycle()
     val swapScanFilter by viewModel.swapScanFilter.collectAsStateWithLifecycle()
     val savedLayout by viewModel.dashboardLayout.collectAsStateWithLifecycle()
+    val editing by viewModel.editing.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var showFilters by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf(false) }
 
     // The working copy the editor mutates; seeded from the saved layout each time editing begins and
     // committed back only on Save, so leaving edit mode by Back discards changes.
@@ -181,7 +181,7 @@ fun DashboardScreen(
         viewModel.resetSearch()
     }
     // In edit mode, Back leaves editing without saving.
-    BackHandler(enabled = editing) { editing = false }
+    BackHandler(enabled = editing) { viewModel.setEditing(false) }
 
     LifecycleResumeEffect(Unit) {
         viewModel.reloadSilently()
@@ -236,7 +236,7 @@ fun DashboardScreen(
                     editing = editing,
                     onSave = {
                         viewModel.saveDashboardLayout(working.toList())
-                        editing = false
+                        viewModel.setEditing(false)
                     },
                 )
             }
@@ -268,18 +268,7 @@ fun DashboardScreen(
                             DashboardEditor(
                                 working = working,
                                 stats = s.data,
-                                recent = charts.recent,
                                 currency = currency,
-                                onUpdate = { id, transform ->
-                                    val i = working.indexOfFirst { it.id == id }
-                                    if (i >= 0) working[i] = transform(working[i])
-                                },
-                                onReorder = { order ->
-                                    val byId = working.associateBy { it.id }
-                                    val reordered = order.mapNotNull { byId[it] }
-                                    working.clear()
-                                    working.addAll(reordered)
-                                },
                                 onReset = {
                                     working.clear()
                                     working.addAll(defaultDashboardLayout())
@@ -295,7 +284,7 @@ fun DashboardScreen(
                                 onOpenLocations = onOpenLocations,
                                 onOpenTags = onOpenTags,
                                 onOpenEntity = onOpenEntity,
-                                onEnterEdit = { editing = true },
+                                onEnterEdit = { viewModel.setEditing(true) },
                             )
                         }
                     }
@@ -523,125 +512,123 @@ private fun StatsDashboard(
     }
 }
 
+/** Uniform height for an editor row, so the live reorder swaps cleanly against a single threshold. */
+private val EditorRowHeight = 76.dp
+
+private fun tileLabel(id: DashboardTileId, stats: GroupStatistics, currency: Currency?): String =
+    if (id == DashboardTileId.RECENT) "Recently added"
+    else statTileFor(id, stats, currency)?.label ?: id.name
+
+private fun tileIcon(id: DashboardTileId, stats: GroupStatistics, currency: Currency?): ImageVector =
+    if (id == DashboardTileId.RECENT) Icons.Filled.Inventory2
+    else statTileFor(id, stats, currency)?.icon ?: Icons.Filled.Inventory2
+
+private fun updatePref(
+    list: MutableList<DashboardTilePref>,
+    id: DashboardTileId,
+    transform: (DashboardTilePref) -> DashboardTilePref,
+) {
+    val i = list.indexOfFirst { it.id == id }
+    if (i >= 0) list[i] = transform(list[i])
+}
+
 /**
- * Edit mode: the same tiles, in place, with controls to resize, hide and reorder. Long-press a tile
- * to drag it to a new spot; reordering settles on drop against the tiles' resting positions, so the
- * grid doesn't churn under the finger. Hidden tiles collect in a strip at the bottom to bring back.
+ * Edit mode: the tiles as a single reorderable column, each a fixed-height row with controls for
+ * width, visibility and - for "Recently added" - item count. Long-press a row and drag; the rows
+ * slide past one another as you go and the one you moved stays where you drop it. Hidden tiles sit
+ * in a section below, ready to bring back. The dashboard's real half/full grid shows on Save.
+ *
+ * [working] is the live layout the search-row Save reads, so every edit here mutates it in place.
  */
 @Composable
 private fun DashboardEditor(
-    working: List<DashboardTilePref>,
+    working: SnapshotStateList<DashboardTilePref>,
     stats: GroupStatistics,
-    recent: List<EntitySummary>,
     currency: Currency?,
-    onUpdate: (DashboardTileId, (DashboardTilePref) -> DashboardTilePref) -> Unit,
-    onReorder: (List<DashboardTileId>) -> Unit,
     onReset: () -> Unit,
 ) {
+    val rowHeightPx = with(LocalDensity.current) { EditorRowHeight.toPx() }
+    var draggingId by remember { mutableStateOf<DashboardTileId?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+
     val visible = working.filter { it.visible }
     val hidden = working.filter { !it.visible }
-    val rows = buildRows(visible)
-
-    // Resting bounds (window coords) of every visible tile, used to resolve a drop to a position.
-    val bounds = remember { mutableMapOf<DashboardTileId, Rect>() }
-    var dragging by remember { mutableStateOf<DashboardTileId?>(null) }
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
-    var dragStartCenter by remember { mutableStateOf(Offset.Zero) }
-
-    fun dropReorder() {
-        val id = dragging ?: return
-        val floatingCenter = dragStartCenter + dragOffset
-        val nearest = bounds.entries
-            .filter { it.key != id && working.any { p -> p.id == it.key && p.visible } }
-            .minByOrNull { (it.value.center - floatingCenter).getDistance() }
-        if (nearest != null) {
-            val order = working.map { it.id }.toMutableList()
-            order.remove(id)
-            val ni = order.indexOf(nearest.key)
-            if (ni >= 0) {
-                val r = nearest.value
-                val after = floatingCenter.y > r.center.y + r.height / 4 ||
-                    (floatingCenter.y >= r.top && floatingCenter.y <= r.bottom && floatingCenter.x > r.center.x)
-                val insertAt = (if (after) ni + 1 else ni).coerceIn(0, order.size)
-                order.add(insertAt, id)
-                onReorder(order)
-            }
-        }
-    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            "Long-press a tile to move it. Use the icons to resize, hide or show. Tap Save when done.",
+            "Long-press a tile and drag to reorder; the rows slide to show where it lands. Use the " +
+                "controls to resize or hide a tile. Tap Save when done.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        rows.forEach { row ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                row.forEach { pref ->
-                    val isDragging = pref.id == dragging
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .graphicsLayer {
-                                if (isDragging) {
-                                    translationX = dragOffset.x
-                                    translationY = dragOffset.y
-                                    scaleX = 1.03f
-                                    scaleY = 1.03f
-                                    shadowElevation = 16f
-                                }
-                            }
-                            .onGloballyPositioned { if (!isDragging) bounds[pref.id] = it.boundsInWindow() }
-                            .pointerInput(pref.id) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        dragging = pref.id
-                                        dragOffset = Offset.Zero
-                                        dragStartCenter = bounds[pref.id]?.center ?: Offset.Zero
-                                    },
-                                    onDragEnd = {
-                                        dropReorder()
-                                        dragging = null
-                                        dragOffset = Offset.Zero
-                                    },
-                                    onDragCancel = {
-                                        dragging = null
-                                        dragOffset = Offset.Zero
-                                    },
-                                    onDrag = { change, amount ->
-                                        change.consume()
-                                        dragOffset += amount
-                                    },
-                                )
-                            },
-                    ) {
-                        EditableTile(
-                            pref = pref,
-                            stats = stats,
-                            recent = recent,
-                            currency = currency,
-                            onToggleWidth = { onUpdate(pref.id) { it.copy(fullWidth = !it.fullWidth) } },
-                            onHide = { onUpdate(pref.id) { it.copy(visible = false) } },
-                            onRowsChange = { delta ->
-                                onUpdate(pref.id) {
-                                    it.copy(rows = (it.rows + delta).coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS))
-                                }
-                            },
-                        )
-                    }
-                }
-                if (row.size == 1 && !row[0].fullWidth) Spacer(modifier = Modifier.weight(1f))
+        visible.forEach { pref ->
+            key(pref.id) {
+                val dragging = pref.id == draggingId
+                EditorTileRow(
+                    pref = pref,
+                    stats = stats,
+                    currency = currency,
+                    dragging = dragging,
+                    modifier = Modifier
+                        .zIndex(if (dragging) 1f else 0f)
+                        .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
+                        .pointerInput(pref.id) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    draggingId = pref.id
+                                    dragOffset = 0f
+                                },
+                                onDragEnd = {
+                                    draggingId = null
+                                    dragOffset = 0f
+                                },
+                                onDragCancel = {
+                                    draggingId = null
+                                    dragOffset = 0f
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragOffset += amount.y
+                                    // Swap with the neighbour once dragged half a row past it, then
+                                    // pull the offset back by a row so the tile stays under the finger.
+                                    val vis = working.filter { it.visible }
+                                    val cur = vis.indexOfFirst { it.id == pref.id }
+                                    if (cur < 0) return@detectDragGesturesAfterLongPress
+                                    if (dragOffset > rowHeightPx / 2 && cur < vis.lastIndex) {
+                                        val a = working.indexOfFirst { it.id == pref.id }
+                                        val b = working.indexOfFirst { it.id == vis[cur + 1].id }
+                                        if (a >= 0 && b >= 0) {
+                                            val moved = working.removeAt(a)
+                                            working.add(b, moved)
+                                            dragOffset -= rowHeightPx
+                                        }
+                                    } else if (dragOffset < -rowHeightPx / 2 && cur > 0) {
+                                        val a = working.indexOfFirst { it.id == pref.id }
+                                        val b = working.indexOfFirst { it.id == vis[cur - 1].id }
+                                        if (a >= 0 && b >= 0) {
+                                            val moved = working.removeAt(a)
+                                            working.add(b, moved)
+                                            dragOffset += rowHeightPx
+                                        }
+                                    }
+                                },
+                            )
+                        },
+                    onToggleWidth = { updatePref(working, pref.id) { it.copy(fullWidth = !it.fullWidth) } },
+                    onHide = { updatePref(working, pref.id) { it.copy(visible = false) } },
+                    onRowsChange = { delta ->
+                        updatePref(working, pref.id) {
+                            it.copy(rows = (it.rows + delta).coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS))
+                        }
+                    },
+                )
             }
         }
 
@@ -654,10 +641,9 @@ private fun DashboardEditor(
             )
             hidden.forEach { pref ->
                 HiddenTileRow(
-                    pref = pref,
-                    stats = stats,
-                    currency = currency,
-                    onShow = { onUpdate(pref.id) { it.copy(visible = true) } },
+                    label = tileLabel(pref.id, stats, currency),
+                    icon = tileIcon(pref.id, stats, currency),
+                    onShow = { updatePref(working, pref.id) { it.copy(visible = true) } },
                 )
             }
         }
@@ -669,67 +655,93 @@ private fun DashboardEditor(
     }
 }
 
-/** A tile as shown in edit mode: its normal content plus a control strip for size/visibility. */
+/** One reorderable row in the editor: drag handle, the tile's name and size, and its controls. */
 @Composable
-private fun EditableTile(
+private fun EditorTileRow(
     pref: DashboardTilePref,
     stats: GroupStatistics,
-    recent: List<EntitySummary>,
     currency: Currency?,
+    dragging: Boolean,
+    modifier: Modifier = Modifier,
     onToggleWidth: () -> Unit,
     onHide: () -> Unit,
     onRowsChange: (Int) -> Unit,
 ) {
+    val container =
+        if (dragging) MaterialTheme.colorScheme.surfaceVariant
+        else MaterialTheme.colorScheme.surfaceContainerHighest
+    val sizeCaption = buildString {
+        append(if (pref.fullWidth) "Full width" else "Half width")
+        if (pref.id == DashboardTileId.RECENT) {
+            append(" - ")
+            append(pref.rows.coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS))
+            append(" items")
+        }
+    }
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(EditorRowHeight),
+        colors = CardDefaults.cardColors(containerColor = container),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.DragIndicator,
-                    contentDescription = "Drag to move",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.DragIndicator,
+                contentDescription = "Drag to move",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Icon(
+                tileIcon(pref.id, stats, currency),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.size(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    tileLabel(pref.id, stats, currency),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                if (pref.id == DashboardTileId.RECENT) {
-                    IconButton(onClick = { onRowsChange(-1) }, enabled = pref.rows > MIN_RECENT_ROWS) {
-                        Icon(Icons.Filled.Remove, contentDescription = "Fewer items")
-                    }
-                    Text(
-                        pref.rows.coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS).toString(),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    IconButton(onClick = { onRowsChange(1) }, enabled = pref.rows < MAX_RECENT_ROWS) {
-                        Icon(Icons.Filled.Add, contentDescription = "More items")
-                    }
-                }
-                IconButton(onClick = onToggleWidth) {
-                    Icon(
-                        if (pref.fullWidth) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                        contentDescription = if (pref.fullWidth) "Make half width" else "Make full width",
-                    )
-                }
-                IconButton(onClick = onHide) {
-                    Icon(Icons.Filled.VisibilityOff, contentDescription = "Hide tile")
-                }
+                Text(
+                    sizeCaption,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             if (pref.id == DashboardTileId.RECENT) {
-                val shown = recent.take(pref.rows.coerceIn(MIN_RECENT_ROWS, MAX_RECENT_ROWS))
-                if (shown.isEmpty()) {
-                    Text(
-                        "Recently added (no items yet)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(8.dp),
-                    )
-                } else {
-                    RecentlyAddedList(items = shown, onOpenEntity = {})
+                IconButton(
+                    onClick = { onRowsChange(-1) },
+                    enabled = pref.rows > MIN_RECENT_ROWS,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(Icons.Filled.Remove, contentDescription = "Fewer items")
                 }
-            } else {
-                val tile = statTileFor(pref.id, stats, currency)
-                if (tile != null) StatCardContent(tile)
+                IconButton(
+                    onClick = { onRowsChange(1) },
+                    enabled = pref.rows < MAX_RECENT_ROWS,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "More items")
+                }
+            }
+            IconButton(onClick = onToggleWidth, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    if (pref.fullWidth) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                    contentDescription = if (pref.fullWidth) "Make half width" else "Make full width",
+                )
+            }
+            IconButton(onClick = onHide, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.VisibilityOff, contentDescription = "Hide tile")
             }
         }
     }
@@ -738,19 +750,10 @@ private fun EditableTile(
 /** A hidden tile's compact row in the editor, with a button to bring it back onto the dashboard. */
 @Composable
 private fun HiddenTileRow(
-    pref: DashboardTilePref,
-    stats: GroupStatistics,
-    currency: Currency?,
+    label: String,
+    icon: ImageVector,
     onShow: () -> Unit,
 ) {
-    val label = when (pref.id) {
-        DashboardTileId.RECENT -> "Recently added"
-        else -> statTileFor(pref.id, stats, currency)?.label ?: pref.id.name
-    }
-    val icon = when (pref.id) {
-        DashboardTileId.RECENT -> Icons.Filled.Inventory2
-        else -> statTileFor(pref.id, stats, currency)?.icon ?: Icons.Filled.Inventory2
-    }
     Row(
         modifier = Modifier
             .fillMaxWidth()

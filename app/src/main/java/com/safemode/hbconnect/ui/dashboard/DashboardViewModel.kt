@@ -93,6 +93,22 @@ class DashboardViewModel : ViewModel() {
         .map { it.dashboardLayout }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), defaultDashboardLayout())
 
+    // ---- Dashboard edit mode (shared by the screen and the top-bar Edit button) ----
+    private val _editing = MutableStateFlow(false)
+    val editing: StateFlow<Boolean> = _editing.asStateFlow()
+
+    /**
+     * Whether the dashboard can be edited right now: the stats grid is showing (connected, with no
+     * active search or filter). The top-bar Edit button hides when this is false.
+     */
+    val canEdit: StateFlow<Boolean> = combine(_state, _query, _filters) { s, q, f ->
+        s is UiState.Success && q.isBlank() && !f.isActive
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setEditing(value: Boolean) {
+        _editing.value = value
+    }
+
     /** Persists a new dashboard layout after the user edits it. */
     fun saveDashboardLayout(layout: List<DashboardTilePref>) {
         viewModelScope.launch { settings.saveDashboardLayout(layout) }
