@@ -47,23 +47,34 @@ enabled in the manifest.
   when the app is closed.
 - **Storage:** DataStore holds app preferences and the saved servers. Each server's bearer token /
   API key is encrypted with an AES-256/GCM key in the Android Keystore (`KeystoreCrypto`) - only
-  ciphertext is written to disk.
+  ciphertext is written to disk. A local **Room** database keeps an offline copy of the inventory
+  and the pending upload queue.
 - **DI:** a small manual `Graph` container initialized from `HBConnectApp`.
 
-### Offline caching
+### Offline support
 
-GET responses are stored in an on-disk OkHttp cache so the app stays usable when the server can't
-be reached. When online it always re-fetches fresh data; when the server is unreachable it serves
-the cached copy instead.
+The app keeps working without the server:
 
-- **Reachability** is tracked as `CHECKING → REACHABLE / UNREACHABLE`. A `ConnectivityManager`
-  callback (`NetworkMonitor`) reacts to network changes instantly, and a lightweight background
-  probe (`/api/v1/status`) resolves the state without ever blocking the UI. When a probe
-  reconnects, screens auto-refresh to live data.
-- **App-wide banner:** a neutral "Connecting…" bar while checking, and a red "Server unreachable -
-  showing cached data" bar once it's confirmed down.
-- **Settings → Offline cache:** shows current usage, a selectable maximum size (25 MB-500 MB), and
-  a **Clear cache** button.
+- **Local database (Room).** A background sync caches the whole collection on device - every item
+  and location, their full detail, each location's contents, and tags - on launch and whenever the
+  server reconnects. It is incremental, so only changed entities are re-fetched. When the server is
+  unreachable the lists, item/location detail, a location's contents, and search all read from this
+  copy instead of failing. Item thumbnails are warmed into the image cache so they show offline too.
+- **Upload queue.** Changes made while offline (add / edit / delete for items, locations, tags,
+  entity types, templates, maintenance, and photos) are saved to a durable outbox and uploaded
+  automatically when the server returns, in order. **More → Queue** lists what's waiting - including
+  the photos queued with a new item - with a manual retry and a remove action. The queue survives a
+  force-close and only replays into the collection it was created in. Settings can post a
+  notification once a queued batch finishes uploading.
+- **Sync status.** The dashboard's top-right shows at a glance whether the local copy is synced and
+  online, up to date but offline, or has changes still to upload; tap it to open the queue.
+
+Underneath, GET responses are also kept in an on-disk OkHttp cache. **Reachability** is tracked as
+`CHECKING → REACHABLE / UNREACHABLE`: a `ConnectivityManager` callback (`NetworkMonitor`) reacts to
+network changes instantly and a lightweight `/api/v1/status` probe resolves the state without
+blocking the UI. On reconnect the "Connecting…" banner clears and open screens refresh to live data
+at once. **Settings → Offline cache** shows usage, a selectable maximum size (25 MB-500 MB), and a
+**Clear cache** button.
 
 ## Feature areas
 
@@ -86,7 +97,8 @@ the cached copy instead.
 
 - **Dashboard** shows group statistics (items, locations, tags, with-warranty count, total value)
   with a server-wide search, saved search filters (archived, photo, tags, custom fields), and a
-  barcode / asset scanner.
+  barcode / asset scanner. A sync-status indicator at the top right shows whether the offline copy
+  is synced, offline but current, or has queued changes to upload, and taps through to the queue.
 - **Items** is a searchable, sortable list with bulk select (move, tag, set quantity, delete).
   Opening an item shows its photo gallery, quantity, location, tags, identifiers,
   purchase/warranty/sold info, notes, and attachments, plus **duplicate**, a location breadcrumb,
