@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,28 +39,46 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.safemode.hbconnect.Graph
-import com.safemode.hbconnect.data.remote.models.EntityOut
-import com.safemode.hbconnect.data.remote.models.EntitySummary
+import com.safemode.hbconnect.ui.common.formatMoney
 import kotlin.math.max
 
 /**
- * The overlay-AR half of the scanner: the floating item cards drawn over recognized Homebox labels,
- * and the lookup that turns a scanned code into card contents. Kept separate from [BarcodeScanner]'s
+ * The overlay-AR half of the scanner: the floating cards drawn over recognized Homebox labels, and
+ * the lookup that turns a scanned code into card contents. Kept separate from [BarcodeScanner]'s
  * camera plumbing so each file stays focused. Used only when the scanner is in AR mode.
  */
 
-/** The item details shown on an overlay card once a scanned code has been resolved. */
-internal data class ArItem(
-    val id: String,
-    val name: String,
-    val subtitle: String?,
-    val imageUrl: String?,
-)
+/**
+ * What an overlay card shows. An [Item] shows a photo, name, location/quantity and price; a
+ * [Location] shows its sub-location count and a preview of the items it holds. Both carry the entity
+ * [id] the card taps through to.
+ */
+internal sealed interface ArCard {
+    val id: String
+    val name: String
 
-/** Per-code resolution state: looking it up, resolved to an item, or no matching item. */
+    data class Item(
+        override val id: String,
+        override val name: String,
+        val subtitle: String?,
+        val priceText: String?,
+        val imageUrl: String?,
+    ) : ArCard
+
+    data class Location(
+        override val id: String,
+        override val name: String,
+        val subLocationCount: Int,
+        val itemCount: Int,
+        /** Up to three contained item names, for the "A, B, C, +N more" preview. */
+        val sampleItemNames: List<String>,
+    ) : ArCard
+}
+
+/** Per-code resolution state: looking it up, resolved to a card, or no matching entity. */
 internal sealed interface Resolution {
     data object Loading : Resolution
-    data class Found(val item: ArItem) : Resolution
+    data class Found(val card: ArCard) : Resolution
     data object NotFound : Resolution
 }
 
@@ -82,7 +103,7 @@ internal const val DETECTION_TTL_MS = 1500L
 /**
  * One floating card, offset so it sits just above the code it describes. The code's normalized centre
  * is mapped to screen pixels using the same FILL_CENTER crop the preview applies, then clamped so the
- * card stays fully on screen. A [Resolution.Found] card is tappable and opens the item.
+ * card stays fully on screen. A [Resolution.Found] card is tappable and opens the entity.
  */
 @Composable
 internal fun OverlayCard(
@@ -138,20 +159,23 @@ internal fun OverlayCard(
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
-                        "No matching item",
+                        "No matching entity",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            is Resolution.Found -> FoundCard(item = r.item, onPick = onPick)
+            is Resolution.Found -> when (val card = r.card) {
+                is ArCard.Item -> ItemCard(card, onPick)
+                is ArCard.Location -> LocationCard(card, onPick)
+            }
         }
     }
 }
 
-/** A tappable card showing the resolved item's photo, name and location/quantity. */
+/** A tappable card showing a scanned item's photo, name, location/quantity and price. */
 @Composable
-private fun FoundCard(item: ArItem, onPick: (String) -> Unit) {
+private fun ItemCard(item: ArCard.Item, onPick: (String) -> Unit) {
     InfoCard(onClick = { onPick(item.id) }) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -194,12 +218,95 @@ private fun FoundCard(item: ArItem, onPick: (String) -> Unit) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                item.priceText?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/**
+ * A tappable card for a scanned location: its name, sub-location count, and a preview of the items it
+ * holds (the first few names, then "+N more" when there are more than fit).
+ */
+@Composable
+private fun LocationCard(location: ArCard.Location, onPick: (String) -> Unit) {
+    InfoCard(onClick = { onPick(location.id) }) {
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.Place,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    location.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Text(
+                subLocationLine(location.subLocationCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (location.itemCount == 0) {
+                Text(
+                    "No items",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    "${location.itemCount} item${if (location.itemCount == 1) "" else "s"}:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                location.sampleItemNames.forEach { itemName ->
+                    Text(
+                        itemName,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val more = location.itemCount - location.sampleItemNames.size
+                if (more > 0) {
+                    Text(
+                        "+ $more more",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -219,49 +326,81 @@ private fun InfoCard(onClick: (() -> Unit)? = null, content: @Composable () -> U
     }
 }
 
-/** Resolves a parsed Homebox label to the item card, or [Resolution.NotFound] if nothing matches. */
-internal suspend fun resolve(target: ScanTarget): Resolution = when (target) {
-    is ScanTarget.Entity ->
-        Graph.repository.getEntity(target.id).fold(
-            onSuccess = { it.toArItem()?.let(Resolution::Found) ?: Resolution.NotFound },
-            onFailure = { Resolution.NotFound },
-        )
-    is ScanTarget.Asset ->
-        Graph.repository.findByAssetId(target.assetId).fold(
-            onSuccess = { items -> items.firstOrNull()?.toArItem()?.let(Resolution::Found) ?: Resolution.NotFound },
-            onFailure = { Resolution.NotFound },
-        )
+/** "No sub-locations" / "1 sub-location" / "N sub-locations". */
+private fun subLocationLine(count: Int): String = when (count) {
+    0 -> "No sub-locations"
+    1 -> "1 sub-location"
+    else -> "$count sub-locations"
 }
 
-/** Builds the overlay subtitle from an item's location and (non-trivial) quantity. */
+/** Resolves a parsed Homebox label to its card, or [Resolution.NotFound] if nothing matches. */
+internal suspend fun resolve(target: ScanTarget): Resolution = when (target) {
+    is ScanTarget.Entity -> resolveEntity(target.id)
+    is ScanTarget.Asset -> resolveAsset(target.assetId)
+}
+
+private suspend fun resolveEntity(id: String): Resolution {
+    val entity = Graph.repository.getEntity(id).getOrNull() ?: return Resolution.NotFound
+    val entityId = entity.id?.ifBlank { null } ?: return Resolution.NotFound
+    return if (entity.isLocation) {
+        Resolution.Found(locationCard(entityId, entity.displayName))
+    } else {
+        Resolution.Found(
+            ArCard.Item(
+                id = entityId,
+                name = entity.displayName,
+                subtitle = subtitleOf(entity.parent?.displayName, entity.quantity?.toInt()),
+                priceText = priceText(entity.purchasePrice),
+                imageUrl = imageUrlFor(entityId, entity.thumbnailId ?: entity.imageId, isLocation = false),
+            ),
+        )
+    }
+}
+
+private suspend fun resolveAsset(assetId: String): Resolution {
+    val summary = Graph.repository.findByAssetId(assetId).getOrNull()?.firstOrNull()
+        ?: return Resolution.NotFound
+    val entityId = summary.id?.ifBlank { null } ?: return Resolution.NotFound
+    // Asset tags are printed on items, but resolve a location defensively just in case.
+    return if (summary.isLocation) {
+        Resolution.Found(locationCard(entityId, summary.displayName))
+    } else {
+        Resolution.Found(
+            ArCard.Item(
+                id = entityId,
+                name = summary.displayName,
+                subtitle = subtitleOf(summary.parent?.displayName, summary.quantity?.toInt()),
+                priceText = priceText(summary.purchasePrice),
+                imageUrl = imageUrlFor(entityId, summary.thumbnailId ?: summary.imageId, isLocation = false),
+            ),
+        )
+    }
+}
+
+/** Builds a location card, fetching its direct contents to count sub-locations and preview items. */
+private suspend fun locationCard(id: String, name: String): ArCard.Location {
+    val children = Graph.repository.getChildren(id).getOrDefault(emptyList())
+    val (subLocations, items) = children.partition { it.isLocation }
+    return ArCard.Location(
+        id = id,
+        name = name,
+        subLocationCount = subLocations.size,
+        itemCount = items.size,
+        sampleItemNames = items.take(3).map { it.displayName },
+    )
+}
+
+/** Formats a positive purchase price with the group's currency; null when there's no price. */
+private fun priceText(price: Double?): String? =
+    price?.takeIf { it > 0.0 }?.let { formatMoney(it, Graph.currency.value) }
+
+/** Builds the item subtitle from its location and (non-trivial) quantity. */
 private fun subtitleOf(locationName: String?, quantity: Int?): String? {
     val parts = buildList {
         quantity?.takeIf { it != 1 }?.let { add("Qty $it") }
         locationName?.let { add(it) }
     }
     return parts.joinToString(" · ").ifBlank { null }
-}
-
-/** Maps a full entity to card contents, or null if it has no usable id. */
-private fun EntityOut.toArItem(): ArItem? {
-    val entityId = id?.ifBlank { null } ?: return null
-    return ArItem(
-        id = entityId,
-        name = displayName,
-        subtitle = subtitleOf(parent?.displayName, quantity?.toInt().takeIf { isLocation.not() }),
-        imageUrl = imageUrlFor(entityId, thumbnailId ?: imageId, isLocation),
-    )
-}
-
-/** Maps an entity summary (from an asset-tag lookup) to card contents, or null if it has no id. */
-private fun EntitySummary.toArItem(): ArItem? {
-    val entityId = id?.ifBlank { null } ?: return null
-    return ArItem(
-        id = entityId,
-        name = displayName,
-        subtitle = subtitleOf(parent?.displayName, quantity?.toInt().takeIf { isLocation.not() }),
-        imageUrl = imageUrlFor(entityId, thumbnailId ?: imageId, isLocation),
-    )
 }
 
 /** Authenticated thumbnail URL for an item, or null for locations / items without a photo. */
