@@ -19,9 +19,13 @@ import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
@@ -30,10 +34,16 @@ import java.util.UUID
  * failing; [drain] replays pending ops in order once the server returns. Rows live in Room so they
  * survive a force-close, and pending photos are copied into [queueDir] so they survive too.
  *
- * A drain only replays ops whose captured [QueuedOp.tenant] matches the collection that is active
- * now, so a write queued in one collection can never be sent into another after a switch. When a
- * drain actually flushed queued work, it posts a completion notification (if the user enabled it) -
- * never for ordinary online writes, which never enter the queue.
+ * A drain only replays ops whose captured server ([QueuedOp.serverId]) and collection
+ * ([QueuedOp.tenant]) match the ones active now, so a write queued in one place can never be sent
+ * somewhere else after a switch. When a drain actually flushed queued work, it posts a completion
+ * notification (if the user enabled it) - never for ordinary online writes, which never enter the
+ * queue.
+ *
+ * Replays are safe to repeat: progress is written back as soon as the server accepts each step, so
+ * a retry after a partial failure resumes where it stopped instead of redoing work (see
+ * [createEntity] and [uploadFiles]). Each op also runs to completion even if the drain is cancelled
+ * (the app going to the background), so a write the server applied is always recorded as done.
  */
 class UploadQueueManager(
     private val dao: QueuedOpDao,
@@ -41,6 +51,7 @@ class UploadQueueManager(
     private val queueDir: File,
     private val serverStatus: ServerStatus,
     private val isOnline: () -> Boolean,
+    private val activeServer: suspend () -> String,
     private val activeTenant: suspend () -> String,
     private val notificationsEnabled: suspend () -> Boolean,
     private val notifier: QueueNotifier,
@@ -67,6 +78,13 @@ class UploadQueueManager(
 
     /** True when a write should be attempted directly rather than queued. */
     fun online(): Boolean = isOnline() && serverStatus.isReachable()
+
+    /**
+     * True when [op] would be replayed against [server] and [tenant]: same collection, and the same
+     * server (ops queued before servers were tracked have no server and follow the active one).
+     */
+    fun belongsTo(op: QueuedOp, server: String, tenant: String): Boolean =
+        (op.serverId == null || op.serverId == server) && op.tenant.orEmpty() == tenant
 
     /**
      * Runs [direct] when the server is reachable, otherwise persists the write to the outbox. Used
@@ -105,10 +123,24 @@ class UploadQueueManager(
         persist(kind, payload, targetId, emptyList(), label)
     }
 
-    /** Queues photos (file paths) to be attached to an existing entity. */
-    suspend fun enqueueUploadPhotos(entityId: String, paths: List<String>, label: String) {
+    /**
+     * Queues photos (file paths) to be attached to an existing entity. [primaryFirst] makes the first
+     * one that uploads the entity's primary image (for an entity that has none yet).
+     */
+    suspend fun enqueueUploadPhotos(
+        entityId: String,
+        paths: List<String>,
+        label: String,
+        primaryFirst: Boolean = false,
+    ) {
         if (paths.isEmpty()) return
-        persist(OpKind.UPLOAD_ATTACHMENT, AttachmentUploadPayload(type = "photo"), targetId = entityId, photoSources = paths, label = label)
+        persist(
+            OpKind.UPLOAD_ATTACHMENT,
+            AttachmentUploadPayload(type = "photo", primaryFirst = primaryFirst),
+            targetId = entityId,
+            photoSources = paths,
+            label = label,
+        )
     }
 
     /** Queues a single attachment (given its bytes) for an existing entity; the bytes are saved to disk. */
@@ -142,36 +174,46 @@ class UploadQueueManager(
     }
 
     /**
-     * Replays everything for the active collection that can be sent now. Each op that succeeds is
-     * removed (and its photos deleted); one that fails against a reachable server is marked FAILED
-     * with its error and left for the user to retry or remove, so a single bad op can't wedge the
-     * queue. If the server drops mid-drain, the pass stops and the rest stay pending.
+     * Drops every op queued against a saved server, with its photo copies. Used when that server is
+     * deleted: its writes can never be sent anywhere else.
+     */
+    suspend fun removeForServer(serverId: String) {
+        if (serverId.isBlank()) return
+        dao.forServer(serverId).forEach { row ->
+            deletePhotos(toDomain(row))
+            dao.delete(row.id)
+        }
+    }
+
+    /**
+     * Replays everything for the active server and collection that can be sent now. Each op that
+     * succeeds is removed (and its photos deleted); one that fails against a reachable server is
+     * marked FAILED with its error and retried on the next drain (or removed by the user), so a single
+     * bad op can't wedge the queue. If the server drops mid-drain, the pass stops and the rest stay
+     * pending.
      */
     suspend fun drain() {
         if (!online() || !drainLock.tryLock()) return
         try {
+            val server = activeServer()
             val tenant = activeTenant()
             var uploaded = 0
             var failed = 0
             for (row in dao.getAll()) {
+                // Stop between ops if the drain was cancelled; an op already started finishes below.
+                currentCoroutineContext().ensureActive()
                 if (!online()) break
-                if (row.tenant.orEmpty() != tenant) continue
-                val op = toDomain(row)
-                val result = replay(op)
-                if (result.isSuccess) {
-                    deletePhotos(op)
-                    dao.delete(op.id)
-                    uploaded++
-                } else {
-                    dao.upsert(
-                        row.copy(
-                            attempts = row.attempts + 1,
-                            lastError = result.exceptionOrNull()?.message ?: "Upload failed.",
-                            status = QueuedOp.Status.FAILED.name,
-                        ),
-                    )
-                    failed++
+                if (!belongsTo(toDomain(row), server, tenant)) continue
+                val ok = withContext(NonCancellable) {
+                    try {
+                        process(row)
+                    } catch (e: Exception) {
+                        // E.g. a payload that no longer decodes: record it rather than crash the drain.
+                        markFailed(row, e)
+                        false
+                    }
                 }
+                if (ok) uploaded++ else failed++
             }
             if ((uploaded > 0 || failed > 0) && notificationsEnabled()) {
                 notifier.notifyDrainComplete(uploaded = uploaded, failed = failed)
@@ -181,14 +223,44 @@ class UploadQueueManager(
         }
     }
 
+    /** Replays one queued op, recording the outcome. Returns true when it fully succeeded. */
+    private suspend fun process(row: QueuedOpEntity): Boolean {
+        val op = toDomain(row)
+        return when (op.kind) {
+            OpKind.CREATE_ENTITY -> createEntity(row, op)
+            OpKind.UPLOAD_ATTACHMENT -> uploadFiles(row, op)
+            else -> finish(row, replay(op))
+        }
+    }
+
+    /** Removes a succeeded op (and its photos), or marks a failed one. Returns whether it succeeded. */
+    private suspend fun finish(row: QueuedOpEntity, result: Result<*>): Boolean {
+        if (result.isSuccess) {
+            deletePhotos(toDomain(row))
+            dao.delete(row.id)
+            return true
+        }
+        markFailed(row, result.exceptionOrNull())
+        return false
+    }
+
+    private suspend fun markFailed(row: QueuedOpEntity, error: Throwable?) {
+        dao.upsert(
+            row.copy(
+                attempts = row.attempts + 1,
+                lastError = error?.message ?: "Upload failed.",
+                status = QueuedOp.Status.FAILED.name,
+            ),
+        )
+    }
+
+    /** The single-request ops. Creates and file uploads are multi-step and handled separately. */
     private suspend fun replay(op: QueuedOp): Result<Unit> = when (op.kind) {
-        OpKind.CREATE_ENTITY -> createEntityWithPhotos(op)
         OpKind.UPDATE_ENTITY ->
             repository.updateEntity(op.targetId.orEmpty(), decode(op.payloadJson, EntityUpdate::class.java)).map {}
         OpKind.PATCH_ENTITY ->
             repository.patchEntity(op.targetId.orEmpty(), decode(op.payloadJson, EntityPatch::class.java)).map {}
         OpKind.DELETE_ENTITY -> repository.deleteEntity(op.targetId.orEmpty())
-        OpKind.UPLOAD_ATTACHMENT -> uploadAttachment(op)
         OpKind.DELETE_ATTACHMENT -> {
             val ref = decode(op.payloadJson, AttachmentRef::class.java)
             repository.deleteAttachment(ref.entityId, ref.attachmentId)
@@ -211,14 +283,20 @@ class UploadQueueManager(
         OpKind.UPDATE_MAINTENANCE ->
             repository.updateMaintenance(op.targetId.orEmpty(), decode(op.payloadJson, MaintenanceEntryRequest::class.java))
         OpKind.DELETE_MAINTENANCE -> repository.deleteMaintenance(op.targetId.orEmpty())
+        OpKind.CREATE_ENTITY, OpKind.UPLOAD_ATTACHMENT ->
+            Result.failure(IllegalStateException("${op.kind} is not a single-request op."))
     }
 
     /**
      * Recreates the entity from the queued [EntityUpdate]: a create carries the fields the create
      * endpoint accepts, then a follow-up update applies the rest, then each photo is uploaded (the
      * first as the primary image). Mirrors the online new-item path so nothing entered offline is lost.
+     *
+     * As soon as the create succeeds, this op is rewritten in place as an update aimed at the new id,
+     * plus a separate photo-upload op, in one transaction. A later failure then retries only those
+     * follow-up steps; it never creates the entity a second time.
      */
-    private suspend fun createEntityWithPhotos(op: QueuedOp): Result<Unit> {
+    private suspend fun createEntity(row: QueuedOpEntity, op: QueuedOp): Boolean {
         val update = decode(op.payloadJson, EntityUpdate::class.java)
         val create = EntityCreate(
             name = update.name,
@@ -230,46 +308,96 @@ class UploadQueueManager(
             manufacturer = update.manufacturer,
             modelNumber = update.modelNumber,
         )
-        val entity = repository.createEntity(create).getOrElse { return Result.failure(it) }
-        val id = entity.id ?: return Result.success(Unit)
-        repository.updateEntity(id, update.copy(id = id)).onFailure { return Result.failure(it) }
-        var firstError: Throwable? = null
-        op.photoPaths.forEachIndexed { index, path ->
-            val file = File(path)
-            val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@forEachIndexed
-            repository.uploadAttachment(
-                entityId = id,
-                fileName = file.name,
-                mimeType = "image/jpeg",
-                bytes = bytes,
-                type = "photo",
-                primary = index == 0,
-            ).onFailure { if (firstError == null) firstError = it }
+        val entity = repository.createEntity(create).getOrElse { return finish(row, Result.failure<Unit>(it)) }
+        val id = entity.id ?: return finish(row, Result.success(Unit))
+
+        val fullUpdate = update.copy(id = id)
+        val updateRow = row.copy(
+            kind = OpKind.UPDATE_ENTITY.name,
+            targetId = id,
+            payloadJson = encode(fullUpdate),
+            photoPathsJson = null,
+        )
+        val photoRow = row.photoPathsJson?.takeIf { op.photoPaths.isNotEmpty() }?.let { paths ->
+            row.copy(
+                id = UUID.randomUUID().toString(),
+                kind = OpKind.UPLOAD_ATTACHMENT.name,
+                targetId = id,
+                payloadJson = encode(AttachmentUploadPayload(type = "photo", primaryFirst = true)),
+                photoPathsJson = paths,
+                label = "Photos for ${update.name}",
+            )
         }
-        return firstError?.let { Result.failure(it) } ?: Result.success(Unit)
+        dao.upsertAll(listOfNotNull(updateRow, photoRow))
+
+        val updated = finish(updateRow, repository.updateEntity(id, fullUpdate))
+        val photosUploaded = photoRow?.let { uploadFiles(it, toDomain(it)) } ?: true
+        return updated && photosUploaded
     }
 
-    /** Uploads each queued file to the target entity, deriving name/type per file when not pinned. */
-    private suspend fun uploadAttachment(op: QueuedOp): Result<Unit> {
-        if (op.photoPaths.isEmpty()) return Result.failure(IllegalStateException("The queued file is missing."))
-        val payload = decode(op.payloadJson, AttachmentUploadPayload::class.java)
+    /**
+     * Uploads each queued file to the target entity, deriving name/type per file when not pinned.
+     * Each file is deleted and dropped from the op as soon as it uploads, so a retry only sends the
+     * files that are still outstanding. A file that has gone missing from disk can never upload, so it
+     * is dropped (and reported) rather than failing the op forever.
+     */
+    private suspend fun uploadFiles(row: QueuedOpEntity, op: QueuedOp): Boolean {
+        if (op.photoPaths.isEmpty()) {
+            return finish(row, Result.failure<Unit>(IllegalStateException("The queued file is missing.")))
+        }
+        var payload = decode(op.payloadJson, AttachmentUploadPayload::class.java)
+        val remaining = op.photoPaths.toMutableList()
+        var current = row
         var firstError: Throwable? = null
-        op.photoPaths.forEach { path ->
+
+        fun snapshot(): QueuedOpEntity = current.copy(
+            payloadJson = encode(payload),
+            photoPathsJson = remaining.takeIf { it.isNotEmpty() }?.let { pathsAdapter.toJson(it) },
+        )
+
+        for (path in op.photoPaths) {
             val file = File(path)
             val bytes = runCatching { file.readBytes() }.getOrNull()
             if (bytes == null) {
+                if (!file.exists()) remaining -= path
                 if (firstError == null) firstError = IllegalStateException("Couldn't read a queued file.")
-                return@forEach
+                continue
             }
-            repository.uploadAttachment(
+            val result = repository.uploadAttachment(
                 entityId = op.targetId.orEmpty(),
                 fileName = payload.fileName ?: file.name,
                 mimeType = payload.mimeType ?: "image/jpeg",
                 bytes = bytes,
                 type = payload.type,
-            ).onFailure { if (firstError == null) firstError = it }
+                primary = payload.primaryFirst,
+            )
+            if (result.isSuccess) {
+                runCatching { file.delete() }
+                remaining -= path
+                if (payload.primaryFirst) payload = payload.copy(primaryFirst = false)
+                current = snapshot()
+                if (remaining.isNotEmpty()) dao.upsert(current)
+            } else if (firstError == null) {
+                firstError = result.exceptionOrNull()
+            }
         }
-        return firstError?.let { Result.failure(it) } ?: Result.success(Unit)
+
+        val error = firstError
+        return when {
+            error == null -> {
+                dao.delete(row.id)
+                true
+            }
+            remaining.isEmpty() -> {
+                // Everything that could upload did; only missing files were left behind.
+                dao.delete(row.id)
+                false
+            }
+            else -> {
+                markFailed(snapshot(), error)
+                false
+            }
+        }
     }
 
     // ---- persistence + mapping ----
@@ -296,6 +424,7 @@ class UploadQueueManager(
                 attempts = 0,
                 lastError = null,
                 status = QueuedOp.Status.PENDING.name,
+                serverId = activeServer().ifBlank { null },
             ),
         )
     }
@@ -327,6 +456,7 @@ class UploadQueueManager(
         id = e.id,
         kind = runCatching { OpKind.valueOf(e.kind) }.getOrDefault(OpKind.UPDATE_ENTITY),
         tenant = e.tenant,
+        serverId = e.serverId,
         payloadJson = e.payloadJson,
         targetId = e.targetId,
         photoPaths = e.photoPathsJson?.let { runCatching { pathsAdapter.fromJson(it) }.getOrNull() }.orEmpty(),

@@ -111,6 +111,7 @@ object Graph {
             queueDir = File(app.filesDir, "upload_queue"),
             serverStatus = serverStatus,
             isOnline = networkMonitor::isOnline,
+            activeServer = { settingsRepository.config.first().serverId },
             activeTenant = { settingsRepository.config.first().activeGroupId },
             notificationsEnabled = { settingsRepository.config.first().queueUploadNotifications },
             notifier = QueueNotifier(app),

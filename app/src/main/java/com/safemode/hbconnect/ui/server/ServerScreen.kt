@@ -308,8 +308,9 @@ fun ServerScreen(viewModel: ServerViewModel = viewModel()) {
                 title = { Text("Remove this server?") },
                 text = {
                     Text(
-                        "Remove this server connection from the app? Its saved credentials will be " +
-                            "deleted from this device.",
+                        "Remove this server connection from the app? Its saved credentials, offline " +
+                            "copy, and any changes still waiting to upload to it will be deleted " +
+                            "from this device.",
                     )
                 },
                 confirmButton = {

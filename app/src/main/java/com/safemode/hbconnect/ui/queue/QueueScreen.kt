@@ -50,6 +50,7 @@ import java.util.Locale
 @Composable
 fun QueueScreen(viewModel: QueueViewModel = viewModel()) {
     val ops by viewModel.ops.collectAsStateWithLifecycle()
+    val elsewhere by viewModel.elsewhere.collectAsStateWithLifecycle()
     val online by viewModel.online.collectAsStateWithLifecycle()
 
     if (ops.isEmpty()) {
@@ -73,7 +74,7 @@ fun QueueScreen(viewModel: QueueViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(ops, key = { it.id }) { op ->
-                QueuedOpCard(op = op, onRemove = { viewModel.remove(op.id) })
+                QueuedOpCard(op = op, elsewhere = op.id in elsewhere, onRemove = { viewModel.remove(op.id) })
             }
         }
     }
@@ -110,8 +111,8 @@ private fun StatusHeader(online: Boolean, count: Int, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun QueuedOpCard(op: QueuedOp, onRemove: () -> Unit) {
-    val failed = op.status == QueuedOp.Status.FAILED
+private fun QueuedOpCard(op: QueuedOp, elsewhere: Boolean, onRemove: () -> Unit) {
+    val failed = op.status == QueuedOp.Status.FAILED && !elsewhere
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -123,7 +124,7 @@ private fun QueuedOpCard(op: QueuedOp, onRemove: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = statusLine(op, failed),
+                        text = statusLine(op, failed, elsewhere),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -164,7 +165,8 @@ private fun QueuedOpCard(op: QueuedOp, onRemove: () -> Unit) {
     }
 }
 
-private fun statusLine(op: QueuedOp, failed: Boolean): String = when {
+private fun statusLine(op: QueuedOp, failed: Boolean, elsewhere: Boolean): String = when {
+    elsewhere -> "Saved for another server or collection - uploads when you switch back to it"
     failed -> op.lastError?.takeIf { it.isNotBlank() }?.let { "Failed - $it" } ?: "Failed - will retry"
     else -> "Waiting to upload"
 }

@@ -7,6 +7,7 @@ import com.safemode.hbconnect.data.queue.QueuedOp
 import com.safemode.hbconnect.data.remote.ServerReachability
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -21,6 +22,14 @@ class QueueViewModel : ViewModel() {
 
     val ops: StateFlow<List<QueuedOp>> = queue.queue
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Ids of ops saved for a different server or collection than the active one. They stay queued
+     * but only upload once their own server and collection are active again.
+     */
+    val elsewhere: StateFlow<Set<String>> = combine(queue.queue, Graph.settingsRepository.config) { ops, cfg ->
+        ops.filterNot { queue.belongsTo(it, cfg.serverId, cfg.activeGroupId) }.map { it.id }.toSet()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     val online: StateFlow<Boolean> = Graph.serverStatus.state
         .map { it == ServerReachability.REACHABLE }

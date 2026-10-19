@@ -45,6 +45,11 @@ enum class ItemSortOrder(val label: String) {
  * Either way it is stored encrypted (see [KeystoreCrypto]).
  */
 data class ConnectionConfig(
+    /**
+     * Id of the active saved server profile (blank when none is saved). Read-only here: it scopes the
+     * offline queue and cache to one server, and [SettingsRepository.save] never writes it back.
+     */
+    val serverId: String = "",
     val scheme: String = "https",
     val host: String = "",
     val port: String = "",

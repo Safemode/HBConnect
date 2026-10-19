@@ -86,17 +86,29 @@ class HomeboxRepository(
     private val summaryAdapter = cacheMoshi.adapter(EntitySummary::class.java)
     private val detailAdapter = cacheMoshi.adapter(EntityOut::class.java)
 
+    /** The saved server profile the cache rows belong to. */
+    private fun cacheServer(): String = apiProvider.currentConfig().serverId
+
     /** The collection the cache rows belong to (blank = the server's default group). */
     private fun cacheTenant(): String = apiProvider.currentConfig().activeGroupId
 
-    /** Upserts fetched entities into the local cache so the lists and search keep working offline. */
-    private suspend fun cacheEntities(entities: List<EntitySummary>) {
+    /**
+     * Upserts fetched entities into the local cache so the lists and search keep working offline.
+     * [server] and [tenant] default to the active ones; a caller that fetched over a longer span
+     * (the background sync) passes the scope captured when it started, so a server or collection
+     * switch mid-fetch can't file rows under the wrong one.
+     */
+    private suspend fun cacheEntities(
+        entities: List<EntitySummary>,
+        server: String = cacheServer(),
+        tenant: String = cacheTenant(),
+    ) {
         val dao = entityCache ?: return
-        val tenant = cacheTenant()
         val rows = entities.mapNotNull { s ->
             val id = s.id ?: return@mapNotNull null
             CachedEntity(
                 id = id,
+                serverId = server,
                 tenant = tenant,
                 isLocation = s.isLocation,
                 name = s.displayName,
@@ -124,19 +136,19 @@ class HomeboxRepository(
 
     private suspend fun cachedChildren(parentId: String, includeArchived: Boolean): List<EntitySummary> {
         val dao = entityCache ?: return emptyList()
-        return dao.childrenOf(cacheTenant(), parentId, includeArchived)
+        return dao.childrenOf(cacheServer(), cacheTenant(), parentId, includeArchived)
             .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
     }
 
     private suspend fun cachedList(isLocation: Boolean, includeArchived: Boolean): List<EntitySummary> {
         val dao = entityCache ?: return emptyList()
-        return dao.list(cacheTenant(), isLocation, includeArchived)
+        return dao.list(cacheServer(), cacheTenant(), isLocation, includeArchived)
             .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
     }
 
     private suspend fun cachedSearch(query: String, includeArchived: Boolean, limit: Int): List<EntitySummary> {
         val dao = entityCache ?: return emptyList()
-        return dao.search(cacheTenant(), query, includeArchived, limit)
+        return dao.search(cacheServer(), cacheTenant(), query, includeArchived, limit)
             .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
     }
 
@@ -533,6 +545,8 @@ class HomeboxRepository(
      */
     suspend fun syncOfflineCache(onEntitySynced: suspend (EntitySummary) -> Unit = {}) {
         val details = detailCache ?: return
+        val server = cacheServer()
+        val tenant = cacheTenant()
         val all = ArrayList<EntitySummary>()
         var page = 1
         while (page <= 200) {
@@ -548,7 +562,9 @@ class HomeboxRepository(
         call { it.getEntities(pageSize = 500, isLocation = true, includeArchived = true) }
             .getOrNull()?.items?.let { all += it }
         if (all.isEmpty()) return
-        cacheEntities(all)
+        // The server or collection changed while paging: the rows may be a mix, so don't keep them.
+        if (cacheServer() != server || cacheTenant() != tenant) return
+        cacheEntities(all, server, tenant)
         for (summary in all) {
             val id = summary.id ?: continue
             val stamp = details.stamp(id)
@@ -814,6 +830,11 @@ class HomeboxRepository(
 
     suspend fun deleteMaintenance(id: String): Result<Unit> =
         callUnit { it.deleteMaintenance(id) }
+
+    /** Drops the offline inventory cached for a saved server (e.g. after that server is deleted). */
+    suspend fun clearCachedServer(serverId: String) {
+        runCatching { entityCache?.clearServer(serverId) }
+    }
 
     /** Clears the saved session so the user returns to a disconnected state. */
     suspend fun clearSession() {

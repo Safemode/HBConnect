@@ -43,6 +43,29 @@ data class ItemForm(
 )
 
 /**
+ * Parses a typed price, accepting "." or "," as the decimal separator (many locales' keyboards only
+ * offer a comma). When both appear, the last one is the decimal separator and the other groups
+ * thousands, so "1,234.56" and "1.234,56" both read as 1234.56. A single comma followed by exactly
+ * three digits ("1,234") is read as a thousands separator; otherwise it is the decimal ("12,50").
+ * Returns null for blank or non-numeric input.
+ */
+internal fun parsePrice(raw: String): Double? {
+    val s = raw.trim()
+    if (s.isEmpty()) return null
+    val lastDot = s.lastIndexOf('.')
+    val lastComma = s.lastIndexOf(',')
+    val normalized = when {
+        lastDot >= 0 && lastComma >= 0 ->
+            if (lastComma > lastDot) s.replace(".", "").replace(',', '.') else s.replace(",", "")
+        lastComma >= 0 ->
+            if (s.count { it == ',' } == 1 && s.length - lastComma - 1 != 3) s.replace(',', '.')
+            else s.replace(",", "")
+        else -> s
+    }
+    return normalized.toDoubleOrNull()
+}
+
+/**
  * In-memory draft of the generic "New item" form (the bottom-bar Add). It outlives the form's
  * back-stack entry, so leaving the form - switching tabs, pressing back - keeps what was typed, and
  * reopening Add restores it. A successful save clears it. Edits and "add item here" (preset parent)
@@ -214,32 +237,62 @@ class ItemFormViewModel(
         if (usesDraft) ItemDraftStore.photoPaths = _photos.value
     }
 
-    /** Uploads the pending photos to entity [id]; the first becomes primary when it has no image. */
-    private suspend fun uploadPendingPhotos(id: String): String? {
+    /** True when the loaded/created entity already has a primary image. */
+    private fun hasImage(): Boolean =
+        original?.imageId?.isNotBlank() == true || original?.thumbnailId?.isNotBlank() == true
+
+    /**
+     * Uploads the pending photos to entity [id]; the first one that uploads becomes primary when the
+     * item has no image yet. A photo that fails to upload is handed to the upload queue (which keeps
+     * its own copy and retries it) rather than deleted, so it is never lost. Returns a warning for the
+     * caller to show, or null when every photo went up.
+     */
+    private suspend fun uploadPendingPhotos(id: String, itemName: String): String? {
         val paths = _photos.value
         if (paths.isEmpty()) return null
-        val hasImage = original?.imageId?.isNotBlank() == true || original?.thumbnailId?.isNotBlank() == true
+        var primaryPending = !hasImage()
+        var unreadable = 0
         var firstError: String? = null
-        paths.forEachIndexed { index, path ->
+        val failed = mutableListOf<String>()
+        paths.forEach { path ->
             val file = File(path)
             val bytes = runCatching { file.readBytes() }.getOrNull()
             if (bytes == null) {
-                if (firstError == null) firstError = "a photo couldn't be read"
-                return@forEachIndexed
+                unreadable++
+                return@forEach
             }
-            repository.uploadAttachment(
+            val result = repository.uploadAttachment(
                 entityId = id,
                 fileName = file.name,
                 mimeType = "image/jpeg",
                 bytes = bytes,
                 type = "photo",
-                primary = !hasImage && index == 0,
-            ).onFailure { if (firstError == null) firstError = it.message }
-            runCatching { file.delete() }
+                primary = primaryPending,
+            )
+            if (result.isSuccess) {
+                primaryPending = false
+                runCatching { file.delete() }
+            } else {
+                if (firstError == null) firstError = result.exceptionOrNull()?.message
+                failed += path
+            }
+        }
+        if (failed.isNotEmpty()) {
+            Graph.uploadQueue.enqueueUploadPhotos(id, failed, "Photos for $itemName", primaryFirst = primaryPending)
+            failed.forEach { runCatching { File(it).delete() } }
         }
         _photos.value = emptyList()
         if (usesDraft) ItemDraftStore.photoPaths = emptyList()
-        return firstError
+        return when {
+            failed.isNotEmpty() -> {
+                val one = failed.size == 1
+                val subject = if (one) "a photo" else "${failed.size} photos"
+                val reason = firstError?.let { " ($it)" }.orEmpty()
+                "Saved, but $subject didn't upload$reason. ${if (one) "It" else "They"} will retry from the upload queue."
+            }
+            unreadable > 0 -> "Saved, but a photo couldn't be read."
+            else -> null
+        }
     }
 
     /** Looks up a scanned barcode; [onResult] gets the candidate products, or an error message. */
@@ -311,6 +364,10 @@ class ItemFormViewModel(
             onResult(false, "Location is required.")
             return
         }
+        if (f.purchasePrice.isNotBlank() && parsePrice(f.purchasePrice) == null) {
+            onResult(false, "Price isn't a valid number.")
+            return
+        }
         viewModelScope.launch {
             _saving.value = true
             try {
@@ -329,7 +386,12 @@ class ItemFormViewModel(
                             label = "Edit item: ${f.name.trim()}",
                         )
                         if (_photos.value.isNotEmpty()) {
-                            Graph.uploadQueue.enqueueUploadPhotos(existingId, _photos.value, "Photos for ${f.name.trim()}")
+                            Graph.uploadQueue.enqueueUploadPhotos(
+                                existingId,
+                                _photos.value,
+                                "Photos for ${f.name.trim()}",
+                                primaryFirst = !hasImage(),
+                            )
                         }
                     } else {
                         Graph.uploadQueue.enqueueCreateEntity(buildUpdate(f, ""), _photos.value, "New item: ${f.name.trim()}")
@@ -378,9 +440,9 @@ class ItemFormViewModel(
                     error != null -> onResult(false, error) // created but detail update failed
                     else -> {
                         clearDraft()
-                        val photoError = uploadPendingPhotos(savedId)
+                        val photoWarning = uploadPendingPhotos(savedId, f.name.trim())
                         // Entity saved; a photo failure is reported but not treated as a hard failure.
-                        onResult(true, photoError?.let { "Saved, but a photo didn't upload: $it" })
+                        onResult(true, photoWarning)
                     }
                 }
             } finally {
@@ -419,7 +481,7 @@ class ItemFormViewModel(
             serialNumber = f.serialNumber.trim().ifBlank { null },
             notes = f.notes.trim().ifBlank { null },
             purchaseFrom = f.purchaseFrom.trim().ifBlank { null },
-            purchasePrice = f.purchasePrice.toDoubleOrNull(),
+            purchasePrice = parsePrice(f.purchasePrice),
             purchaseDate = f.purchaseDate.ifBlank { null },
             // Preserved from the loaded/created entity (not editable in this form).
             soldTo = prior?.soldTo,

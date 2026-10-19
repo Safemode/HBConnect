@@ -67,6 +67,7 @@ class SettingsRepository(private val context: Context) {
         val servers = readServers(prefs)
         val active = servers.firstOrNull { it.id == readActiveId(prefs, servers) } ?: ServerProfile(id = "")
         ConnectionConfig(
+            serverId = active.id,
             scheme = active.scheme,
             host = active.host,
             port = active.port,

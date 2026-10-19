@@ -1,5 +1,6 @@
 package com.safemode.hbconnect.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -9,12 +10,14 @@ import androidx.room.PrimaryKey
  * [com.safemode.hbconnect.data.remote.models.EntitySummary] so a row reconstructs faithfully.
  *
  * Rows are upserted whenever a server fetch succeeds and read back when the server is unreachable,
- * so the lists and search keep working offline from the last-synced copy. [tenant] scopes a row to
- * the collection it came from (blank means the server's default group).
+ * so the lists and search keep working offline from the last-synced copy. [serverId] (the saved
+ * server profile) and [tenant] (the collection, blank for the server's default group) scope a row to
+ * where it came from, so one server's inventory never shows up while another server is active.
  */
 @Entity(tableName = "cached_entity")
 data class CachedEntity(
     @PrimaryKey val id: String,
+    @ColumnInfo(defaultValue = "") val serverId: String,
     val tenant: String,
     val isLocation: Boolean,
     val name: String,
