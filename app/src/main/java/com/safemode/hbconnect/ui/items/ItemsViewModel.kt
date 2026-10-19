@@ -12,6 +12,7 @@ import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshOnLiveEvent
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,7 +66,7 @@ class ItemsViewModel : ViewModel() {
             combine(
                 _query.debounce(300).distinctUntilChanged(),
                 _showArchived,
-            ) { _, _ -> }.collect { reload(showLoading = true) }
+            ) { _, _ -> }.collect { startReload(showLoading = true) }
         }
         refreshWhenServerReachable { reloadSilently() }
         refreshOnLiveEvent(LiveEvent.ENTITY) { reloadSilently() }
@@ -80,19 +81,29 @@ class ItemsViewModel : ViewModel() {
     }
 
     fun load() {
-        viewModelScope.launch { reload(showLoading = true) }
+        startReload(showLoading = true)
     }
 
     fun reloadSilently() {
-        viewModelScope.launch { reload(showLoading = false) }
+        startReload(showLoading = false)
     }
 
     fun refresh() {
         viewModelScope.launch {
             _refreshing.value = true
-            reload(showLoading = false)
+            startReload(showLoading = false).join()
             _refreshing.value = false
         }
+    }
+
+    // The reload in flight. Live events, reconnects, typing and pull-to-refresh can each trigger one,
+    // so a new reload cancels the previous one: an older, slower response can't land after a newer
+    // one and show stale results.
+    private var loadJob: Job? = null
+
+    private fun startReload(showLoading: Boolean): Job {
+        loadJob?.cancel()
+        return viewModelScope.launch { reload(showLoading) }.also { loadJob = it }
     }
 
     /** Loads locations and tags for the bulk-edit dialogs (once per session). */
@@ -183,7 +194,7 @@ class ItemsViewModel : ViewModel() {
             }
             _applying.value = false
             clearSelection()
-            reload(showLoading = false)
+            startReload(showLoading = false)
             onResult(firstError == null, firstError)
         }
     }

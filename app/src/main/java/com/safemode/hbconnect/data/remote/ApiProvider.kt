@@ -1,5 +1,6 @@
 package com.safemode.hbconnect.data.remote
 
+import com.safemode.hbconnect.BuildConfig
 import com.safemode.hbconnect.data.settings.ConnectionConfig
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -143,8 +144,10 @@ class ApiProvider(
     }
 
     private fun buildClient(): OkHttpClient {
+        // Request lines (URLs with search terms and ids) go to Logcat only in debug builds; release
+        // builds keep just the in-app diagnostic log.
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
             redactHeader("Authorization")
         }
         return OkHttpClient.Builder()

@@ -121,14 +121,14 @@ class HomeboxRepository(
                 summaryJson = summaryAdapter.toJson(s),
             )
         }
-        if (rows.isNotEmpty()) runCatching { dao.upsertAll(rows) }
+        if (rows.isNotEmpty()) runCatchingCancellable { dao.upsertAll(rows) }
     }
 
     /** Stores an entity's full detail for offline detail screens. */
     private suspend fun cacheDetail(entity: EntityOut) {
         val dao = detailCache ?: return
         val id = entity.id ?: return
-        runCatching { dao.upsert(CachedDetail(id, entity.updatedAt.orEmpty(), detailAdapter.toJson(entity))) }
+        runCatchingCancellable { dao.upsert(CachedDetail(id, entity.updatedAt.orEmpty(), detailAdapter.toJson(entity))) }
     }
 
     /**
@@ -143,7 +143,7 @@ class HomeboxRepository(
         tenant: String,
         keep: Set<String>,
     ) {
-        runCatching {
+        runCatchingCancellable {
             val stale = entities.idsIn(server, tenant).filterNot { it in keep }
             stale.chunked(500).forEach { chunk ->
                 entities.deleteIds(chunk)
@@ -154,36 +154,36 @@ class HomeboxRepository(
 
     /** Drops one entity from the offline cache (after it was deleted). */
     private suspend fun uncache(id: String) {
-        runCatching { entityCache?.deleteIds(listOf(id)) }
-        runCatching { detailCache?.deleteIds(listOf(id)) }
+        runCatchingCancellable { entityCache?.deleteIds(listOf(id)) }
+        runCatchingCancellable { detailCache?.deleteIds(listOf(id)) }
     }
 
     private suspend fun cachedDetail(id: String): EntityOut? {
         val dao = detailCache ?: return null
         val json = dao.detail(id) ?: return null
-        return runCatching { detailAdapter.fromJson(json) }.getOrNull()
+        return runCatchingCancellable { detailAdapter.fromJson(json) }.getOrNull()
     }
 
     private suspend fun cachedChildren(parentId: String, includeArchived: Boolean): List<EntitySummary> {
         val dao = entityCache ?: return emptyList()
         return dao.childrenOf(cacheServer(), cacheTenant(), parentId, includeArchived)
-            .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
+            .mapNotNull { runCatchingCancellable { summaryAdapter.fromJson(it) }.getOrNull() }
     }
 
     private suspend fun cachedList(isLocation: Boolean, includeArchived: Boolean): List<EntitySummary> {
         val dao = entityCache ?: return emptyList()
         return dao.list(cacheServer(), cacheTenant(), isLocation, includeArchived)
-            .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
+            .mapNotNull { runCatchingCancellable { summaryAdapter.fromJson(it) }.getOrNull() }
     }
 
     private suspend fun cachedSearch(query: String, includeArchived: Boolean, limit: Int): List<EntitySummary> {
         val dao = entityCache ?: return emptyList()
         return dao.search(cacheServer(), cacheTenant(), query, includeArchived, limit)
-            .mapNotNull { runCatching { summaryAdapter.fromJson(it) }.getOrNull() }
+            .mapNotNull { runCatchingCancellable { summaryAdapter.fromJson(it) }.getOrNull() }
     }
 
     private suspend fun <T> call(block: suspend (HomeboxApi) -> Response<T>): Result<T> =
-        runCatching {
+        runCatchingCancellable {
             val response = block(api())
             if (response.isSuccessful) {
                 response.body() ?: throw IllegalStateException("Empty response from server.")
@@ -193,7 +193,7 @@ class HomeboxRepository(
         }
 
     private suspend fun callUnit(block: suspend (HomeboxApi) -> Response<*>): Result<Unit> =
-        runCatching {
+        runCatchingCancellable {
             val response = block(api())
             if (response.isSuccessful) Unit
             else throw errorFor(response)
@@ -264,7 +264,7 @@ class HomeboxRepository(
      * Grouping by manufacturer relies on that field being present on the entity list rows; items
      * without a manufacturer simply don't contribute to that breakdown.
      */
-    suspend fun valueInsights(): Result<ValueInsights> = runCatching {
+    suspend fun valueInsights(): Result<ValueInsights> = runCatchingCancellable {
         val items = allItems(includeArchived = false).getOrThrow()
         val locTotal = LinkedHashMap<String, Double>()
         val locName = HashMap<String, String>()
@@ -340,7 +340,7 @@ class HomeboxRepository(
         pageSize: Int = PAGE_SIZE,
         maxPages: Int = MAX_PAGES,
         fetch: suspend (HomeboxApi, Int, Int) -> Response<EntityListResult>,
-    ): Result<List<EntitySummary>> = runCatching {
+    ): Result<List<EntitySummary>> = runCatchingCancellable {
         val acc = ArrayList<EntitySummary>()
         var page = 1
         while (page <= maxPages) {
@@ -499,7 +499,7 @@ class HomeboxRepository(
         val orderBy = filters.sort.orderBy
         val orderDirection = filters.sort.orderDirection
 
-        val result = runCatching {
+        val result = runCatchingCancellable {
             coroutineScope {
                 val items = async {
                     call {
@@ -634,7 +634,7 @@ class HomeboxRepository(
                 val entity = call { it.getEntity(id) }.getOrNull()
                 if (entity != null) {
                     cacheDetail(entity)
-                    runCatching { onEntitySynced(summary) }
+                    runCatchingCancellable { onEntitySynced(summary) }
                 }
             }
         }
@@ -749,7 +749,7 @@ class HomeboxRepository(
      * partial file behind.
      */
     suspend fun downloadAttachmentTo(entityId: String, attachmentId: String, dest: File): Result<Unit> =
-        runCatching {
+        runCatchingCancellable {
             val url = attachmentUrl(entityId, attachmentId)
             val client = apiProvider.authenticatedImageClient()
             withContext(Dispatchers.IO) {
@@ -791,7 +791,7 @@ class HomeboxRepository(
 
     /** Downloads the server-rendered label PNG using the authenticated client (off the main thread). */
     suspend fun downloadLabel(entityId: String, isLocation: Boolean): Result<ByteArray> =
-        runCatching {
+        runCatchingCancellable {
             val url = labelUrl(entityId, isLocation)
             val client = apiProvider.authenticatedImageClient()
             withContext(Dispatchers.IO) {
@@ -837,7 +837,7 @@ class HomeboxRepository(
 
     // ---- CSV import / export ----
     /** Downloads the group's entities as CSV bytes (text/csv). */
-    suspend fun exportCsv(): Result<ByteArray> = runCatching {
+    suspend fun exportCsv(): Result<ByteArray> = runCatchingCancellable {
         val response = api().exportEntities()
         if (response.isSuccessful) {
             (response.body() ?: throw IllegalStateException("Empty response from server."))
@@ -854,7 +854,7 @@ class HomeboxRepository(
     }
 
     /** Downloads the bill of materials for the active collection as CSV bytes (text/csv). */
-    suspend fun billOfMaterialsCsv(): Result<ByteArray> = runCatching {
+    suspend fun billOfMaterialsCsv(): Result<ByteArray> = runCatchingCancellable {
         val response = api().billOfMaterials()
         if (response.isSuccessful) {
             (response.body() ?: throw IllegalStateException("Empty response from server."))
@@ -879,7 +879,7 @@ class HomeboxRepository(
     suspend fun deleteExport(id: String): Result<Unit> = callUnit { it.deleteExport(id) }
 
     /** Streams a completed backup's zip bytes to [sink] (a stream the caller opens and closes). */
-    suspend fun downloadExportTo(id: String, sink: OutputStream): Result<Unit> = runCatching {
+    suspend fun downloadExportTo(id: String, sink: OutputStream): Result<Unit> = runCatchingCancellable {
         withContext(Dispatchers.IO) {
             val response = api().downloadExport(id)
             if (!response.isSuccessful) throw mapError(response.code(), response.errorBody()?.string())
@@ -917,14 +917,14 @@ class HomeboxRepository(
 
     /** Drops the offline inventory cached for a saved server (e.g. after that server is deleted). */
     suspend fun clearCachedServer(serverId: String) {
-        runCatching { entityCache?.clearServer(serverId) }
+        runCatchingCancellable { entityCache?.clearServer(serverId) }
     }
 
     /** Clears the saved session so the user returns to a disconnected state. */
     suspend fun clearSession() {
         val cfg = apiProvider.currentConfig()
         // Best-effort server-side logout for token sessions; ignore failures.
-        runCatching { if (cfg.token.isNotBlank()) logout() }
+        runCatchingCancellable { if (cfg.token.isNotBlank()) logout() }
     }
 
     private companion object {

@@ -162,6 +162,14 @@ fun ServerScreen(viewModel: ServerViewModel = viewModel()) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (form.scheme == "http" && form.host.isNotBlank() && !isLocalNetworkHost(form.host)) {
+                        Text(
+                            text = "HTTP sends your password and token unencrypted. Use HTTPS unless " +
+                                "this server is only reachable on your own network.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
 

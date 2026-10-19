@@ -271,13 +271,20 @@ fun ItemFormScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    // Location is required, so there's no "(None)" choice. With no locations to pick
+                    // from (none created yet, or offline with nothing cached), say why the item can't
+                    // be saved instead of leaving an empty list.
                     OptionDropdownField(
                         label = "Location *",
-                        options = listOf(Option("(None)", null)) +
-                            locations.map { Option(it.displayName, it.id) },
+                        options = locations.map { Option(it.displayName, it.id) },
                         selectedValue = form.parentId,
                         onSelect = { opt -> viewModel.update { it.copy(parentId = opt.value) } },
                         isError = form.parentId.isNullOrBlank(),
+                        supportingText = if (locations.isEmpty()) {
+                            "No locations available. Create one under Locations to save items."
+                        } else {
+                            null
+                        },
                     )
 
                     val selectedTagNames = tags

@@ -154,6 +154,13 @@ class ItemFormViewModel(
                 }
                 original = entity
                 _form.value = formFrom(entity)
+                // An item can sit inside something that isn't in the location list (another item, or
+                // an archived location). Add its parent as an option so the field shows where it is
+                // instead of looking empty.
+                val parent = entity.parent
+                if (parent?.id != null && _locations.value.none { it.id == parent.id }) {
+                    _locations.value = _locations.value + parent
+                }
             } else {
                 val restored = if (usesDraft) ItemDraftStore.draft else null
                 // Restore a saved draft, otherwise default the entity type to the first item type.
@@ -503,7 +510,9 @@ class ItemFormViewModel(
             description = f.description.trim().ifBlank { null },
             entityTypeId = f.entityTypeId,
             parentId = f.parentId,
-            quantity = f.quantity.toIntOrNull(),
+            // A cleared quantity keeps the current one rather than being sent as missing (which the
+            // server stores as 0).
+            quantity = f.quantity.toIntOrNull() ?: prior?.quantity?.toInt() ?: 1,
             insured = f.insured,
             archived = f.archived,
             lifetimeWarranty = f.lifetimeWarranty,

@@ -17,18 +17,19 @@ import com.safemode.hbconnect.data.settings.ConnectionConfig
 import com.safemode.hbconnect.data.settings.ThemePreference
 import com.safemode.hbconnect.ui.HBConnectRoot
 import com.safemode.hbconnect.ui.theme.HBConnectTheme
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Read the persisted settings synchronously once (a single small DataStore file) so the
+        // Read the appearance settings synchronously once (a single small DataStore file) so the
         // very first frame - and the window background behind it - already match the saved theme.
         // Without this the first frame defaults to SYSTEM and the window stays the OS day/night
-        // colour, which flashes white when the in-app theme is dark but the device is not.
-        val initialConfig = runBlocking { Graph.settingsRepository.config.first() }
+        // colour, which flashes white when the in-app theme is dark but the device is not. Only
+        // the theme/accent keys are read, so no credential is decrypted on the main thread; the
+        // full config arrives through the flow below.
+        val initialConfig = runBlocking { Graph.settingsRepository.appearance() }
         handleDeepLink(intent)
 
         enableEdgeToEdge()

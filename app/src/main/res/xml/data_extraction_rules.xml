@@ -1,14 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Auto Backup / device-transfer rules (Android 12+). With no <exclude> entries the defaults apply:
-   the app's DataStore settings (theme, saved servers, preferences) are backed up and transferred.
-   This is intentional and safe: each server's token / API key is encrypted with a device-bound
-   Android Keystore key that is never backed up, so on a cloud restore to a different device the
-   stored token can't be decrypted. The saved servers themselves (label, address, username) are
-   stored unencrypted, so they carry over and the user just signs in again; the other preferences
-   carry over too.
+   Auto Backup / device-transfer rules (Android 12+). The app's DataStore settings (theme, saved
+   servers, preferences) are backed up and transferred. This is intentional and safe: each server's
+   token / API key is encrypted with a device-bound Android Keystore key that is never backed up, so
+   on a cloud restore to a different device the stored token can't be decrypted. The saved servers
+   themselves (label, address, username) are stored unencrypted, so they carry over and the user
+   just signs in again; the other preferences carry over too.
+
+   Excluded: the local database (the offline copy of the inventory, with serial numbers, prices and
+   notes, plus the upload queue) and the queued photo files. The inventory is re-synced from the
+   server, so there's no reason to copy it to cloud backup, and replaying a stale upload queue on
+   another device later could re-apply old changes.
 -->
 <data-extraction-rules>
-    <cloud-backup />
-    <device-transfer />
+    <cloud-backup>
+        <exclude domain="database" path="hbconnect.db" />
+        <exclude domain="database" path="hbconnect.db-shm" />
+        <exclude domain="database" path="hbconnect.db-wal" />
+        <exclude domain="file" path="upload_queue/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="hbconnect.db" />
+        <exclude domain="database" path="hbconnect.db-shm" />
+        <exclude domain="database" path="hbconnect.db-wal" />
+        <exclude domain="file" path="upload_queue/" />
+    </device-transfer>
 </data-extraction-rules>

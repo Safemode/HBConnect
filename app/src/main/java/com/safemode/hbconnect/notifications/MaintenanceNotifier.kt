@@ -56,7 +56,11 @@ class MaintenanceNotifier(private val context: Context) {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .build()
 
-        NotificationManagerCompat.from(context).notify(notificationId, notification)
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+        } catch (_: SecurityException) {
+            // The notification permission was revoked between canNotify() and posting; skip it.
+        }
     }
 
     private fun duePhrase(due: LocalDate, today: LocalDate): String {

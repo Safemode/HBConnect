@@ -13,6 +13,7 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
@@ -101,6 +102,22 @@ class SettingsRepository(private val context: Context) {
                 .getOrDefault(MaintenanceLead.DUE_DAY),
             moreOrder = prefs[Keys.MORE_ORDER]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
             dashboardLayout = decodeDashboardLayout(prefs[Keys.DASHBOARD_LAYOUT]),
+        )
+    }
+
+    /**
+     * Just the appearance preferences (theme and accent) as a [ConnectionConfig], read without
+     * touching the saved servers. MainActivity reads this synchronously before its first frame, so it
+     * must not decrypt credentials (a Keystore call) on the main thread.
+     */
+    suspend fun appearance(): ConnectionConfig {
+        val prefs = context.dataStore.data.first()
+        return ConnectionConfig(
+            themePreference = runCatching { ThemePreference.valueOf(prefs[Keys.THEME] ?: "SYSTEM") }
+                .getOrDefault(ThemePreference.SYSTEM),
+            accent = runCatching { AccentPreset.valueOf(prefs[Keys.ACCENT] ?: "AUTO") }
+                .getOrDefault(AccentPreset.AUTO),
+            accentColor = prefs[Keys.ACCENT_COLOR] ?: 0xFF1565C0.toInt(),
         )
     }
 
