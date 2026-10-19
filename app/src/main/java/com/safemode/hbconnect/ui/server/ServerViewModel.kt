@@ -179,10 +179,26 @@ class ServerViewModel : ViewModel() {
                     }
                     AuthMode.LOGIN -> {
                         // Point the API provider at the host (no token yet) so login can be issued.
-                        Graph.apiProvider.updateConfig(form.baseConfig())
+                        // Built from the saved config so app-wide settings (cache size) don't change.
+                        val saved = settings.config.first()
+                        Graph.apiProvider.updateConfig(
+                            saved.copy(
+                                serverId = "",
+                                scheme = form.scheme,
+                                host = form.host.trim(),
+                                port = form.port,
+                                authMode = form.authMode,
+                                token = "",
+                                tokenExpiresAt = "",
+                                activeGroupId = "",
+                            ),
+                        )
                         val login = repository.login(form.username.trim(), form.password)
                         val issued = login.getOrNull()?.token
                         if (login.isFailure || issued.isNullOrBlank()) {
+                            // Point the app back at the saved connection; otherwise images, sync and
+                            // the upload queue would keep talking to the draft host with no token.
+                            Graph.apiProvider.updateConfig(saved)
                             _state.value = UiState.Error(
                                 login.exceptionOrNull()?.message ?: "Login failed. Check your username and password.",
                             )

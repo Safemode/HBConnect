@@ -7,12 +7,17 @@ import com.safemode.hbconnect.data.remote.models.ItemAttachment
 import com.safemode.hbconnect.data.queue.AttachmentRef
 import com.safemode.hbconnect.data.queue.OFFLINE_SAVED_MESSAGE
 import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.isUndelivered
 import com.safemode.hbconnect.data.queue.submitWrite
 import com.safemode.hbconnect.ui.common.UiState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * Backs the Attachments screen for one entity ([entityId]): lists its attachments and
@@ -44,22 +49,34 @@ class AttachmentsViewModel(private val entityId: String) : ViewModel() {
         }
     }
 
-    fun upload(fileName: String, mimeType: String?, bytes: ByteArray, onResult: (Boolean, String?) -> Unit) {
+    /**
+     * Uploads [file] (a local copy the screen made; this deletes it when done) as [fileName]. The
+     * file is streamed from disk. Offline, or if the connection drops before the server gets it, the
+     * file is copied into the upload queue instead.
+     */
+    fun upload(file: File, fileName: String, mimeType: String?, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             _busy.value = true
             val type = if (mimeType?.startsWith("image/") == true) "photo" else "attachment"
-            if (Graph.uploadQueue.online()) {
-                val result = repository.uploadAttachment(entityId, fileName, mimeType, bytes, type = type)
-                _busy.value = false
-                result.fold(
-                    onSuccess = { load(); onResult(true, null) },
-                    onFailure = { onResult(false, it.message) },
-                )
-            } else {
-                // Offline: stash the bytes in the outbox to upload on reconnect.
-                Graph.uploadQueue.enqueueUploadBytes(entityId, fileName, mimeType, type, bytes, "Upload $fileName")
-                _busy.value = false
+            try {
+                if (Graph.uploadQueue.online()) {
+                    val result = repository.uploadAttachment(entityId, file, fileName, mimeType, type = type)
+                    if (result.isSuccess) {
+                        load()
+                        onResult(true, null)
+                        return@launch
+                    }
+                    if (!isUndelivered(result.exceptionOrNull())) {
+                        onResult(false, result.exceptionOrNull()?.message)
+                        return@launch
+                    }
+                }
+                // Offline: stash the file in the outbox to upload on reconnect.
+                Graph.uploadQueue.enqueueUploadFile(entityId, file, fileName, mimeType, type, "Upload $fileName")
                 onResult(true, OFFLINE_SAVED_MESSAGE)
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { file.delete() }
+                _busy.value = false
             }
         }
     }
@@ -95,6 +112,7 @@ class AttachmentsViewModel(private val entityId: String) : ViewModel() {
 
     fun imageUrl(attachmentId: String): String = repository.attachmentUrl(entityId, attachmentId)
 
-    suspend fun download(attachmentId: String): Result<ByteArray> =
-        repository.downloadAttachment(entityId, attachmentId)
+    /** Downloads an attachment to [dest], streamed to disk. */
+    suspend fun downloadTo(attachmentId: String, dest: File): Result<Unit> =
+        repository.downloadAttachmentTo(entityId, attachmentId, dest)
 }

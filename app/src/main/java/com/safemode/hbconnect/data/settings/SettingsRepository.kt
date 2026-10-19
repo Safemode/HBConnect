@@ -19,10 +19,15 @@ import java.util.UUID
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "hbconnect_settings")
 
 /**
- * Persists app settings. Server connections are stored as a list of [ServerProfile]s (serialized to
- * an encrypted JSON blob via [KeystoreCrypto], since each carries a bearer token / API key) with one
+ * Persists app settings. Server connections are stored as a JSON list of [ServerProfile]s with one
  * marked active; the active profile plus the app-wide preferences form the effective
  * [ConnectionConfig] the rest of the app reads. App-wide preferences are stored as plain keys.
+ *
+ * Only each profile's token / API key is encrypted (via [KeystoreCrypto]); the rest of the profile
+ * (label, host, port, username) is plain. The Keystore key is device-bound and never backed up, so
+ * after a restore to another device - or if the Keystore briefly can't decrypt - the server list
+ * survives and only the credential is missing. A stored token that can't be decrypted is kept as-is
+ * on later writes (rather than replaced with a blank), so a temporary Keystore failure can't erase it.
  */
 class SettingsRepository(private val context: Context) {
 
@@ -42,7 +47,9 @@ class SettingsRepository(private val context: Context) {
         val MORE_ORDER = stringPreferencesKey("more_order")
         val DASHBOARD_LAYOUT = stringPreferencesKey("dashboard_layout")
 
-        // Servers.
+        // Servers. SERVERS is the current format; SERVERS_BLOB is the older one, read until the next
+        // write migrates it.
+        val SERVERS = stringPreferencesKey("servers")
         val SERVERS_BLOB = stringPreferencesKey("servers_blob")
         val ACTIVE_SERVER_ID = stringPreferencesKey("active_server_id")
 
@@ -184,7 +191,16 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    /** The stored profiles exactly as written (tokens still encrypted), or null when absent/corrupt. */
+    private fun readStoredServers(prefs: Preferences): List<ServerProfile>? {
+        val json = prefs[Keys.SERVERS]?.ifBlank { null } ?: return null
+        return runCatching { serversAdapter.fromJson(json) }.getOrNull()
+    }
+
     private fun readServers(prefs: Preferences): List<ServerProfile> {
+        readStoredServers(prefs)?.let { stored ->
+            return stored.map { it.copy(token = KeystoreCrypto.decrypt(it.token)) }
+        }
         val blob = prefs[Keys.SERVERS_BLOB]
         if (!blob.isNullOrBlank()) {
             val json = KeystoreCrypto.decrypt(blob)
@@ -222,7 +238,23 @@ class SettingsRepository(private val context: Context) {
     }
 
     private fun writeServers(prefs: MutablePreferences, servers: List<ServerProfile>) {
-        prefs[Keys.SERVERS_BLOB] = KeystoreCrypto.encrypt(serversAdapter.toJson(servers))
+        val previous = readStoredServers(prefs).orEmpty().associateBy({ it.id }, { it.token })
+        val stored = servers.map { profile ->
+            val oldCipher = previous[profile.id].orEmpty()
+            // A blank token whose stored ciphertext can't be decrypted means the Keystore failed to
+            // read it, not that the user cleared it (a deliberate sign-out had a readable token), so
+            // keep the ciphertext instead of erasing the credential.
+            val keepOld = profile.token.isBlank() && oldCipher.isNotBlank() &&
+                KeystoreCrypto.decrypt(oldCipher).isBlank()
+            profile.copy(token = if (keepOld) oldCipher else KeystoreCrypto.encrypt(profile.token))
+        }
+        prefs[Keys.SERVERS] = serversAdapter.toJson(stored)
+        // Drop the older whole-list blob once migrated, unless it couldn't be read (then leave it be
+        // rather than destroy data a later Keystore read might still recover).
+        val blob = prefs[Keys.SERVERS_BLOB]
+        if (blob != null && (blob.isBlank() || KeystoreCrypto.decrypt(blob).isNotBlank())) {
+            prefs.remove(Keys.SERVERS_BLOB)
+        }
     }
 
     private fun ConnectionConfig.toProfile(id: String) = ServerProfile(

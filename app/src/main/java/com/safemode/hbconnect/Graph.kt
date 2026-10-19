@@ -117,6 +117,9 @@ object Graph {
             notifier = QueueNotifier(app),
         )
 
+        // Clear out queue files no pending op still needs (best-effort, once per launch).
+        appScope.launch(Dispatchers.IO) { runCatching { uploadQueue.sweepOrphanFiles() } }
+
         // Keep the API provider's config in sync with saved settings.
         settingsRepository.config
             .onEach { apiProvider.updateConfig(it) }

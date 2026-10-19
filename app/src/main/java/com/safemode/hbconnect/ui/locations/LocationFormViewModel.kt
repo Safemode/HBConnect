@@ -3,6 +3,8 @@ package com.safemode.hbconnect.ui.locations
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.EntityEditPayload
+import com.safemode.hbconnect.data.toUpdate
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntitySummary
@@ -52,6 +54,9 @@ class LocationFormViewModel(
 
     private var original: EntityOut? = null
 
+    /** The form as first loaded when editing: the base the user's changes are measured against. */
+    private var loadedForm: LocationForm? = null
+
     init {
         viewModelScope.launch {
             val allLocations = repository.getLocations().getOrDefault(emptyList())
@@ -66,12 +71,14 @@ class LocationFormViewModel(
                     return@launch
                 }
                 original = entity
-                _form.value = LocationForm(
+                val loaded = LocationForm(
                     name = entity.name.orEmpty(),
                     description = entity.description.orEmpty(),
                     parentId = entity.parent?.id,
                     entityTypeId = entity.entityType?.id ?: locationTypeId,
                 )
+                loadedForm = loaded
+                _form.value = loaded
             } else {
                 _form.value = _form.value.copy(entityTypeId = locationTypeId)
             }
@@ -93,47 +100,42 @@ class LocationFormViewModel(
             _saving.value = true
             val done: (Boolean, String?) -> Unit = { ok, message -> _saving.value = false; onResult(ok, message) }
             if (isEdit) {
-                // The update endpoint replaces the whole entity, so carry through every field this
-                // form doesn't expose (tags, notes, archived, asset id, purchase/warranty/sold info,
-                // custom fields) from the loaded original, otherwise saving a name/parent change
-                // would wipe them. Dates are trimmed to yyyy-MM-dd the same way the item form does.
-                val prior = original
-                val update = EntityUpdate(
-                    id = locationId!!,
-                    name = f.name.trim(),
-                    description = f.description.trim().ifBlank { null },
-                    entityTypeId = f.entityTypeId,
-                    parentId = f.parentId,
-                    quantity = prior?.quantity?.toInt(),
-                    insured = prior?.insured,
-                    archived = prior?.archived,
-                    lifetimeWarranty = prior?.lifetimeWarranty,
-                    assetId = prior?.assetId,
-                    serialNumber = prior?.serialNumber,
-                    modelNumber = prior?.modelNumber,
-                    manufacturer = prior?.manufacturer,
-                    notes = prior?.notes,
-                    purchaseFrom = prior?.purchaseFrom,
-                    purchasePrice = prior?.purchasePrice,
-                    purchaseDate = prior?.purchaseDate?.substringBefore('T')?.ifBlank { null },
-                    soldTo = prior?.soldTo,
-                    soldPrice = prior?.soldPrice,
-                    soldDate = prior?.soldDate,
-                    soldNotes = prior?.soldNotes,
-                    warrantyDetails = prior?.warrantyDetails,
-                    warrantyExpires = prior?.warrantyExpires?.substringBefore('T')?.ifBlank { null },
+                // The update endpoint replaces the whole entity, so every field this form doesn't
+                // expose (tags, notes, archived, asset id, purchase/warranty/sold info, custom fields)
+                // is carried from the loaded original. The save is then merged onto the server's
+                // current version (see mergeEdit), so only the fields edited here change and edits
+                // made elsewhere meanwhile - including while this change waits offline - survive.
+                val id = locationId!!
+                val carried = original?.toUpdate() ?: EntityUpdate(id = id, name = "")
+                fun withForm(form: LocationForm) = carried.copy(
+                    id = id,
+                    name = form.name.trim(),
+                    description = form.description.trim().ifBlank { null },
+                    entityTypeId = form.entityTypeId,
+                    parentId = form.parentId,
                     syncChildEntityLocations = false,
-                    fields = prior?.fields,
-                    tagIds = prior?.tags?.mapNotNull { it.id },
                 )
-                Graph.uploadQueue.submitWrite(
-                    kind = OpKind.UPDATE_ENTITY,
-                    payload = update,
-                    targetId = locationId,
-                    label = "Edit location: ${update.name}",
-                    direct = { repository.updateEntity(locationId, update).map {} },
-                    onResult = done,
-                )
+                val update = withForm(f)
+                val base = loadedForm?.let(::withForm)
+                if (base != null) {
+                    Graph.uploadQueue.submitWrite(
+                        kind = OpKind.MERGE_ENTITY,
+                        payload = EntityEditPayload(base, update),
+                        targetId = id,
+                        label = "Edit location: ${update.name}",
+                        direct = { repository.mergeUpdateEntity(id, base, update).map {} },
+                        onResult = done,
+                    )
+                } else {
+                    Graph.uploadQueue.submitWrite(
+                        kind = OpKind.UPDATE_ENTITY,
+                        payload = update,
+                        targetId = id,
+                        label = "Edit location: ${update.name}",
+                        direct = { repository.updateEntity(id, update).map {} },
+                        onResult = done,
+                    )
+                }
             } else {
                 val create = EntityCreate(
                     name = f.name.trim(),

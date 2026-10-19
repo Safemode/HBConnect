@@ -104,9 +104,14 @@ class ApiProvider(
     /**
      * An OkHttp client that injects only the auth header (no JSON Accept header), so protected
      * item images/attachments can be fetched by Coil. Follows redirects so presigned storage URLs
-     * resolve.
+     * resolve. One shared instance (it reads the latest config per request), so every download
+     * reuses the same connection pool and threads.
      */
-    fun authenticatedImageClient(): OkHttpClient = OkHttpClient.Builder()
+    fun authenticatedImageClient(): OkHttpClient = imageClient
+
+    private val imageClient: OkHttpClient by lazy { buildImageClient() }
+
+    private fun buildImageClient(): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(Interceptor { chain ->
             val builder = chain.request().newBuilder()
             config.authHeader()?.let { builder.header("Authorization", it) }
@@ -214,7 +219,9 @@ class AuthInterceptor(private val configProvider: () -> ConnectionConfig) : Inte
 /**
  * Tries the network first; on a connection failure it reports the server as unreachable and
  * retries the request against the cache only (serving stale data when available). A successful
- * network call reports the server as reachable. Writes (non-GET) simply fail offline.
+ * network call reports the server as reachable. Writes (non-GET) can't be served from the cache, so
+ * their network error is passed through as-is: callers can then tell a write that never reached
+ * the server (safe to queue) from one the server rejected.
  */
 class OfflineInterceptor(
     private val status: ServerStatus,
@@ -232,6 +239,7 @@ class OfflineInterceptor(
             response
         } catch (e: IOException) {
             status.report(false)
+            if (!isGet) throw e
             chain.proceed(request.cacheOnly())
         }
     }

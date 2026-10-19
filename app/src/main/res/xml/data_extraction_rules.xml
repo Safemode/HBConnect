@@ -4,8 +4,9 @@
    the app's DataStore settings (theme, saved servers, preferences) are backed up and transferred.
    This is intentional and safe: each server's token / API key is encrypted with a device-bound
    Android Keystore key that is never backed up, so on a cloud restore to a different device the
-   stored blob can't be decrypted - KeystoreCrypto clears it and the user simply re-enters the
-   credential. The non-sensitive preferences still carry over.
+   stored token can't be decrypted. The saved servers themselves (label, address, username) are
+   stored unencrypted, so they carry over and the user just signs in again; the other preferences
+   carry over too.
 -->
 <data-extraction-rules>
     <cloud-backup />

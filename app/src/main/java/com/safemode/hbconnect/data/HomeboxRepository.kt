@@ -6,6 +6,7 @@ import com.safemode.hbconnect.data.local.CachedEntity
 import com.safemode.hbconnect.data.local.CachedEntityDao
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.HomeboxApi
+import com.safemode.hbconnect.data.remote.ServerUnreachableException
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.safemode.hbconnect.data.remote.models.ApiKeyCreate
@@ -64,8 +65,10 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.Response
+import java.io.File
 import java.io.OutputStream
 
 /**
@@ -128,6 +131,33 @@ class HomeboxRepository(
         runCatching { dao.upsert(CachedDetail(id, entity.updatedAt.orEmpty(), detailAdapter.toJson(entity))) }
     }
 
+    /**
+     * Removes cached rows (summary and detail) for [server]/[tenant] whose id isn't in [keep]: the
+     * full current set, so anything missing was deleted on the server. Deleted in chunks to stay under
+     * SQLite's bound-parameter limit.
+     */
+    private suspend fun pruneDeleted(
+        entities: CachedEntityDao,
+        details: CachedDetailDao,
+        server: String,
+        tenant: String,
+        keep: Set<String>,
+    ) {
+        runCatching {
+            val stale = entities.idsIn(server, tenant).filterNot { it in keep }
+            stale.chunked(500).forEach { chunk ->
+                entities.deleteIds(chunk)
+                details.deleteIds(chunk)
+            }
+        }
+    }
+
+    /** Drops one entity from the offline cache (after it was deleted). */
+    private suspend fun uncache(id: String) {
+        runCatching { entityCache?.deleteIds(listOf(id)) }
+        runCatching { detailCache?.deleteIds(listOf(id)) }
+    }
+
     private suspend fun cachedDetail(id: String): EntityOut? {
         val dao = detailCache ?: return null
         val json = dao.detail(id) ?: return null
@@ -158,7 +188,7 @@ class HomeboxRepository(
             if (response.isSuccessful) {
                 response.body() ?: throw IllegalStateException("Empty response from server.")
             } else {
-                throw mapError(response.code(), response.errorBody()?.string())
+                throw errorFor(response)
             }
         }
 
@@ -166,8 +196,18 @@ class HomeboxRepository(
         runCatching {
             val response = block(api())
             if (response.isSuccessful) Unit
-            else throw mapError(response.code(), response.errorBody()?.string())
+            else throw errorFor(response)
         }
+
+    /**
+     * The exception for a failed [response]. A 504 that never touched the network is OkHttp's
+     * synthetic answer to a cache-only lookup that missed (the server is unreachable, see
+     * OfflineInterceptor), so it becomes a [ServerUnreachableException] rather than a server error.
+     */
+    private fun errorFor(response: Response<*>): Exception {
+        if (response.code() == 504 && response.raw().networkResponse == null) return ServerUnreachableException()
+        return mapError(response.code(), response.errorBody()?.string())
+    }
 
     private fun mapError(code: Int, body: String?): Exception {
         val detail = body?.take(200)?.ifBlank { null }
@@ -281,19 +321,30 @@ class HomeboxRepository(
     }
 
     /** Fetches every item (optionally including archived), paging until the full set is retrieved. */
-    private suspend fun allItems(includeArchived: Boolean): Result<List<EntitySummary>> = runCatching {
+    private suspend fun allItems(includeArchived: Boolean): Result<List<EntitySummary>> =
+        allPages { api, page, size ->
+            api.getEntities(
+                page = page,
+                pageSize = size,
+                isLocation = false,
+                includeArchived = includeArchived.takeIf { v -> v },
+            )
+        }
+
+    /**
+     * Fetches every page of an entities listing ([fetch] gets the api, the 1-based page and the page
+     * size), stopping at the server's reported total or a short page. Fails if any page fails, so a
+     * partial list is never mistaken for the whole set. [maxPages] caps the walk as a safety net.
+     */
+    private suspend fun allPages(
+        pageSize: Int = PAGE_SIZE,
+        maxPages: Int = MAX_PAGES,
+        fetch: suspend (HomeboxApi, Int, Int) -> Response<EntityListResult>,
+    ): Result<List<EntitySummary>> = runCatching {
         val acc = ArrayList<EntitySummary>()
-        val pageSize = 200
         var page = 1
-        while (page <= 100) {
-            val result = call {
-                it.getEntities(
-                    page = page,
-                    pageSize = pageSize,
-                    isLocation = false,
-                    includeArchived = includeArchived.takeIf { v -> v },
-                )
-            }.getOrThrow()
+        while (page <= maxPages) {
+            val result = call { fetch(it, page, pageSize) }.getOrThrow()
             val batch = result.items.orEmpty()
             acc += batch
             val total = result.total ?: acc.size
@@ -349,29 +400,39 @@ class HomeboxRepository(
 
     // ---- Entities ----
 
-    /** Items (non-location entities), optionally filtered by [query], sorted per [sort]. */
+    /**
+     * Every item (non-location entity), optionally filtered by [query], sorted per [sort]. All pages
+     * are fetched, with the server sorting too, so a large collection is complete and "newest first"
+     * really is the newest across the whole collection rather than within one page.
+     */
     suspend fun getItems(
         query: String? = null,
         sort: ItemSortOrder = ItemSortOrder.NAME_ASC,
         includeArchived: Boolean = false,
-        page: Int = 1,
-        pageSize: Int = 200,
     ): Result<List<EntitySummary>> {
-        val result = call {
-            it.getEntities(
+        val (orderBy, orderDirection) = when (sort) {
+            ItemSortOrder.NAME_ASC -> SearchSort.NAME.orderBy to "asc"
+            ItemSortOrder.NAME_DESC -> SearchSort.NAME.orderBy to "desc"
+            ItemSortOrder.NEWEST_FIRST -> SearchSort.CREATED.orderBy to "desc"
+            ItemSortOrder.OLDEST_FIRST -> SearchSort.CREATED.orderBy to "asc"
+        }
+        val result = allPages { api, page, size ->
+            api.getEntities(
                 q = query?.ifBlank { null },
                 page = page,
-                pageSize = pageSize,
+                pageSize = size,
                 isLocation = false,
                 includeArchived = includeArchived.takeIf { v -> v },
+                orderBy = orderBy,
+                orderDirection = orderDirection,
             )
-        }.map { it.items.orEmpty().sortedWith(sortComparator(sort)) }
+        }.map { it.sortedWith(sortComparator(sort)) }
         return result.fold(
             onSuccess = { items -> cacheEntities(items); Result.success(items) },
             onFailure = { e ->
                 // Offline: serve the last-synced copy from the local cache (search when a query is set).
                 val cached = if (!query.isNullOrBlank()) {
-                    cachedSearch(query, includeArchived, pageSize).filterNot { it.isLocation }
+                    cachedSearch(query, includeArchived, OFFLINE_SEARCH_LIMIT).filterNot { it.isLocation }
                 } else {
                     cachedList(isLocation = false, includeArchived = includeArchived)
                 }
@@ -390,15 +451,16 @@ class HomeboxRepository(
         )
     }.map { it.items.orEmpty() }
 
-    /** All locations (location entities), sorted by name. */
+    /** All locations (location entities, every page), sorted by name. */
     suspend fun getLocations(includeArchived: Boolean = false): Result<List<EntitySummary>> {
-        val result = call {
-            it.getEntities(
-                pageSize = 500,
+        val result = allPages { api, page, size ->
+            api.getEntities(
+                page = page,
+                pageSize = size,
                 isLocation = true,
                 includeArchived = includeArchived.takeIf { v -> v },
             )
-        }.map { it.items.orEmpty().sortedBy { l -> l.displayName.lowercase() } }
+        }.map { it.sortedBy { l -> l.displayName.lowercase() } }
         return result.fold(
             onSuccess = { locations -> cacheEntities(locations); Result.success(locations) },
             onFailure = { e ->
@@ -492,13 +554,14 @@ class HomeboxRepository(
         parentId: String,
         includeArchived: Boolean = false,
     ): Result<List<EntitySummary>> {
-        val result = call {
-            it.getEntities(
+        val result = allPages { api, page, size ->
+            api.getEntities(
                 parentIds = listOf(parentId),
-                pageSize = 500,
+                page = page,
+                pageSize = size,
                 includeArchived = includeArchived.takeIf { v -> v },
             )
-        }.map { it.items.orEmpty().sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
+        }.map { it.sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
         return result.fold(
             // Feed children into the cache too, so a location's contents are browsable offline.
             onSuccess = { children -> cacheEntities(children); Result.success(children) },
@@ -518,14 +581,15 @@ class HomeboxRepository(
         parentId: String,
         includeArchived: Boolean = false,
     ): Result<List<EntitySummary>> {
-        val result = call {
-            it.getEntities(
+        val result = allPages { api, page, size ->
+            api.getEntities(
                 parentIds = listOf(parentId),
                 isLocation = true,
-                pageSize = 500,
+                page = page,
+                pageSize = size,
                 includeArchived = includeArchived.takeIf { v -> v },
             )
-        }.map { it.items.orEmpty().sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
+        }.map { it.sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
         return result.fold(
             onSuccess = { children -> cacheEntities(children); Result.success(children) },
             onFailure = { e ->
@@ -542,29 +606,27 @@ class HomeboxRepository(
      * re-fetched - so only the first run is heavy. [onEntitySynced] fires for each entity whose
      * detail was (re)fetched, so the caller can warm its thumbnail. Best-effort and silent; a no-op
      * when the cache isn't wired.
+     *
+     * Because the full set is fetched (and the pass is abandoned if any page fails), anything still
+     * cached for this server and collection but no longer on the server was deleted there, so it is
+     * pruned from the cache - otherwise deleted items would linger in offline lists and search.
      */
     suspend fun syncOfflineCache(onEntitySynced: suspend (EntitySummary) -> Unit = {}) {
         val details = detailCache ?: return
+        val entities = entityCache ?: return
         val server = cacheServer()
         val tenant = cacheTenant()
-        val all = ArrayList<EntitySummary>()
-        var page = 1
-        while (page <= 200) {
-            val result = call {
-                it.getEntities(page = page, pageSize = 200, isLocation = false, includeArchived = true)
-            }.getOrNull() ?: break
-            val batch = result.items.orEmpty()
-            all += batch
-            val total = result.total ?: all.size
-            if (batch.size < 200 || all.size >= total) break
-            page++
-        }
-        call { it.getEntities(pageSize = 500, isLocation = true, includeArchived = true) }
-            .getOrNull()?.items?.let { all += it }
-        if (all.isEmpty()) return
+        val items = allPages(maxPages = SYNC_MAX_PAGES) { api, page, size ->
+            api.getEntities(page = page, pageSize = size, isLocation = false, includeArchived = true)
+        }.getOrNull() ?: return
+        val locations = allPages { api, page, size ->
+            api.getEntities(page = page, pageSize = size, isLocation = true, includeArchived = true)
+        }.getOrNull() ?: return
+        val all = items + locations
         // The server or collection changed while paging: the rows may be a mix, so don't keep them.
         if (cacheServer() != server || cacheTenant() != tenant) return
         cacheEntities(all, server, tenant)
+        pruneDeleted(entities, details, server, tenant, keep = all.mapNotNull { it.id }.toSet())
         for (summary in all) {
             val id = summary.id ?: continue
             val stamp = details.stamp(id)
@@ -592,6 +654,16 @@ class HomeboxRepository(
     suspend fun updateEntity(id: String, body: EntityUpdate): Result<EntityOut> =
         call { it.updateEntity(id, body) }
 
+    /**
+     * Saves an edit without overwriting changes made on the server since the form loaded: fetches
+     * the entity fresh, applies only the fields that differ between [base] and [edited] (see
+     * [mergeEdit]), and sends the result as the full-replace update.
+     */
+    suspend fun mergeUpdateEntity(id: String, base: EntityUpdate, edited: EntityUpdate): Result<EntityOut> {
+        val current = call { it.getEntity(id) }.getOrElse { return Result.failure(it) }
+        return updateEntity(id, mergeEdit(base, edited, current.toUpdate().copy(id = id)))
+    }
+
     /** Partial update - only the non-null fields of [body] are changed. */
     suspend fun patchEntity(id: String, body: EntityPatch): Result<EntityOut> =
         call { it.patchEntity(id, body) }
@@ -599,7 +671,8 @@ class HomeboxRepository(
     suspend fun duplicateEntity(id: String, options: DuplicateOptions): Result<EntityOut> =
         call { it.duplicateEntity(id, options) }
 
-    suspend fun deleteEntity(id: String): Result<Unit> = callUnit { it.deleteEntity(id) }
+    suspend fun deleteEntity(id: String): Result<Unit> =
+        callUnit { it.deleteEntity(id) }.onSuccess { uncache(id) }
 
     /** Items matching an asset id (usually one); empty when nothing matches. */
     suspend fun findByAssetId(assetId: String): Result<List<EntitySummary>> =
@@ -670,15 +743,24 @@ class HomeboxRepository(
         return "$base/api/v1/entities/$entityId/attachments/$attachmentId"
     }
 
-    /** Downloads an attachment's bytes using the authenticated client (off the main thread). */
-    suspend fun downloadAttachment(entityId: String, attachmentId: String): Result<ByteArray> =
+    /**
+     * Downloads an attachment to [dest] using the authenticated client, streaming it to disk so a
+     * large file (a manual PDF, a video) is never held in memory. A failed download leaves no
+     * partial file behind.
+     */
+    suspend fun downloadAttachmentTo(entityId: String, attachmentId: String, dest: File): Result<Unit> =
         runCatching {
             val url = attachmentUrl(entityId, attachmentId)
             val client = apiProvider.authenticatedImageClient()
             withContext(Dispatchers.IO) {
-                client.newCall(Request.Builder().url(url).build()).execute().use {
-                    if (!it.isSuccessful) throw IllegalStateException("Download failed (${it.code}).")
-                    it.body.bytes()
+                try {
+                    client.newCall(Request.Builder().url(url).build()).execute().use {
+                        if (!it.isSuccessful) throw IllegalStateException("Download failed (${it.code}).")
+                        dest.outputStream().use { out -> it.body.byteStream().copyTo(out) }
+                    }
+                } catch (e: Exception) {
+                    dest.delete()
+                    throw e
                 }
             }
         }
@@ -731,18 +813,21 @@ class HomeboxRepository(
         it.updateAttachment(entityId, attachmentId, AttachmentUpdate(type = type, title = title, primary = primary))
     }.map { }
 
-    /** Uploads a file as an attachment on an entity. [type] is e.g. "photo" or "attachment". */
+    /**
+     * Uploads [file] as an attachment on an entity, streamed from disk rather than loaded into
+     * memory. [fileName] is the name the server stores; [type] is e.g. "photo" or "attachment".
+     */
     suspend fun uploadAttachment(
         entityId: String,
+        file: File,
         fileName: String,
         mimeType: String?,
-        bytes: ByteArray,
         type: String = "attachment",
         primary: Boolean = false,
     ): Result<Unit> = callUnit { api ->
         val media = (mimeType ?: "application/octet-stream").toMediaTypeOrNull()
         val parts = listOf(
-            MultipartBody.Part.createFormData("file", fileName, bytes.toRequestBody(media)),
+            MultipartBody.Part.createFormData("file", fileName, file.asRequestBody(media)),
             MultipartBody.Part.createFormData("type", type),
             MultipartBody.Part.createFormData("name", fileName),
             MultipartBody.Part.createFormData("primary", primary.toString()),
@@ -762,11 +847,9 @@ class HomeboxRepository(
         }
     }
 
-    /** Uploads a Homebox CSV to create/update entities. */
-    suspend fun importCsv(fileName: String, bytes: ByteArray): Result<Unit> = callUnit { api ->
-        val part = MultipartBody.Part.createFormData(
-            "csv", fileName, bytes.toRequestBody("text/csv".toMediaTypeOrNull()),
-        )
+    /** Uploads a Homebox CSV to create/update entities; [body] streams the file's contents. */
+    suspend fun importCsv(fileName: String, body: RequestBody): Result<Unit> = callUnit { api ->
+        val part = MultipartBody.Part.createFormData("csv", fileName, body)
         api.importEntities(part)
     }
 
@@ -805,12 +888,13 @@ class HomeboxRepository(
         }
     }
 
-    /** Restores a whole collection from a previously exported backup zip. */
-    suspend fun importCollection(fileName: String, bytes: ByteArray): Result<ExportOut> =
+    /**
+     * Restores a whole collection from a previously exported backup zip. [body] streams the zip, so
+     * a backup with many photos isn't read into memory first.
+     */
+    suspend fun importCollection(fileName: String, body: RequestBody): Result<ExportOut> =
         call { api ->
-            val part = MultipartBody.Part.createFormData(
-                "file", fileName, bytes.toRequestBody("application/zip".toMediaTypeOrNull()),
-            )
+            val part = MultipartBody.Part.createFormData("file", fileName, body)
             api.importCollection(part)
         }
 
@@ -841,6 +925,20 @@ class HomeboxRepository(
         val cfg = apiProvider.currentConfig()
         // Best-effort server-side logout for token sessions; ignore failures.
         runCatching { if (cfg.token.isNotBlank()) logout() }
+    }
+
+    private companion object {
+        /** Page size for full listings. */
+        const val PAGE_SIZE = 200
+
+        /** Safety cap on pages for a full listing (PAGE_SIZE x MAX_PAGES entities). */
+        const val MAX_PAGES = 100
+
+        /** The background sync walks further, so very large collections are still fully cached. */
+        const val SYNC_MAX_PAGES = 200
+
+        /** Most results an offline (cached) item search returns. */
+        const val OFFLINE_SEARCH_LIMIT = 500
     }
 
     private fun sortComparator(sort: ItemSortOrder): Comparator<EntitySummary> = when (sort) {

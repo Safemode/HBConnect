@@ -112,12 +112,12 @@ fun AttachmentsScreen(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            val picked = withContext(Dispatchers.IO) { readPickedFile(context, uri) }
+            val picked = withContext(Dispatchers.IO) { copyPickedFile(context, uri) }
             if (picked == null) {
                 Toast.makeText(context, "Couldn't read that file", Toast.LENGTH_LONG).show()
                 return@launch
             }
-            viewModel.upload(picked.name, picked.mime, picked.bytes) { ok, err ->
+            viewModel.upload(picked.file, picked.name, picked.mime) { ok, err ->
                 Toast.makeText(context, if (ok) "Uploaded" else (err ?: "Upload failed"), Toast.LENGTH_LONG).show()
             }
         }
@@ -130,16 +130,9 @@ fun AttachmentsScreen(
         val file = pendingPhotoPath?.let(::File)
         pendingPhotoPath = null
         if (success && file != null) {
-            scope.launch {
-                val bytes = withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() }
-                withContext(Dispatchers.IO) { file.delete() }
-                if (bytes == null) {
-                    Toast.makeText(context, "Couldn't read the photo", Toast.LENGTH_LONG).show()
-                    return@launch
-                }
-                viewModel.upload(file.name, "image/jpeg", bytes) { ok, err ->
-                    Toast.makeText(context, if (ok) "Uploaded" else (err ?: "Upload failed"), Toast.LENGTH_LONG).show()
-                }
+            // The view model streams the photo from disk and deletes it once uploaded or queued.
+            viewModel.upload(file, file.name, "image/jpeg") { ok, err ->
+                Toast.makeText(context, if (ok) "Uploaded" else (err ?: "Upload failed"), Toast.LENGTH_LONG).show()
             }
         } else {
             file?.delete()
@@ -226,9 +219,9 @@ fun AttachmentsScreen(
                                 onOpen = {
                                     val id = att.id ?: return@AttachmentRow
                                     scope.launch {
-                                        val bytes = withContext(Dispatchers.IO) { viewModel.download(id) }
-                                        bytes.fold(
-                                            onSuccess = { openBytes(context, it, att) },
+                                        val dest = openTarget(context, att)
+                                        viewModel.downloadTo(id, dest).fold(
+                                            onSuccess = { openFile(context, dest, att) },
                                             onFailure = {
                                                 Toast.makeText(context, it.message ?: "Open failed", Toast.LENGTH_LONG).show()
                                             },
@@ -410,9 +403,14 @@ private fun createPhotoFile(context: android.content.Context): File {
     return File(dir, "photo_${System.currentTimeMillis()}.jpg")
 }
 
-private data class PickedFile(val name: String, val mime: String?, val bytes: ByteArray)
+/** A picked document copied to a local [file], with its display [name] and [mime] type. */
+private data class PickedFile(val file: File, val name: String, val mime: String?)
 
-private fun readPickedFile(context: android.content.Context, uri: Uri): PickedFile? = runCatching {
+/**
+ * Copies a picked document into the cache (streamed, so a large file never sits in memory) for
+ * upload. Returns null if it can't be read.
+ */
+private fun copyPickedFile(context: android.content.Context, uri: Uri): PickedFile? = runCatching {
     val resolver = context.contentResolver
     val mime = resolver.getType(uri)
     var name = "upload"
@@ -422,17 +420,23 @@ private fun readPickedFile(context: android.content.Context, uri: Uri): PickedFi
             if (idx >= 0) c.getString(idx)?.let { name = it }
         }
     }
-    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-    PickedFile(name, mime, bytes)
+    val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
+    val file = File(dir, "upload_${System.currentTimeMillis()}")
+    val input = resolver.openInputStream(uri) ?: return null
+    input.use { src -> file.outputStream().use { src.copyTo(it) } }
+    PickedFile(file, name, mime)
 }.getOrNull()
 
-/** Writes [bytes] to the cache and opens it with an external viewer via FileProvider. */
-private fun openBytes(context: android.content.Context, bytes: ByteArray, att: ItemAttachment) {
+/** Where an attachment is downloaded to for opening: the cache, named after its title. */
+private fun openTarget(context: android.content.Context, att: ItemAttachment): File {
+    val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
+    val safeName = (att.title ?: "attachment").replace(Regex("[^A-Za-z0-9._-]"), "_")
+    return File(dir, safeName)
+}
+
+/** Opens a downloaded attachment [file] with an external viewer via FileProvider. */
+private fun openFile(context: android.content.Context, file: File, att: ItemAttachment) {
     try {
-        val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
-        val safeName = (att.title ?: "attachment").replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val file = File(dir, safeName)
-        file.writeBytes(bytes)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, att.mimeType ?: "*/*")

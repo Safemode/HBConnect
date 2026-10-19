@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.safemode.hbconnect.Graph
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 /**
@@ -26,6 +28,14 @@ class MaintenanceReminderWorker(
         if (!notifier.canNotify()) return Result.success()
 
         Graph.apiProvider.updateConfig(config)
+        // In a background process the foreground reachability loop never runs, so the server status
+        // stays "checking" and every GET would be served from the HTTP cache only - reminders would
+        // be computed from stale data, or not at all. Probe first so the fetch below hits the server.
+        if (!Graph.serverStatus.isReachable()) {
+            val reachable = withContext(Dispatchers.IO) { Graph.apiProvider.probeReachable() }
+            Graph.serverStatus.report(reachable)
+            if (!reachable) return Result.retry()
+        }
         val entries = Graph.repository.getAllMaintenance(SCHEDULED).getOrElse {
             return Result.retry()
         }
