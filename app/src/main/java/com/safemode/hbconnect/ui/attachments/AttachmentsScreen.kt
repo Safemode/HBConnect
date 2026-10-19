@@ -243,47 +243,27 @@ fun AttachmentsScreen(
     }
 
     deleting?.let { att ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            title = { Text("Delete attachment?") },
-            text = { Text("\"${att.title ?: "file"}\" will be removed from this item.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val id = att.id
-                    deleting = null
-                    if (!id.isNullOrBlank()) viewModel.delete(id) { ok, err ->
-                        if (!ok) Toast.makeText(context, err ?: "Delete failed", Toast.LENGTH_LONG).show()
-                    }
-                }) { Text("Delete") }
+        DeleteAttachmentDialog(
+            attachment = att,
+            ownerNoun = "item",
+            onDismiss = { deleting = null },
+            onConfirm = { id ->
+                deleting = null
+                viewModel.delete(id) { ok, err ->
+                    if (!ok) Toast.makeText(context, err ?: "Delete failed", Toast.LENGTH_LONG).show()
+                }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
     }
 
     renaming?.let { att ->
-        var title by remember(att) { mutableStateOf(att.title.orEmpty()) }
-        AlertDialog(
-            onDismissRequest = { renaming = null },
-            title = { Text("Rename attachment") },
-            text = {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+        RenameAttachmentDialog(
+            attachment = att,
+            onDismiss = { renaming = null },
+            onConfirm = { title ->
+                applyUpdate(att, att.type ?: "attachment", title, att.primary == true)
+                renaming = null
             },
-            confirmButton = {
-                TextButton(
-                    enabled = title.isNotBlank(),
-                    onClick = {
-                        applyUpdate(att, att.type ?: "attachment", title.trim(), att.primary == true)
-                        renaming = null
-                    },
-                ) { Text("Save") }
-            },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } },
         )
     }
 
@@ -315,19 +295,74 @@ fun AttachmentsScreen(
 
 private val ATTACHMENT_TYPES = listOf("photo", "attachment", "manual", "warranty", "receipt")
 
+/** Confirms deleting [attachment] from its item or location ([ownerNoun]); [onConfirm] gets its id. */
 @Composable
-private fun AttachmentRow(
+internal fun DeleteAttachmentDialog(
+    attachment: ItemAttachment,
+    ownerNoun: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete attachment?") },
+        text = { Text("\"${attachment.title ?: "file"}\" will be removed from this $ownerNoun.") },
+        confirmButton = {
+            TextButton(onClick = {
+                val id = attachment.id
+                if (id.isNullOrBlank()) onDismiss() else onConfirm(id)
+            }) { Text("Delete") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Asks for a new title for [attachment]; [onConfirm] gets the trimmed title. */
+@Composable
+internal fun RenameAttachmentDialog(
+    attachment: ItemAttachment,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var title by remember(attachment) { mutableStateOf(attachment.title.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename attachment") },
+        text = {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Title") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = title.isNotBlank(), onClick = { onConfirm(title.trim()) }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * One attachment as a card: thumbnail or file icon, title, type and primary marker, and a menu with
+ * set-as-primary (images only), rename, change type, and delete. A null [onOpen] makes the card not
+ * tappable; a null [onRetype] hides Change type.
+ */
+@Composable
+internal fun AttachmentRow(
     attachment: ItemAttachment,
     imageUrl: String?,
-    onOpen: () -> Unit,
+    onOpen: (() -> Unit)?,
     onSetPrimary: () -> Unit,
     onRename: () -> Unit,
-    onRetype: () -> Unit,
+    onRetype: (() -> Unit)?,
     onDelete: () -> Unit,
 ) {
     val isImage = attachment.mimeType?.startsWith("image/") == true || attachment.type == "photo"
     var menuOpen by remember { mutableStateOf(false) }
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+    val cardModifier = Modifier.fillMaxWidth().let { if (onOpen != null) it.clickable(onClick = onOpen) else it }
+    Card(modifier = cardModifier) {
         Row(
             modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -371,7 +406,7 @@ private fun AttachmentRow(
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (isImage && attachment.primary != true) {
                         DropdownMenuItem(
-                            text = { Text("Set as primary") },
+                            text = { Text("Set as primary photo") },
                             leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
                             onClick = { menuOpen = false; onSetPrimary() },
                         )
@@ -381,11 +416,13 @@ private fun AttachmentRow(
                         leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                         onClick = { menuOpen = false; onRename() },
                     )
-                    DropdownMenuItem(
-                        text = { Text("Change type") },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
-                        onClick = { menuOpen = false; onRetype() },
-                    )
+                    if (onRetype != null) {
+                        DropdownMenuItem(
+                            text = { Text("Change type") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
+                            onClick = { menuOpen = false; onRetype() },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Delete") },
                         leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },

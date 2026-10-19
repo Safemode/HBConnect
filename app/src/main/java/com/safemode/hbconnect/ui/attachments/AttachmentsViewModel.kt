@@ -51,16 +51,19 @@ class AttachmentsViewModel(private val entityId: String) : ViewModel() {
 
     /**
      * Uploads [file] (a local copy the screen made; this deletes it when done) as [fileName]. The
-     * file is streamed from disk. Offline, or if the connection drops before the server gets it, the
-     * file is copied into the upload queue instead.
+     * file is streamed from disk. A photo becomes the primary image when the entity has none yet.
+     * Offline, or if the connection drops before the server gets it, the file is copied into the
+     * upload queue instead.
      */
     fun upload(file: File, fileName: String, mimeType: String?, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             _busy.value = true
             val type = if (mimeType?.startsWith("image/") == true) "photo" else "attachment"
+            val current = (_state.value as? UiState.Success)?.data
+            val primary = type == "photo" && current != null && current.none { it.primary == true }
             try {
                 if (Graph.uploadQueue.online()) {
-                    val result = repository.uploadAttachment(entityId, file, fileName, mimeType, type = type)
+                    val result = repository.uploadAttachment(entityId, file, fileName, mimeType, type = type, primary = primary)
                     if (result.isSuccess) {
                         load()
                         onResult(true, null)
@@ -72,7 +75,7 @@ class AttachmentsViewModel(private val entityId: String) : ViewModel() {
                     }
                 }
                 // Offline: stash the file in the outbox to upload on reconnect.
-                Graph.uploadQueue.enqueueUploadFile(entityId, file, fileName, mimeType, type, "Upload $fileName")
+                Graph.uploadQueue.enqueueUploadFile(entityId, file, fileName, mimeType, type, "Upload $fileName", primary)
                 onResult(true, OFFLINE_SAVED_MESSAGE)
             } finally {
                 withContext(NonCancellable + Dispatchers.IO) { file.delete() }

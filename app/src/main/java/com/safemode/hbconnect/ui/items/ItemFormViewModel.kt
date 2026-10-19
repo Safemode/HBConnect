@@ -16,6 +16,7 @@ import com.safemode.hbconnect.data.queue.OpKind
 import com.safemode.hbconnect.data.queue.isUndelivered
 import com.safemode.hbconnect.data.EntityEditPayload
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.ui.common.uploadFormPhotos
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -251,56 +252,14 @@ class ItemFormViewModel(
         original?.imageId?.isNotBlank() == true || original?.thumbnailId?.isNotBlank() == true
 
     /**
-     * Uploads the pending photos to entity [id]; the first one that uploads becomes primary when the
-     * item has no image yet. A photo that fails to upload is handed to the upload queue (which keeps
-     * its own copy and retries it) rather than deleted, so it is never lost. Returns a warning for the
-     * caller to show, or null when every photo went up.
+     * Uploads the pending photos to entity [id] (see [uploadFormPhotos]); the first becomes primary
+     * when the item has no image yet. Returns a warning for the caller to show, or null.
      */
     private suspend fun uploadPendingPhotos(id: String, itemName: String): String? {
-        val paths = _photos.value
-        if (paths.isEmpty()) return null
-        var primaryPending = !hasImage()
-        var unreadable = 0
-        var firstError: String? = null
-        val failed = mutableListOf<String>()
-        paths.forEach { path ->
-            val file = File(path)
-            if (!file.isFile) {
-                unreadable++
-                return@forEach
-            }
-            val result = repository.uploadAttachment(
-                entityId = id,
-                file = file,
-                fileName = file.name,
-                mimeType = "image/jpeg",
-                type = "photo",
-                primary = primaryPending,
-            )
-            if (result.isSuccess) {
-                primaryPending = false
-                runCatching { file.delete() }
-            } else {
-                if (firstError == null) firstError = result.exceptionOrNull()?.message
-                failed += path
-            }
-        }
-        if (failed.isNotEmpty()) {
-            Graph.uploadQueue.enqueueUploadPhotos(id, failed, "Photos for $itemName", primaryFirst = primaryPending)
-            failed.forEach { runCatching { File(it).delete() } }
-        }
+        val warning = uploadFormPhotos(id, _photos.value, itemName, primaryFirst = !hasImage())
         _photos.value = emptyList()
         if (usesDraft) ItemDraftStore.photoPaths = emptyList()
-        return when {
-            failed.isNotEmpty() -> {
-                val one = failed.size == 1
-                val subject = if (one) "a photo" else "${failed.size} photos"
-                val reason = firstError?.let { " ($it)" }.orEmpty()
-                "Saved, but $subject didn't upload$reason. ${if (one) "It" else "They"} will retry from the upload queue."
-            }
-            unreadable > 0 -> "Saved, but a photo couldn't be read."
-            else -> null
-        }
+        return warning
     }
 
     /** Looks up a scanned barcode; [onResult] gets the candidate products, or an error message. */

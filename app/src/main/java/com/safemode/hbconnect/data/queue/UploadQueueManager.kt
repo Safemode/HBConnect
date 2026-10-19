@@ -2,6 +2,7 @@ package com.safemode.hbconnect.data.queue
 
 import com.safemode.hbconnect.data.EntityEditPayload
 import com.safemode.hbconnect.data.HomeboxRepository
+import com.safemode.hbconnect.data.imageMimeType
 import com.safemode.hbconnect.data.local.QueuedOpDao
 import com.safemode.hbconnect.data.local.QueuedOpEntity
 import com.safemode.hbconnect.data.remote.ServerStatus
@@ -150,7 +151,8 @@ class UploadQueueManager(
 
     /**
      * Queues a single attachment ([file] on disk) for an existing entity. The file is copied into the
-     * queue dir, so the caller may delete its own copy afterwards.
+     * queue dir, so the caller may delete its own copy afterwards. [primary] makes it the entity's
+     * primary image once it uploads.
      */
     suspend fun enqueueUploadFile(
         entityId: String,
@@ -159,10 +161,11 @@ class UploadQueueManager(
         mimeType: String?,
         type: String,
         label: String,
+        primary: Boolean = false,
     ) {
         persist(
             OpKind.UPLOAD_ATTACHMENT,
-            AttachmentUploadPayload(type = type, fileName = fileName, mimeType = mimeType),
+            AttachmentUploadPayload(type = type, fileName = fileName, mimeType = mimeType, primaryFirst = primary),
             targetId = entityId,
             photoSources = listOf(file.absolutePath),
             label = label,
@@ -388,7 +391,7 @@ class UploadQueueManager(
                 entityId = op.targetId.orEmpty(),
                 file = file,
                 fileName = payload.fileName ?: file.name,
-                mimeType = payload.mimeType ?: "image/jpeg",
+                mimeType = payload.mimeType ?: imageMimeType(file.name),
                 type = payload.type,
                 primary = payload.primaryFirst,
             )

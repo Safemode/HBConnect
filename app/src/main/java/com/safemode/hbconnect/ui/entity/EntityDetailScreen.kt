@@ -28,6 +28,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -122,7 +123,7 @@ private fun detailFactory(entityId: String) = object : ViewModelProvider.Factory
 
 /**
  * Detail screen for one item or location: photo gallery, fields (quantity, purchase/warranty/sold,
- * notes, identifiers), a location breadcrumb and - for a location - its contents, plus quick
+ * notes, identifiers), a location breadcrumb and - for a location - a photo banner and its contents, plus quick
  * actions (move, retag, set quantity, duplicate, maintenance, attachments, QR/label). Backed by
  * [EntityDetailViewModel].
  */
@@ -244,7 +245,12 @@ fun EntityDetailScreen(
                     UiState.NotConfigured -> ErrorState(message = "Not connected.")
                     is UiState.Error -> ErrorState(message = s.message, onRetry = { viewModel.load(showLoading = true) })
                     is UiState.Success -> if (isLocation) {
-                        LocationContents(children = children, onOpenEntity = onOpenEntity)
+                        LocationContents(
+                            entityId = s.data.id,
+                            imageIds = s.data.imageAttachmentIds(),
+                            children = children,
+                            onOpenEntity = onOpenEntity,
+                        )
                     } else {
                         ItemDetails(
                             entity = s.data,
@@ -324,40 +330,82 @@ fun EntityDetailScreen(
 
 }
 
+/**
+ * A location's contents. When the location has a photo, a short banner of its primary photo sits at
+ * the top and scrolls away with the list; tapping it opens the full-screen viewer.
+ */
 @Composable
 private fun LocationContents(
-    children: List<com.safemode.hbconnect.data.remote.models.EntitySummary>,
+    entityId: String?,
+    imageIds: List<String>,
+    children: List<EntitySummary>,
     onOpenEntity: (String) -> Unit,
 ) {
-    if (children.isEmpty()) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Icon(
-                Icons.Filled.Inventory2,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.height(48.dp),
-            )
-            Text(
-                "This location is empty",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 16.dp),
-            )
+    val headerId = imageIds.firstOrNull()?.takeIf { entityId != null }
+    var viewerOpen by remember { mutableStateOf(false) }
+    LazyColumn(
+        contentPadding = PaddingValues(top = if (headerId != null) 0.dp else 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        if (headerId != null && entityId != null) {
+            item(key = "header") {
+                AsyncImage(
+                    model = Graph.repository.attachmentUrl(entityId, headerId),
+                    contentDescription = "Location photo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(LOCATION_HEADER_HEIGHT)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { viewerOpen = true },
+                )
+            }
         }
-    } else {
-        LazyColumn(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        if (children.isEmpty()) {
+            item(key = "empty") {
+                Column(
+                    modifier = Modifier
+                        .fillParentMaxWidth()
+                        .padding(horizontal = 32.dp, vertical = if (headerId != null) 32.dp else 96.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        Icons.Filled.Inventory2,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.height(48.dp),
+                    )
+                    Text(
+                        "This location is empty",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
+            }
+        } else {
             items(children, key = { it.id ?: it.hashCode().toString() }) { child ->
-                EntityRow(entity = child, onClick = { child.id?.let(onOpenEntity) })
+                EntityRow(
+                    entity = child,
+                    onClick = { child.id?.let(onOpenEntity) },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
         }
     }
+
+    if (viewerOpen && entityId != null) {
+        ImageViewerDialog(
+            entityId = entityId,
+            imageIds = imageIds,
+            initialIndex = 0,
+            onDismiss = { viewerOpen = false },
+        )
+    }
 }
+
+/** Height of the photo banner on a location; kept short so the contents stay in view. */
+private val LOCATION_HEADER_HEIGHT = 140.dp
 
 @Composable
 private fun Breadcrumb(path: List<EntityPath>, onOpenEntity: (String) -> Unit) {
@@ -498,7 +546,7 @@ private fun ItemDetails(
 }
 
 /**
- * Image attachment ids for an item, primary first. Falls back to the primary image/thumbnail id
+ * Image attachment ids for an item or location, primary first. Falls back to the primary image/thumbnail id
  * when the attachments list carries no photos.
  */
 private fun EntityOut.imageAttachmentIds(): List<String> {
