@@ -146,6 +146,7 @@ fun EntityDetailScreen(
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val currency by Graph.currency.collectAsStateWithLifecycle()
     val showDeviceQr by viewModel.showDeviceQr.collectAsStateWithLifecycle()
+    val showLocationBanner by viewModel.showLocationBanner.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
     var showDuplicate by remember { mutableStateOf(false) }
@@ -247,7 +248,7 @@ fun EntityDetailScreen(
                     is UiState.Success -> if (isLocation) {
                         LocationContents(
                             entityId = s.data.id,
-                            imageIds = s.data.imageAttachmentIds(),
+                            imageIds = if (showLocationBanner) s.data.imageAttachmentIds() else emptyList(),
                             children = children,
                             onOpenEntity = onOpenEntity,
                         )
@@ -331,8 +332,9 @@ fun EntityDetailScreen(
 }
 
 /**
- * A location's contents. When the location has a photo, a short banner of its primary photo sits at
- * the top and scrolls away with the list; tapping it opens the full-screen viewer.
+ * A location's contents. When the location has a photo (and banners are on in Settings), a short
+ * banner of its primary photo sits at the top and scrolls away with the list; tapping it opens the
+ * full-screen viewer.
  */
 @Composable
 private fun LocationContents(
