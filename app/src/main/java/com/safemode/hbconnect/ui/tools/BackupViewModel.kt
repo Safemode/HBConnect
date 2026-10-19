@@ -5,7 +5,9 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.UriRequestBody
 import com.safemode.hbconnect.data.remote.models.ExportOut
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import com.safemode.hbconnect.ui.common.UiState
 import com.safemode.hbconnect.ui.common.refreshWhenServerReachable
 import kotlinx.coroutines.Dispatchers
@@ -163,13 +165,14 @@ class BackupViewModel : ViewModel() {
         if (_busy.value) return
         viewModelScope.launch {
             _busy.value = true
+            // The zip is streamed from the picked document, not read into memory: a backup with
+            // photos can be far larger than the app's heap.
             val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    (resolver.openInputStream(source) ?: error("Couldn't open the chosen file."))
-                        .use { it.readBytes() }
-                }.mapCatching { bytes ->
-                    repository.importCollection(fileName, bytes).getOrThrow()
-                }
+                runCatching { UriRequestBody.checkReadable(resolver, source) }
+                    .mapCatching {
+                        val body = UriRequestBody(resolver, source, "application/zip".toMediaTypeOrNull())
+                        repository.importCollection(fileName, body).getOrThrow()
+                    }
             }
             _busy.value = false
             _message.value = result.fold(

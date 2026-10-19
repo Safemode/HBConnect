@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.remote.UriRequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,13 +51,13 @@ class ImportExportViewModel : ViewModel() {
         if (_busy.value) return
         viewModelScope.launch {
             _busy.value = true
+            // Streamed from the picked document rather than read into memory first.
             val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    (resolver.openInputStream(source) ?: error("Couldn't open the chosen file."))
-                        .use { it.readBytes() }
-                }.mapCatching { bytes ->
-                    repository.importCsv(fileName, bytes).getOrThrow()
-                }
+                runCatching { UriRequestBody.checkReadable(resolver, source) }
+                    .mapCatching {
+                        val body = UriRequestBody(resolver, source, "text/csv".toMediaTypeOrNull())
+                        repository.importCsv(fileName, body).getOrThrow()
+                    }
             }
             _message.value = result.fold(
                 onSuccess = { BackupMessage(true, "Import sent. Items will appear once the server finishes.") },

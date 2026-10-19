@@ -13,6 +13,8 @@ import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.data.queue.OFFLINE_SAVED_MESSAGE
 import com.safemode.hbconnect.data.queue.OpKind
+import com.safemode.hbconnect.data.queue.isUndelivered
+import com.safemode.hbconnect.data.EntityEditPayload
 import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -256,16 +258,15 @@ class ItemFormViewModel(
         val failed = mutableListOf<String>()
         paths.forEach { path ->
             val file = File(path)
-            val bytes = runCatching { file.readBytes() }.getOrNull()
-            if (bytes == null) {
+            if (!file.isFile) {
                 unreadable++
                 return@forEach
             }
             val result = repository.uploadAttachment(
                 entityId = id,
+                file = file,
                 fileName = file.name,
                 mimeType = "image/jpeg",
-                bytes = bytes,
                 type = "photo",
                 primary = primaryPending,
             )
@@ -374,46 +375,47 @@ class ItemFormViewModel(
                 // itemId when editing, or createdId when completing an item made earlier this session.
                 val existingId = itemId?.ifBlank { null } ?: createdId
 
-                // Offline: save to the upload queue instead of hitting the server. A new item (with
-                // its photos) goes in as one create op that carries the full field set; an edit goes
-                // in as an update op plus a photo-upload op for any new photos.
+                // The version the form started from, so an edit only changes the fields the user
+                // touched and keeps anything changed on the server meanwhile (see mergeEdit).
+                val base = existingId?.let { id -> original?.let { buildUpdate(formFrom(it), id) } }
+
+                // Offline: save to the upload queue instead of hitting the server.
                 if (!Graph.uploadQueue.online()) {
-                    if (existingId != null) {
-                        Graph.uploadQueue.enqueue(
-                            kind = OpKind.UPDATE_ENTITY,
-                            payload = buildUpdate(f, existingId),
-                            targetId = existingId,
-                            label = "Edit item: ${f.name.trim()}",
-                        )
-                        if (_photos.value.isNotEmpty()) {
-                            Graph.uploadQueue.enqueueUploadPhotos(
-                                existingId,
-                                _photos.value,
-                                "Photos for ${f.name.trim()}",
-                                primaryFirst = !hasImage(),
-                            )
-                        }
-                    } else {
-                        Graph.uploadQueue.enqueueCreateEntity(buildUpdate(f, ""), _photos.value, "New item: ${f.name.trim()}")
-                    }
-                    clearDraft()
-                    _photos.value.forEach { runCatching { File(it).delete() } }
-                    _photos.value = emptyList()
-                    _saving.value = false
+                    saveOffline(f, existingId, base)
                     onResult(true, OFFLINE_SAVED_MESSAGE)
                     return@launch
                 }
                 var savedId: String? = null
                 var error: String? = null
                 if (existingId != null) {
-                    val result = repository.updateEntity(existingId, buildUpdate(f, existingId))
-                    if (result.isSuccess) savedId = existingId else error = result.exceptionOrNull()?.message
+                    val edited = buildUpdate(f, existingId)
+                    val result = if (base != null) {
+                        repository.mergeUpdateEntity(existingId, base, edited)
+                    } else {
+                        repository.updateEntity(existingId, edited)
+                    }
+                    if (result.isSuccess) {
+                        savedId = existingId
+                    } else if (isUndelivered(result.exceptionOrNull())) {
+                        // The connection dropped before the server got the request: queue it.
+                        saveOffline(f, existingId, base)
+                        onResult(true, OFFLINE_SAVED_MESSAGE)
+                        return@launch
+                    } else {
+                        error = result.exceptionOrNull()?.message
+                    }
                 } else {
                     // The create endpoint accepts only a subset of fields; persist the rest with a
                     // follow-up update so details entered on a new item (serial, notes, purchase,
                     // warranty, insured) aren't lost.
                     val created = repository.createEntity(buildCreate(f))
                     val entity = created.getOrNull()
+                    if (entity == null && isUndelivered(created.exceptionOrNull())) {
+                        // Nothing reached the server, so queueing can't make a duplicate.
+                        saveOffline(f, null, null)
+                        onResult(true, OFFLINE_SAVED_MESSAGE)
+                        return@launch
+                    }
                     if (entity == null) {
                         error = created.exceptionOrNull()?.message
                     } else {
@@ -449,6 +451,36 @@ class ItemFormViewModel(
                 _saving.value = false
             }
         }
+    }
+
+    /**
+     * Saves to the upload queue. A new item (with its photos) goes in as one create op that carries
+     * the full field set; an edit goes in as a merge op (or a plain update when there's no loaded
+     * [base]) plus a photo-upload op for any new photos.
+     */
+    private suspend fun saveOffline(f: ItemForm, existingId: String?, base: EntityUpdate?) {
+        if (existingId != null) {
+            val edited = buildUpdate(f, existingId)
+            Graph.uploadQueue.enqueue(
+                kind = if (base != null) OpKind.MERGE_ENTITY else OpKind.UPDATE_ENTITY,
+                payload = if (base != null) EntityEditPayload(base, edited) else edited,
+                targetId = existingId,
+                label = "Edit item: ${f.name.trim()}",
+            )
+            if (_photos.value.isNotEmpty()) {
+                Graph.uploadQueue.enqueueUploadPhotos(
+                    existingId,
+                    _photos.value,
+                    "Photos for ${f.name.trim()}",
+                    primaryFirst = !hasImage(),
+                )
+            }
+        } else {
+            Graph.uploadQueue.enqueueCreateEntity(buildUpdate(f, ""), _photos.value, "New item: ${f.name.trim()}")
+        }
+        clearDraft()
+        _photos.value.forEach { runCatching { File(it).delete() } }
+        _photos.value = emptyList()
     }
 
     private fun buildCreate(f: ItemForm) = EntityCreate(

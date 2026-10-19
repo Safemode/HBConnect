@@ -3,7 +3,7 @@
    Legacy Auto Backup rules (Android 11 and older; ignored on API 31+, which uses
    data_extraction_rules.xml). Empty content keeps the default: everything is backed up. Saved
    credentials are encrypted with a device-bound Keystore key that is not backed up, so a restore
-   onto another device can't decrypt them and the user re-enters the credential; other preferences
-   carry over.
+   onto another device can't decrypt them and the user signs in again; the saved servers and other
+   preferences carry over.
 -->
 <full-backup-content />

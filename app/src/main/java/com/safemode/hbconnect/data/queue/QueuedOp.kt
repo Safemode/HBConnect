@@ -13,6 +13,14 @@ enum class OpKind {
     CREATE_TYPE, UPDATE_TYPE, DELETE_TYPE,
     CREATE_TEMPLATE, UPDATE_TEMPLATE, DELETE_TEMPLATE,
     CREATE_MAINTENANCE, UPDATE_MAINTENANCE, DELETE_MAINTENANCE,
+
+    /**
+     * An edit to an existing entity, stored as an [com.safemode.hbconnect.data.EntityEditPayload]
+     * and merged onto the server's current version on replay, so changes made elsewhere while this
+     * device was offline survive. (UPDATE_ENTITY is a blind full replace, kept for older rows and for
+     * the follow-up update of a queued create.)
+     */
+    MERGE_ENTITY,
 }
 
 /**

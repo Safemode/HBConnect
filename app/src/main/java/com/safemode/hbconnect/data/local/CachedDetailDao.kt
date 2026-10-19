@@ -19,6 +19,9 @@ interface CachedDetailDao {
     @Query("SELECT updatedAt FROM cached_detail WHERE id = :id")
     suspend fun stamp(id: String): String?
 
+    @Query("DELETE FROM cached_detail WHERE id IN (:ids)")
+    suspend fun deleteIds(ids: List<String>)
+
     @Query("DELETE FROM cached_detail")
     suspend fun clearAll()
 }

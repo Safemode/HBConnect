@@ -1,5 +1,6 @@
 package com.safemode.hbconnect.data.queue
 
+import com.safemode.hbconnect.data.EntityEditPayload
 import com.safemode.hbconnect.data.HomeboxRepository
 import com.safemode.hbconnect.data.local.QueuedOpDao
 import com.safemode.hbconnect.data.local.QueuedOpEntity
@@ -19,6 +20,7 @@ import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -89,7 +91,9 @@ class UploadQueueManager(
     /**
      * Runs [direct] when the server is reachable, otherwise persists the write to the outbox. Used
      * for every write except the item-create flow (which needs the new id back on success and so
-     * uses [enqueueCreateEntity] on its own offline branch).
+     * uses [enqueueCreateEntity] on its own offline branch). If [direct] fails because the
+     * connection dropped before the request reached the server ([isUndelivered]), the write is
+     * queued too, rather than reported as a failure.
      */
     suspend fun submit(
         kind: OpKind,
@@ -101,7 +105,8 @@ class UploadQueueManager(
     ): Dispatch {
         if (online()) {
             val r = direct()
-            return if (r.isSuccess) Dispatch.Sent else Dispatch.Failed(r.exceptionOrNull()?.message)
+            if (r.isSuccess) return Dispatch.Sent
+            if (!isUndelivered(r.exceptionOrNull())) return Dispatch.Failed(r.exceptionOrNull()?.message)
         }
         persist(kind, payload, targetId, photoSources, label)
         return Dispatch.Queued
@@ -143,19 +148,18 @@ class UploadQueueManager(
         )
     }
 
-    /** Queues a single attachment (given its bytes) for an existing entity; the bytes are saved to disk. */
-    suspend fun enqueueUploadBytes(
+    /**
+     * Queues a single attachment ([file] on disk) for an existing entity. The file is copied into the
+     * queue dir, so the caller may delete its own copy afterwards.
+     */
+    suspend fun enqueueUploadFile(
         entityId: String,
+        file: File,
         fileName: String,
         mimeType: String?,
         type: String,
-        bytes: ByteArray,
         label: String,
     ) {
-        if (!queueDir.exists()) queueDir.mkdirs()
-        val tempId = UUID.randomUUID().toString()
-        val file = File(queueDir, "pending_$tempId")
-        runCatching { file.writeBytes(bytes) }.getOrElse { return }
         persist(
             OpKind.UPLOAD_ATTACHMENT,
             AttachmentUploadPayload(type = type, fileName = fileName, mimeType = mimeType),
@@ -163,8 +167,6 @@ class UploadQueueManager(
             photoSources = listOf(file.absolutePath),
             label = label,
         )
-        // persist() copies the sources into the queue dir, so drop our staging copy.
-        runCatching { file.delete() }
     }
 
     /** Drops a queued op and deletes any photo copies it owned. */
@@ -183,6 +185,22 @@ class UploadQueueManager(
             deletePhotos(toDomain(row))
             dao.delete(row.id)
         }
+    }
+
+    /**
+     * Deletes files in [queueDir] that no queued op references - left behind when the app died
+     * mid-write, or by an older build that dropped queue rows on a database upgrade. Files changed in
+     * the last hour are skipped, so a copy made for an op that is being saved right now is safe.
+     */
+    suspend fun sweepOrphanFiles() {
+        val files = queueDir.listFiles() ?: return
+        val referenced = dao.getAll()
+            .flatMap { toDomain(it).photoPaths }
+            .map { File(it).absolutePath }
+            .toSet()
+        val cutoff = System.currentTimeMillis() - ORPHAN_MIN_AGE_MS
+        files.filter { it.isFile && it.absolutePath !in referenced && it.lastModified() < cutoff }
+            .forEach { runCatching { it.delete() } }
     }
 
     /**
@@ -258,6 +276,10 @@ class UploadQueueManager(
     private suspend fun replay(op: QueuedOp): Result<Unit> = when (op.kind) {
         OpKind.UPDATE_ENTITY ->
             repository.updateEntity(op.targetId.orEmpty(), decode(op.payloadJson, EntityUpdate::class.java)).map {}
+        OpKind.MERGE_ENTITY -> {
+            val edit = decode(op.payloadJson, EntityEditPayload::class.java)
+            repository.mergeUpdateEntity(op.targetId.orEmpty(), edit.base, edit.edited).map {}
+        }
         OpKind.PATCH_ENTITY ->
             repository.patchEntity(op.targetId.orEmpty(), decode(op.payloadJson, EntityPatch::class.java)).map {}
         OpKind.DELETE_ENTITY -> repository.deleteEntity(op.targetId.orEmpty())
@@ -357,17 +379,16 @@ class UploadQueueManager(
 
         for (path in op.photoPaths) {
             val file = File(path)
-            val bytes = runCatching { file.readBytes() }.getOrNull()
-            if (bytes == null) {
-                if (!file.exists()) remaining -= path
-                if (firstError == null) firstError = IllegalStateException("Couldn't read a queued file.")
+            if (!file.isFile) {
+                remaining -= path
+                if (firstError == null) firstError = IllegalStateException("A queued file was missing.")
                 continue
             }
             val result = repository.uploadAttachment(
                 entityId = op.targetId.orEmpty(),
+                file = file,
                 fileName = payload.fileName ?: file.name,
                 mimeType = payload.mimeType ?: "image/jpeg",
-                bytes = bytes,
                 type = payload.type,
                 primary = payload.primaryFirst,
             )
@@ -410,7 +431,10 @@ class UploadQueueManager(
         label: String,
     ) {
         val opId = UUID.randomUUID().toString()
-        val copied = photoSources.mapIndexedNotNull { index, src -> copyIntoQueueDir(src, opId, index) }
+        // Off the main thread: an attachment can be large.
+        val copied = withContext(Dispatchers.IO) {
+            photoSources.mapIndexedNotNull { index, src -> copyIntoQueueDir(src, opId, index) }
+        }
         dao.upsert(
             QueuedOpEntity(
                 id = opId,
@@ -450,6 +474,10 @@ class UploadQueueManager(
 
     private fun deletePhotos(op: QueuedOp) {
         op.photoPaths.forEach { runCatching { File(it).delete() } }
+    }
+
+    private companion object {
+        const val ORPHAN_MIN_AGE_MS = 60 * 60 * 1000L
     }
 
     private fun toDomain(e: QueuedOpEntity): QueuedOp = QueuedOp(

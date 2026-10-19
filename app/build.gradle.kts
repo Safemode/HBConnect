@@ -14,8 +14,8 @@ android {
         applicationId = "com.safemode.hbconnect"
         minSdk = 24
         targetSdk = 37
-        versionCode = 40
-        versionName = "1.4.2"
+        versionCode = 41
+        versionName = "1.4.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
