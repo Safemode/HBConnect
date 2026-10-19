@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
    Legacy Auto Backup rules (Android 11 and older; ignored on API 31+, which uses
-   data_extraction_rules.xml). Empty content keeps the default: everything is backed up. Saved
-   credentials are encrypted with a device-bound Keystore key that is not backed up, so a restore
-   onto another device can't decrypt them and the user signs in again; the saved servers and other
-   preferences carry over.
+   data_extraction_rules.xml). Everything not excluded below is backed up. Saved credentials are
+   encrypted with a device-bound Keystore key that is not backed up, so a restore onto another
+   device can't decrypt them and the user signs in again; the saved servers and other preferences
+   carry over. The local database (offline inventory copy and upload queue) and queued photo files
+   are excluded, as in data_extraction_rules.xml.
 -->
-<full-backup-content />
+<full-backup-content>
+    <exclude domain="database" path="hbconnect.db" />
+    <exclude domain="database" path="hbconnect.db-shm" />
+    <exclude domain="database" path="hbconnect.db-wal" />
+    <exclude domain="file" path="upload_queue/" />
+</full-backup-content>

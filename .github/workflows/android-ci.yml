@@ -49,3 +49,10 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      # Lint fails only on errors; warnings are reported but don't block the build.
+      - name: Run lint
+        run: ./gradlew lintDebug --stacktrace

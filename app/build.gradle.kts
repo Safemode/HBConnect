@@ -34,6 +34,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG gates the HTTP request logging to debug builds.
+        buildConfig = true
     }
 }
 

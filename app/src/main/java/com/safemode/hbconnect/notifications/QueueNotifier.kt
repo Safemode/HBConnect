@@ -54,7 +54,11 @@ class QueueNotifier(private val context: Context) {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
 
-        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+            // The notification permission was revoked between canNotify() and posting; skip it.
+        }
     }
 
     private fun plural(n: Int, one: String, many: String) = if (n == 1) one else many
