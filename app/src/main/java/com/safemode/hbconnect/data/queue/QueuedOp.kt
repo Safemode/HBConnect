@@ -19,11 +19,14 @@ enum class OpKind {
  * Payload for [OpKind.UPLOAD_ATTACHMENT]; the files themselves travel in the op's photo paths (one
  * op can carry several, e.g. all the photos taken for an edited item). [fileName]/[mimeType] are set
  * for a single picked document and left null for item photos, which derive both per file on replay.
+ * [primaryFirst] makes the first file that uploads the entity's primary image (used for the photos
+ * of a new item, or an item that has none yet); it is cleared once that upload succeeds.
  */
 data class AttachmentUploadPayload(
     val type: String,
     val fileName: String? = null,
     val mimeType: String? = null,
+    val primaryFirst: Boolean = false,
 )
 
 /** Payload for [OpKind.DELETE_ATTACHMENT]. */
@@ -40,6 +43,8 @@ data class QueuedOp(
     val id: String,
     val kind: OpKind,
     val tenant: String?,
+    /** The saved server profile this op was queued against; null for ops queued before servers were tracked. */
+    val serverId: String?,
     val payloadJson: String,
     val targetId: String?,
     val photoPaths: List<String>,

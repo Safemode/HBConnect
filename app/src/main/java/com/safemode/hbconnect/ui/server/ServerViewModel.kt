@@ -131,12 +131,18 @@ class ServerViewModel : ViewModel() {
         }
     }
 
-    /** Removes the active server and moves to whichever remains (or a disconnected state). */
+    /**
+     * Removes the active server and moves to whichever remains (or a disconnected state). Its queued
+     * offline writes and cached inventory go with it, since they can't be sent or shown anywhere else.
+     */
     fun deleteActiveServer() {
         viewModelScope.launch {
             _busy.value = true
             _addingNew.value = false
-            settings.deleteServer(activeServerId.value)
+            val deletedId = activeServerId.value
+            settings.deleteServer(deletedId)
+            Graph.uploadQueue.removeForServer(deletedId)
+            repository.clearCachedServer(deletedId)
             val config = settings.config.first()
             loadFormFrom(config)
             switchActiveConnection(config)

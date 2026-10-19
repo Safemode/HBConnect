@@ -21,6 +21,13 @@ interface QueuedOpDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(op: QueuedOpEntity)
 
+    /** Writes several rows in one transaction (all or nothing). */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(ops: List<QueuedOpEntity>)
+
+    @Query("SELECT * FROM queued_op WHERE serverId = :serverId")
+    suspend fun forServer(serverId: String): List<QueuedOpEntity>
+
     @Query("DELETE FROM queued_op WHERE id = :id")
     suspend fun delete(id: String)
 

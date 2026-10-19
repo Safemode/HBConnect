@@ -93,9 +93,10 @@ class LocationFormViewModel(
             _saving.value = true
             val done: (Boolean, String?) -> Unit = { ok, message -> _saving.value = false; onResult(ok, message) }
             if (isEdit) {
-                // The update endpoint replaces the whole entity, so carry through the fields this
-                // form doesn't expose (quantity, custom fields) from the loaded original, otherwise
-                // saving a name/parent change would wipe them.
+                // The update endpoint replaces the whole entity, so carry through every field this
+                // form doesn't expose (tags, notes, archived, asset id, purchase/warranty/sold info,
+                // custom fields) from the loaded original, otherwise saving a name/parent change
+                // would wipe them. Dates are trimmed to yyyy-MM-dd the same way the item form does.
                 val prior = original
                 val update = EntityUpdate(
                     id = locationId!!,
@@ -104,8 +105,26 @@ class LocationFormViewModel(
                     entityTypeId = f.entityTypeId,
                     parentId = f.parentId,
                     quantity = prior?.quantity?.toInt(),
+                    insured = prior?.insured,
+                    archived = prior?.archived,
+                    lifetimeWarranty = prior?.lifetimeWarranty,
+                    assetId = prior?.assetId,
+                    serialNumber = prior?.serialNumber,
+                    modelNumber = prior?.modelNumber,
+                    manufacturer = prior?.manufacturer,
+                    notes = prior?.notes,
+                    purchaseFrom = prior?.purchaseFrom,
+                    purchasePrice = prior?.purchasePrice,
+                    purchaseDate = prior?.purchaseDate?.substringBefore('T')?.ifBlank { null },
+                    soldTo = prior?.soldTo,
+                    soldPrice = prior?.soldPrice,
+                    soldDate = prior?.soldDate,
+                    soldNotes = prior?.soldNotes,
+                    warrantyDetails = prior?.warrantyDetails,
+                    warrantyExpires = prior?.warrantyExpires?.substringBefore('T')?.ifBlank { null },
                     syncChildEntityLocations = false,
                     fields = prior?.fields,
+                    tagIds = prior?.tags?.mapNotNull { it.id },
                 )
                 Graph.uploadQueue.submitWrite(
                     kind = OpKind.UPDATE_ENTITY,

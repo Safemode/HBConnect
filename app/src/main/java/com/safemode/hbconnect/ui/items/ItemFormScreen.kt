@@ -347,9 +347,12 @@ fun ItemFormScreen(
                         )
                         OutlinedTextField(
                             value = form.purchasePrice,
-                            onValueChange = { v -> viewModel.update { it.copy(purchasePrice = v.filter { c -> c.isDigit() || c == '.' }) } },
+                            onValueChange = { v ->
+                                viewModel.update { it.copy(purchasePrice = v.filter { c -> c.isDigit() || c == '.' || c == ',' }) }
+                            },
                             label = { Text("Price") },
                             singleLine = true,
+                            isError = form.purchasePrice.isNotBlank() && parsePrice(form.purchasePrice) == null,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.fillMaxWidth(),
                         )

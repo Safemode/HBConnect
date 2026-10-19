@@ -14,8 +14,11 @@ import androidx.room.PrimaryKey
  * [photoPathsJson] is a JSON array of file paths (copies kept in the app's files dir) for a create
  * that carries photos, or for a standalone attachment upload.
  *
- * [tenant] is the active collection id captured at enqueue time; the drainer only replays an op
- * while that same collection is active, so a queued write is never misrouted into another collection.
+ * [tenant] is the active collection id captured at enqueue time and [serverId] the active saved
+ * server profile; the drainer only replays an op while that same server and collection are active,
+ * so a queued write is never misrouted into another collection or onto another server. (Collection
+ * ids alone aren't enough: the default collection is blank on every server.) [serverId] is null for
+ * rows queued before it existed; those replay against whichever server is active.
  */
 @Entity(tableName = "queued_op")
 data class QueuedOpEntity(
@@ -30,4 +33,5 @@ data class QueuedOpEntity(
     val attempts: Int,
     val lastError: String?,
     val status: String,
+    val serverId: String? = null,
 )
