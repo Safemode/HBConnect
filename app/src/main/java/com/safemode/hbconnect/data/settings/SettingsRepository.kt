@@ -40,6 +40,7 @@ class SettingsRepository(private val context: Context) {
         val ACCENT_COLOR = intPreferencesKey("accent_color")
         val SORT_ORDER = stringPreferencesKey("item_sort_order")
         val SHOW_DEVICE_QR = booleanPreferencesKey("show_device_qr")
+        val SHOW_LOCATION_BANNERS = booleanPreferencesKey("show_location_banners")
         val SWAP_SCAN_FILTER = booleanPreferencesKey("swap_scan_filter")
         val LIVE_UPDATES = booleanPreferencesKey("live_updates")
         val MAINTENANCE_REMINDERS = booleanPreferencesKey("maintenance_reminders")
@@ -94,6 +95,7 @@ class SettingsRepository(private val context: Context) {
             itemSortOrder = runCatching { ItemSortOrder.valueOf(prefs[Keys.SORT_ORDER] ?: "NAME_ASC") }
                 .getOrDefault(ItemSortOrder.NAME_ASC),
             showDeviceQr = prefs[Keys.SHOW_DEVICE_QR] ?: false,
+            showLocationBanners = prefs[Keys.SHOW_LOCATION_BANNERS] ?: true,
             swapScanFilter = prefs[Keys.SWAP_SCAN_FILTER] ?: false,
             liveUpdates = prefs[Keys.LIVE_UPDATES] ?: true,
             maintenanceReminders = prefs[Keys.MAINTENANCE_REMINDERS] ?: false,
@@ -141,6 +143,7 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.ACCENT_COLOR] = config.accentColor
             prefs[Keys.SORT_ORDER] = config.itemSortOrder.name
             prefs[Keys.SHOW_DEVICE_QR] = config.showDeviceQr
+            prefs[Keys.SHOW_LOCATION_BANNERS] = config.showLocationBanners
             prefs[Keys.SWAP_SCAN_FILTER] = config.swapScanFilter
             prefs[Keys.LIVE_UPDATES] = config.liveUpdates
             prefs[Keys.MAINTENANCE_REMINDERS] = config.maintenanceReminders

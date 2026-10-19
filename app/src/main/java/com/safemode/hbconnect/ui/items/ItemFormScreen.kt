@@ -1,22 +1,14 @@
 package com.safemode.hbconnect.ui.items
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,25 +16,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -64,16 +47,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
-import coil3.compose.AsyncImage
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
-import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
 import com.safemode.hbconnect.ui.scan.ScanMode
 import com.safemode.hbconnect.ui.scan.ScanRequest
@@ -85,9 +62,11 @@ import com.safemode.hbconnect.ui.common.DateField
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.Option
 import com.safemode.hbconnect.ui.common.OptionDropdownField
+import com.safemode.hbconnect.ui.common.PhotosSection
+import com.safemode.hbconnect.ui.common.TagPickerDialog
+import com.safemode.hbconnect.ui.common.TagsField
+import com.safemode.hbconnect.ui.common.rememberTakePhoto
 import com.safemode.hbconnect.ui.common.UiState
-import com.safemode.hbconnect.ui.common.verticalScrollbar
-import java.io.File
 
 @Suppress("UNCHECKED_CAST")
 private fun formFactory(itemId: String?, parentId: String?) = object : ViewModelProvider.Factory {
@@ -124,33 +103,8 @@ fun ItemFormScreen(
     var showReset by remember { mutableStateOf(false) }
     var showTagPicker by remember { mutableStateOf(false) }
 
-    // Camera capture: the photo is written to a FileProvider URI and held until the item is saved,
-    // then uploaded as an attachment. The path is saved so it survives rotation in the camera view.
-    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        val path = pendingPhotoPath
-        pendingPhotoPath = null
-        if (success && path != null) viewModel.addPhoto(path)
-        else path?.let { runCatching { File(it).delete() } }
-    }
-    fun launchCamera() {
-        val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
-        val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
-        pendingPhotoPath = file.absolutePath
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        cameraLauncher.launch(uri)
-    }
-    val cameraPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) launchCamera()
-        else Toast.makeText(context, "Camera permission is needed to take a photo", Toast.LENGTH_LONG).show()
-    }
-    fun takePhoto() {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-        if (granted) launchCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
-    }
+    // Camera capture: the photo is held until the item is saved, then uploaded as an attachment.
+    val takePhoto = rememberTakePhoto(onTaken = viewModel::addPhoto)
 
     // Inline scanners for the identifier fields: the decoded code goes straight into the field, with
     // no product lookup. One launcher per field so the result lands in the right place.
@@ -297,7 +251,7 @@ fun ItemFormScreen(
 
                     PhotosSection(
                         photos = photos,
-                        onTakePhoto = { takePhoto() },
+                        onTakePhoto = takePhoto,
                         onRemove = viewModel::removePhoto,
                     )
 
@@ -513,147 +467,6 @@ fun ItemFormScreen(
     }
 }
 
-/** A read-only field that opens the tag picker; shows the selected tag names, or a placeholder. */
-@Composable
-private fun TagsField(summary: String, onClick: () -> Unit) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = summary,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Tags") },
-            placeholder = { Text("None selected") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        // Transparent overlay so a tap anywhere opens the picker.
-        Box(modifier = Modifier.matchParentSize().clickableNoRipple(onClick))
-    }
-}
-
-/** Camera capture for the item: a Take-photo button and thumbnails of pending (not-yet-uploaded) shots. */
-@Composable
-private fun PhotosSection(
-    photos: List<String>,
-    onTakePhoto: () -> Unit,
-    onRemove: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Photos", style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = onTakePhoto, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text("Take photo")
-        }
-        if (photos.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                photos.forEach { path ->
-                    Box(modifier = Modifier.size(84.dp)) {
-                        AsyncImage(
-                            model = File(path),
-                            contentDescription = "Item photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.matchParentSize().clip(RoundedCornerShape(10.dp)),
-                        )
-                        IconButton(
-                            onClick = { onRemove(path) },
-                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
-                        ) {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = "Remove photo",
-                                tint = MaterialTheme.colorScheme.onError,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(MaterialTheme.colorScheme.error)
-                                    .padding(2.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Tag multi-select popup: create a tag up top, then toggle any existing ones. The list is a
- * LazyColumn so it scrolls smoothly inside the dialog without fighting a sheet drag.
- */
-@Composable
-private fun TagPickerDialog(
-    tags: List<TagSummary>,
-    selected: Set<String>,
-    onToggle: (String) -> Unit,
-    onCreate: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var newName by remember { mutableStateOf("") }
-    val withIds = tags.filter { it.id != null }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Tags") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("New tag") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Button(
-                        enabled = newName.isNotBlank(),
-                        onClick = {
-                            onCreate(newName.trim())
-                            newName = ""
-                        },
-                    ) { Text("Add") }
-                }
-                if (withIds.isEmpty()) {
-                    Text(
-                        "No tags yet - create one above.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    val listState = rememberLazyListState()
-                    val scrollbarColor = MaterialTheme.colorScheme.outline
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(end = 10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp)
-                            .verticalScrollbar(listState, color = scrollbarColor),
-                    ) {
-                        items(withIds, key = { it.id!! }) { tag ->
-                            val id = tag.id!!
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onToggle(id) }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(checked = id in selected, onCheckedChange = { onToggle(id) })
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(tag.name ?: "tag", style = MaterialTheme.typography.bodyLarge)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-    )
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CollapsibleSection(
@@ -708,10 +521,3 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
-
-private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
-    this.clickable(
-        interactionSource = MutableInteractionSource(),
-        indication = null,
-        onClick = onClick,
-    )

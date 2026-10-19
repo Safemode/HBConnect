@@ -116,6 +116,15 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 )
             }
 
+            SettingCard("Locations") {
+                SwitchRow(
+                    title = "Photo banner",
+                    subtitle = "Shows a location's primary photo as a banner at the top of its screen.",
+                    checked = config.showLocationBanners,
+                    onCheckedChange = { v -> viewModel.updateAndSave { it.copy(showLocationBanners = v) } },
+                )
+            }
+
             SettingCard("Dashboard") {
                 SwitchRow(
                     title = "Swap scan & filter buttons",

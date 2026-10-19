@@ -67,6 +67,11 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
         .map { it.showDeviceQr }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Whether a location shows its primary photo as a banner (Settings, on by default). */
+    val showLocationBanner: StateFlow<Boolean> = Graph.settingsRepository.config
+        .map { it.showLocationBanners }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
     private var pickersLoaded = false
 
     init {

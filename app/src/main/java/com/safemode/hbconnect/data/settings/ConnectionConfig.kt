@@ -67,6 +67,8 @@ data class ConnectionConfig(
     val itemSortOrder: ItemSortOrder = ItemSortOrder.NAME_ASC,
     /** Whether the detail screen offers the on-device QR code action. Off by default. */
     val showDeviceQr: Boolean = false,
+    /** Whether a location's screen shows its primary photo as a banner. On by default. */
+    val showLocationBanners: Boolean = true,
     /** When true, the dashboard search row shows the filter button before the scan button. */
     val swapScanFilter: Boolean = false,
     /**
