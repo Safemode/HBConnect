@@ -27,6 +27,15 @@ class EntityMergeTest {
     }
 
     @Test
+    fun ownLocationOfASubItemIsMergedAndKept() {
+        val sub = base.copy(parentId = "toolbox", locationId = "garage")
+        // Untouched: the server's current own location survives an unrelated edit.
+        assertEquals("garage", mergeEdit(sub, sub.copy(name = "Drill bit"), sub).locationId)
+        // Edited: clearing it (back to the parent item's location) is applied.
+        assertEquals(null, mergeEdit(sub, sub.copy(locationId = null), sub).locationId)
+    }
+
+    @Test
     fun userEditWinsOnAFieldBothChanged() {
         val edited = base.copy(notes = "mine")
         val current = base.copy(notes = "theirs")

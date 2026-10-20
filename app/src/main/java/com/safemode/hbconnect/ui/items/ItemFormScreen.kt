@@ -75,7 +75,7 @@ private fun formFactory(itemId: String?, parentId: String?) = object : ViewModel
 }
 
 /**
- * Add/edit item form: name, quantity, location, type, tags, identifiers, purchase/warranty/insured
+ * Add/edit item form: name, quantity, location or parent item, type, tags, identifiers, purchase/warranty/insured
  * details, notes, and photos. Supports barcode lookup to prefill fields and inline tag creation.
  * Backed by [ItemFormViewModel].
  */
@@ -102,6 +102,7 @@ fun ItemFormScreen(
     var candidates by remember { mutableStateOf<List<BarcodeProduct>?>(null) }
     var showReset by remember { mutableStateOf(false) }
     var showTagPicker by remember { mutableStateOf(false) }
+    var showParentPicker by remember { mutableStateOf(false) }
 
     // Camera capture: the photo is held until the item is saved, then uploaded as an attachment.
     val takePhoto = rememberTakePhoto(onTaken = viewModel::addPhoto)
@@ -227,18 +228,31 @@ fun ItemFormScreen(
                     )
                     // Location is required, so there's no "(None)" choice. With no locations to pick
                     // from (none created yet, or offline with nothing cached), say why the item can't
-                    // be saved instead of leaving an empty list.
+                    // be saved instead of leaving an empty list. With a parent item the location is
+                    // optional: "Same as parent item" takes the parent item's location, and picking one
+                    // sets this item's own location for when it is kept somewhere else.
+                    val hasParentItem = !form.parentItemId.isNullOrBlank()
+                    val sameAsParent = Option(
+                        "Same as parent item" + form.inheritedLocationName.ifBlank { null }?.let { " ($it)" }.orEmpty(),
+                        null,
+                    )
                     OptionDropdownField(
-                        label = "Location *",
-                        options = locations.map { Option(it.displayName, it.id) },
+                        label = if (hasParentItem) "Location" else "Location *",
+                        options = (if (hasParentItem) listOf(sameAsParent) else emptyList()) +
+                            locations.map { Option(it.displayName, it.id) },
                         selectedValue = form.parentId,
                         onSelect = { opt -> viewModel.update { it.copy(parentId = opt.value) } },
-                        isError = form.parentId.isNullOrBlank(),
-                        supportingText = if (locations.isEmpty()) {
-                            "No locations available. Create one under Locations to save items."
-                        } else {
-                            null
+                        isError = !hasParentItem && form.parentId.isNullOrBlank(),
+                        supportingText = when {
+                            hasParentItem -> "Pick a location only if this item is kept somewhere other than its parent item."
+                            locations.isEmpty() -> "No locations available. Create one under Locations to save items."
+                            else -> null
                         },
+                    )
+                    ParentItemField(
+                        name = form.parentItemName.ifBlank { null }.takeIf { hasParentItem },
+                        onClick = { showParentPicker = true },
+                        onClear = viewModel::clearParentItem,
                     )
 
                     val selectedTagNames = tags
@@ -419,6 +433,20 @@ fun ItemFormScreen(
                 }) { Text("Reset") }
             },
             dismissButton = { TextButton(onClick = { showReset = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (showParentPicker) {
+        ParentItemPickerDialog(
+            excludeId = itemId,
+            selectedId = form.parentItemId,
+            onPick = { item ->
+                viewModel.pickParentItem(item) { err ->
+                    if (err == null) showParentPicker = false
+                    else Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                }
+            },
+            onDismiss = { showParentPicker = false },
         )
     }
 

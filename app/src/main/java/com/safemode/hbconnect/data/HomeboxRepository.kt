@@ -441,6 +441,40 @@ class HomeboxRepository(
         )
     }
 
+    /**
+     * One page of items sorted by name, for pickers that load more as the user scrolls instead of
+     * fetching the whole collection. [query] narrows by name on the server. Offline, the first page
+     * comes from the cache (up to [OFFLINE_SEARCH_LIMIT] matches) and there are no more pages.
+     */
+    suspend fun getItemsPage(query: String?, page: Int, pageSize: Int = PICKER_PAGE_SIZE): Result<ItemPage> {
+        val result = call {
+            it.getEntities(
+                q = query?.ifBlank { null },
+                page = page,
+                pageSize = pageSize,
+                isLocation = false,
+                orderBy = SearchSort.NAME.orderBy,
+                orderDirection = "asc",
+            )
+        }
+        return result.fold(
+            onSuccess = { r ->
+                val items = r.items.orEmpty()
+                cacheEntities(items)
+                val total = r.total
+                Result.success(ItemPage(items, hasMore = items.size >= pageSize && (total == null || page * pageSize < total)))
+            },
+            onFailure = { e ->
+                val cached = if (page == 1) {
+                    cachedSearch(query.orEmpty(), includeArchived = false, limit = OFFLINE_SEARCH_LIMIT).filterNot { it.isLocation }
+                } else {
+                    emptyList()
+                }
+                if (cached.isNotEmpty()) Result.success(ItemPage(cached, hasMore = false)) else Result.failure(e)
+            },
+        )
+    }
+
     /** The most recently created items, newest first (for the dashboard's "Recently added"). */
     suspend fun getRecentItems(limit: Int = 3): Result<List<EntitySummary>> = call {
         it.getEntities(
@@ -939,6 +973,9 @@ class HomeboxRepository(
 
         /** Most results an offline (cached) item search returns. */
         const val OFFLINE_SEARCH_LIMIT = 500
+
+        /** Page size for pickers that load more as the user scrolls. */
+        const val PICKER_PAGE_SIZE = 50
     }
 
     private fun sortComparator(sort: ItemSortOrder): Comparator<EntitySummary> = when (sort) {
@@ -948,3 +985,6 @@ class HomeboxRepository(
         ItemSortOrder.OLDEST_FIRST -> compareBy { it.createdAt.orEmpty() }
     }
 }
+
+/** One page of [items] from [HomeboxRepository.getItemsPage]; [hasMore] says whether another page follows. */
+data class ItemPage(val items: List<EntitySummary>, val hasMore: Boolean)

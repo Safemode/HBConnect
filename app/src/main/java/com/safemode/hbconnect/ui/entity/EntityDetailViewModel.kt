@@ -28,7 +28,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Backs the entity detail screen for one item or location ([entityId]). Loads the entity plus its
- * ancestor path and, for a location, the entities it contains ([children]). Quick actions (set
+ * ancestor path and the entities directly inside it ([children]): a location's contents or an item's
+ * sub-items. Quick actions (set
  * quantity, move, retag) go through PATCH, which changes only the named fields - so, unlike the
  * full-replace update on the edit form, they can't accidentally wipe anything and need no
  * field-preservation. Re-fetches on a live ENTITY event (unless this entity was just deleted), and
@@ -41,7 +42,7 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
     private val _state = MutableStateFlow<UiState<EntityOut>>(UiState.Loading)
     val state: StateFlow<UiState<EntityOut>> = _state.asStateFlow()
 
-    /** For locations: the entities contained directly within. */
+    /** The entities directly inside this one: a location's contents, or an item's sub-items. */
     private val _children = MutableStateFlow<List<EntitySummary>>(emptyList())
     val children: StateFlow<List<EntitySummary>> = _children.asStateFlow()
 
@@ -176,10 +177,11 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
             if (entity != null) {
                 _path.value = repository.getEntityPath(entityId).getOrDefault(emptyList())
             }
-            if (entity?.isLocation == true) {
-                _children.value = repository.getChildren(entityId).getOrDefault(emptyList())
+            // A location's contents, or an item's sub-items.
+            _children.value = if (entity != null) {
+                repository.getChildren(entityId).getOrDefault(emptyList())
             } else {
-                _children.value = emptyList()
+                emptyList()
             }
         }
     }
