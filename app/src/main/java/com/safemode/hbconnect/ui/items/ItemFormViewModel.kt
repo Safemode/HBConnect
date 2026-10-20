@@ -6,6 +6,7 @@ import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.data.remote.models.EntityCreate
 import com.safemode.hbconnect.data.remote.models.EntityOut
+import com.safemode.hbconnect.data.remote.models.EntityPath
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.EntityTypeSummary
 import com.safemode.hbconnect.data.remote.models.EntityUpdate
@@ -30,11 +31,17 @@ data class ItemForm(
     val name: String = "",
     val description: String = "",
     val quantity: String = "1",
-    /** The location field. Not used for saving while [parentItemId] is set. */
+    /**
+     * The location field. Without a parent item it is the saved parent. With one, it is the item's
+     * own location, and null means it takes the parent item's location.
+     */
     val parentId: String? = null,
     /** An item this one is stored inside. When set it is the saved parent, ahead of [parentId]. */
     val parentItemId: String? = null,
     val parentItemName: String = "",
+    /** The location the parent item gives this item when it has no own location (for display). */
+    val inheritedLocationId: String? = null,
+    val inheritedLocationName: String = "",
     val entityTypeId: String? = null,
     val tagIds: Set<String> = emptySet(),
     val manufacturer: String = "",
@@ -53,6 +60,9 @@ data class ItemForm(
 
 /** The parent the item is saved under: the parent item when one is set, otherwise the location. */
 internal fun ItemForm.effectiveParentId(): String? = parentItemId?.ifBlank { null } ?: parentId?.ifBlank { null }
+
+/** The item's own location: only sent while it has a parent item, and null to take the parent item's. */
+internal fun ItemForm.ownLocationId(): String? = if (parentItemId.isNullOrBlank()) null else parentId?.ifBlank { null }
 
 /**
  * Parses a typed price, accepting "." or "," as the decimal separator (many locales' keyboards only
@@ -152,8 +162,8 @@ class ItemFormViewModel(
     /** Whether the loaded item's parent is another item rather than a location. */
     private var loadedParentIsItem = false
 
-    /** When the loaded item sits inside another item: the nearest location above it, for the location field. */
-    private var loadedLocationId: String? = null
+    /** When the loaded item sits inside another item: the location it gets from that item. */
+    private var loadedInherited: EntitySummary? = null
 
     private fun locationIds(): Set<String> = _locations.value.mapNotNull { it.id }.toSet()
 
@@ -171,18 +181,27 @@ class ItemFormViewModel(
                     return@launch
                 }
                 original = entity
-                // The parent is either a location or another item. One not in the location list is
-                // looked up in the item's path: another item goes in the Parent item field (with the
-                // nearest location above it shown in Location), and anything else (an archived
-                // location) is added as a location option so the field shows where it is.
+                // The parent is either a location or another item. Homebox resolves [EntityOut.location]
+                // to the item's own location or else the nearest location above it, so a resolved
+                // location other than the parent (or an own locationId) means the parent is an item.
+                // Older servers without those fields fall back to the item's path. A parent that turns
+                // out to be a location missing from the list (archived) is added as an option so the
+                // field shows where it is.
                 val parent = entity.parent
                 if (parent?.id != null && parent.id !in locationIds()) {
-                    val path = repository.getEntityPath(itemId).getOrNull().orEmpty()
-                    val parentNode = path.dropLast(1).lastOrNull()
-                    loadedParentIsItem = parent.entityType?.isLocation == false ||
-                        parentNode?.type.equals("item", ignoreCase = true)
+                    val resolved = entity.location?.id
+                    var path: List<EntityPath>? = null
+                    suspend fun path() = path ?: repository.getEntityPath(itemId).getOrNull().orEmpty().also { path = it }
+                    loadedParentIsItem = entity.locationId != null ||
+                        (resolved != null && resolved != parent.id) ||
+                        parent.entityType?.isLocation == false ||
+                        path().dropLast(1).lastOrNull()?.type.equals("item", ignoreCase = true)
                     if (loadedParentIsItem) {
-                        loadedLocationId = path.nearestLocation(locationIds())?.id
+                        loadedInherited = if (entity.locationId == null && entity.location?.id != null) {
+                            entity.location
+                        } else {
+                            path().nearestLocation(locationIds())?.let { EntitySummary(id = it.id, name = it.name) }
+                        }
                     } else {
                         _locations.value = _locations.value + parent
                     }
@@ -203,14 +222,19 @@ class ItemFormViewModel(
         setForm(transform(_form.value))
     }
 
+    /** Whether [entity] is the loaded item and its parent is another item. */
+    private fun parentIsItem(entity: EntityOut) = loadedParentIsItem && entity.id == itemId
+
     /** Builds the editable form from a loaded entity. */
     private fun formFrom(entity: EntityOut) = ItemForm(
         name = entity.name.orEmpty(),
         description = entity.description.orEmpty(),
         quantity = (entity.quantity?.toInt() ?: 1).toString(),
-        parentId = if (loadedParentIsItem && entity.id == itemId) loadedLocationId else entity.parent?.id,
-        parentItemId = entity.parent?.id?.takeIf { loadedParentIsItem && entity.id == itemId },
-        parentItemName = entity.parent?.displayName?.takeIf { loadedParentIsItem && entity.id == itemId }.orEmpty(),
+        parentId = if (parentIsItem(entity)) entity.locationId else entity.parent?.id,
+        parentItemId = entity.parent?.id?.takeIf { parentIsItem(entity) },
+        parentItemName = entity.parent?.displayName?.takeIf { parentIsItem(entity) }.orEmpty(),
+        inheritedLocationId = loadedInherited?.id?.takeIf { parentIsItem(entity) },
+        inheritedLocationName = loadedInherited?.displayName?.takeIf { parentIsItem(entity) }.orEmpty(),
         entityTypeId = entity.entityType?.id,
         tagIds = entity.tags?.mapNotNull { it.id }?.toSet() ?: emptySet(),
         manufacturer = entity.manufacturer.orEmpty(),
@@ -318,7 +342,8 @@ class ItemFormViewModel(
 
     /**
      * Sets [item] as the parent item. Its path is checked first so an item can't be put inside itself
-     * or one of its own sub-items, and the Location field is set to the nearest location above it.
+     * or one of its own sub-items. The Location field switches to the parent item's location (no own
+     * location), which the user can then change if this item is kept somewhere else.
      * [onResult] gets an error message, or null when the parent was set.
      */
     fun pickParentItem(item: EntitySummary, onResult: (String?) -> Unit) {
@@ -330,16 +355,36 @@ class ItemFormViewModel(
                 onResult("An item can't go inside itself or one of its own sub-items.")
                 return@launch
             }
-            val location = path?.nearestLocation(locationIds())?.id
-                ?: item.parent?.id?.takeIf { it in locationIds() }
-            setForm(_form.value.copy(parentItemId = id, parentItemName = item.displayName, parentId = location))
+            val inherited = path?.nearestLocation(locationIds())?.let { it.id to it.name.orEmpty() }
+                ?: item.parent?.takeIf { it.id in locationIds() }?.let { it.id to it.displayName }
+            setForm(
+                _form.value.copy(
+                    parentItemId = id,
+                    parentItemName = item.displayName,
+                    parentId = null,
+                    inheritedLocationId = inherited?.first,
+                    inheritedLocationName = inherited?.second.orEmpty(),
+                ),
+            )
             onResult(null)
         }
     }
 
-    /** Removes the parent item, so the item is saved directly in the Location field's location. */
+    /**
+     * Removes the parent item, so the item is saved directly in the Location field's location. With no
+     * own location set, it keeps the one it had through the parent item.
+     */
     fun clearParentItem() {
-        setForm(_form.value.copy(parentItemId = null, parentItemName = ""))
+        val f = _form.value
+        setForm(
+            f.copy(
+                parentItemId = null,
+                parentItemName = "",
+                parentId = f.parentId ?: f.inheritedLocationId?.takeIf { it in locationIds() },
+                inheritedLocationId = null,
+                inheritedLocationName = "",
+            ),
+        )
     }
 
     fun toggleTag(tagId: String) {
@@ -508,6 +553,7 @@ class ItemFormViewModel(
         description = f.description.trim().ifBlank { null },
         entityTypeId = f.entityTypeId,
         parentId = f.effectiveParentId(),
+        locationId = f.ownLocationId(),
         quantity = f.quantity.toIntOrNull() ?: 1,
         tagIds = f.tagIds.toList().ifEmpty { null },
         manufacturer = f.manufacturer.trim().ifBlank { null },
@@ -523,6 +569,7 @@ class ItemFormViewModel(
             description = f.description.trim().ifBlank { null },
             entityTypeId = f.entityTypeId,
             parentId = f.effectiveParentId(),
+            locationId = f.ownLocationId(),
             // A cleared quantity keeps the current one rather than being sent as missing (which the
             // server stores as 0).
             quantity = f.quantity.toIntOrNull() ?: prior?.quantity?.toInt() ?: 1,

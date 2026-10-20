@@ -72,6 +72,10 @@ data class EntityOut(
     val description: String? = null,
     val entityType: EntityTypeSummary? = null,
     val parent: EntitySummary? = null,
+    /** Resolved location: this entity's own location, else the nearest location above it. Read-only. */
+    val location: EntitySummary? = null,
+    /** This entity's own location, set only when its parent is another item and it is kept elsewhere. */
+    val locationId: String? = null,
     val children: List<EntitySummary>? = null,
     val quantity: Double? = null,
     val itemCount: Double? = null,
@@ -111,6 +115,8 @@ data class EntityCreate(
     val description: String? = null,
     val entityTypeId: String? = null,
     val parentId: String? = null,
+    /** Own location, only when [parentId] is another item and this is kept somewhere else. */
+    val locationId: String? = null,
     val quantity: Int? = null,
     val tagIds: List<String>? = null,
     val manufacturer: String? = null,
@@ -124,6 +130,8 @@ data class EntityUpdate(
     val description: String? = null,
     val entityTypeId: String? = null,
     val parentId: String? = null,
+    /** Own location, only when [parentId] is another item and this is kept somewhere else. */
+    val locationId: String? = null,
     val quantity: Int? = null,
     val insured: Boolean? = null,
     val archived: Boolean? = null,

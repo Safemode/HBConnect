@@ -486,14 +486,20 @@ private fun ItemDetails(
             }
         }
 
-        // An item stored inside another item shows that parent item, plus the nearest location above.
-        val parentIsItem = entity.parent?.id != null && (
-            entity.parent.entityType?.isLocation == false ||
+        // An item stored inside another item shows that parent item, plus its location: the server's
+        // resolved one (its own, else the parent item's), or the nearest location in its path.
+        val parentId = entity.parent?.id
+        val parentIsItem = parentId != null && (
+            entity.locationId != null ||
+                (entity.location?.id != null && entity.location.id != parentId) ||
+                entity.parent.entityType?.isLocation == false ||
                 path.dropLast(1).lastOrNull()?.type.equals("item", ignoreCase = true)
             )
+        val locationName = entity.location?.displayName
+            ?: if (parentIsItem) path.nearestLocation()?.name else entity.parent?.displayName
         DetailCard("Overview") {
             DetailRow("Quantity", entity.quantity?.toInt()?.toString())
-            DetailRow("Location", if (parentIsItem) path.nearestLocation()?.name else entity.parent?.displayName)
+            DetailRow("Location", locationName)
             if (parentIsItem) DetailRow("Parent item", entity.parent?.displayName)
             DetailRow("Asset ID", entity.assetId)
             DetailRow("Insured", entity.insured?.let { if (it) "Yes" else "No" })

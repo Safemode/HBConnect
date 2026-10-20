@@ -38,21 +38,19 @@ fun OptionDropdownField(
     modifier: Modifier = Modifier,
     isError: Boolean = false,
     supportingText: String? = null,
-    enabled: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.value == selectedValue }?.label ?: ""
     ExposedDropdownMenuBox(
         // An empty list has nothing to show, so don't open an empty menu.
-        expanded = expanded && enabled && options.isNotEmpty(),
-        onExpandedChange = { expanded = it && enabled },
+        expanded = expanded && options.isNotEmpty(),
+        onExpandedChange = { expanded = it },
         modifier = modifier.fillMaxWidth(),
     ) {
         OutlinedTextField(
             value = selectedLabel,
             onValueChange = {},
             readOnly = true,
-            enabled = enabled,
             isError = isError,
             label = { Text(label) },
             supportingText = supportingText?.let { { Text(it) } },
@@ -61,7 +59,7 @@ fun OptionDropdownField(
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),
         )
-        ExposedDropdownMenu(expanded = expanded && enabled && options.isNotEmpty(), onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(expanded = expanded && options.isNotEmpty(), onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(option.label) },

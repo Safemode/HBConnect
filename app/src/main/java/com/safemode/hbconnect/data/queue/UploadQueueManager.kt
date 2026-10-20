@@ -328,6 +328,7 @@ class UploadQueueManager(
             description = update.description,
             entityTypeId = update.entityTypeId,
             parentId = update.parentId,
+            locationId = update.locationId,
             quantity = update.quantity,
             tagIds = update.tagIds,
             manufacturer = update.manufacturer,

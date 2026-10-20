@@ -24,6 +24,8 @@ fun EntityOut.toUpdate(): EntityUpdate = EntityUpdate(
     description = description,
     entityTypeId = entityType?.id,
     parentId = parent?.id,
+    // Without this, a full replace would drop a sub-item's own location.
+    locationId = locationId,
     quantity = quantity?.toInt(),
     insured = insured,
     archived = archived,
@@ -72,6 +74,7 @@ fun mergeEdit(base: EntityUpdate, edited: EntityUpdate, current: EntityUpdate): 
         description = pick(base.description, edited.description, current.description),
         entityTypeId = pick(base.entityTypeId, edited.entityTypeId, current.entityTypeId),
         parentId = pick(base.parentId, edited.parentId, current.parentId),
+        locationId = pick(base.locationId, edited.locationId, current.locationId),
         quantity = pick(base.quantity, edited.quantity, current.quantity),
         insured = pick(base.insured, edited.insured, current.insured),
         archived = pick(base.archived, edited.archived, current.archived),

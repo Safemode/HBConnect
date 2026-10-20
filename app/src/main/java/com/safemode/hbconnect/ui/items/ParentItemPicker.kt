@@ -114,7 +114,7 @@ fun ParentItemField(name: String?, onClick: () -> Unit, onClear: () -> Unit) {
             label = { Text("Parent item") },
             placeholder = { Text("None") },
             supportingText = if (hasParent) {
-                { Text("Stored inside this item instead of directly in a location.") }
+                { Text("Stored inside this item.") }
             } else {
                 null
             },
