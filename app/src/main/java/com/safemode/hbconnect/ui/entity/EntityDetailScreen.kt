@@ -101,6 +101,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.nearestLocation
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityOut
@@ -255,6 +256,9 @@ fun EntityDetailScreen(
                     } else {
                         ItemDetails(
                             entity = s.data,
+                            path = path,
+                            subItems = children,
+                            onOpenEntity = onOpenEntity,
                             currency = currency,
                             onOpenMaintenance = { s.data.id?.let(onOpenMaintenance) },
                             onOpenAttachments = { s.data.id?.let(onOpenAttachments) },
@@ -443,6 +447,9 @@ private fun Breadcrumb(path: List<EntityPath>, onOpenEntity: (String) -> Unit) {
 @Composable
 private fun ItemDetails(
     entity: EntityOut,
+    path: List<EntityPath>,
+    subItems: List<EntitySummary>,
+    onOpenEntity: (String) -> Unit,
     currency: Currency?,
     onOpenMaintenance: () -> Unit,
     onOpenAttachments: () -> Unit,
@@ -479,9 +486,15 @@ private fun ItemDetails(
             }
         }
 
+        // An item stored inside another item shows that parent item, plus the nearest location above.
+        val parentIsItem = entity.parent?.id != null && (
+            entity.parent.entityType?.isLocation == false ||
+                path.dropLast(1).lastOrNull()?.type.equals("item", ignoreCase = true)
+            )
         DetailCard("Overview") {
             DetailRow("Quantity", entity.quantity?.toInt()?.toString())
-            DetailRow("Location", entity.parent?.displayName)
+            DetailRow("Location", if (parentIsItem) path.nearestLocation()?.name else entity.parent?.displayName)
+            if (parentIsItem) DetailRow("Parent item", entity.parent?.displayName)
             DetailRow("Asset ID", entity.assetId)
             DetailRow("Insured", entity.insured?.let { if (it) "Yes" else "No" })
             DetailRow("Archived", entity.archived?.takeIf { it }?.let { "Yes" })
@@ -542,6 +555,15 @@ private fun ItemDetails(
         if (attachments.isNotEmpty()) {
             DetailCard("Attachments") {
                 attachments.forEach { DetailRow("File", it) }
+            }
+        }
+
+        if (subItems.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Sub-items (${subItems.size})", style = MaterialTheme.typography.titleMedium)
+                subItems.forEach { child ->
+                    EntityRow(entity = child, onClick = { child.id?.let(onOpenEntity) })
+                }
             }
         }
     }
