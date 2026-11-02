@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.formatQuantity
 import com.safemode.hbconnect.ui.common.formatMoney
 import kotlin.math.max
 
@@ -349,7 +350,7 @@ private suspend fun resolveEntity(id: String): Resolution {
             ArCard.Item(
                 id = entityId,
                 name = entity.displayName,
-                subtitle = subtitleOf(entity.parent?.displayName, entity.quantity?.toInt()),
+                subtitle = subtitleOf(entity.parent?.displayName, entity.quantity),
                 priceText = priceText(entity.purchasePrice),
                 imageUrl = imageUrlFor(entityId, entity.thumbnailId ?: entity.imageId, isLocation = false),
             ),
@@ -369,7 +370,7 @@ private suspend fun resolveAsset(assetId: String): Resolution {
             ArCard.Item(
                 id = entityId,
                 name = summary.displayName,
-                subtitle = subtitleOf(summary.parent?.displayName, summary.quantity?.toInt()),
+                subtitle = subtitleOf(summary.parent?.displayName, summary.quantity),
                 priceText = priceText(summary.purchasePrice),
                 imageUrl = imageUrlFor(entityId, summary.thumbnailId ?: summary.imageId, isLocation = false),
             ),
@@ -399,9 +400,9 @@ private fun priceText(price: Double?): String? =
     price?.takeIf { it > 0.0 }?.let { formatMoney(it, Graph.currency.value) }
 
 /** Builds the item subtitle from its location and (non-trivial) quantity. */
-private fun subtitleOf(locationName: String?, quantity: Int?): String? {
+private fun subtitleOf(locationName: String?, quantity: Double?): String? {
     val parts = buildList {
-        quantity?.takeIf { it != 1 }?.let { add("Qty $it") }
+        quantity?.takeIf { it != 1.0 }?.let { add("Qty ${formatQuantity(it)}") }
         locationName?.let { add(it) }
     }
     return parts.joinToString(" · ").ifBlank { null }

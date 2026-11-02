@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,14 +46,14 @@ class SettingsViewModel : ViewModel() {
     }
 
     /**
-     * Applies a preference change and persists it right away. The transform runs on the freshly
-     * read config so every app preference (including the accent) is saved, and the connection
-     * fields are carried through untouched.
+     * Applies a preference change and persists it right away. The transform runs on the latest saved
+     * config inside one atomic write, so every app preference (including the accent) is saved, quick
+     * successive changes can't undo each other, and the connection fields are carried through
+     * untouched.
      */
     fun updateAndSave(transform: (ConnectionConfig) -> ConnectionConfig) {
         viewModelScope.launch {
-            val merged = transform(settings.config.first())
-            settings.save(merged)
+            val merged = settings.update(transform)
             apiProvider.updateConfig(merged)
         }
     }

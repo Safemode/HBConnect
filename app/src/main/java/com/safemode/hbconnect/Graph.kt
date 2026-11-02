@@ -6,6 +6,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.safemode.hbconnect.data.HomeboxRepository
 import com.safemode.hbconnect.data.local.AppDatabase
+import com.safemode.hbconnect.data.queue.QueueTarget
 import com.safemode.hbconnect.data.queue.UploadQueueManager
 import com.safemode.hbconnect.data.sync.SyncManager
 import com.safemode.hbconnect.notifications.QueueNotifier
@@ -111,8 +112,7 @@ object Graph {
             queueDir = File(app.filesDir, "upload_queue"),
             serverStatus = serverStatus,
             isOnline = networkMonitor::isOnline,
-            activeServer = { settingsRepository.config.first().serverId },
-            activeTenant = { settingsRepository.config.first().activeGroupId },
+            activeTarget = ::queueTarget,
             notificationsEnabled = { settingsRepository.config.first().queueUploadNotifications },
             notifier = QueueNotifier(app),
         )
@@ -181,12 +181,13 @@ object Graph {
                 repository.refresh().onSuccess { tr ->
                     val newToken = tr.token
                     if (!newToken.isNullOrBlank()) {
-                        val updated = cfg.copy(
-                            token = newToken,
-                            tokenExpiresAt = tr.expiresAt?.ifBlank { null } ?: cfg.tokenExpiresAt,
-                        )
-                        settingsRepository.save(updated)
-                        apiProvider.updateConfig(updated)
+                        // Written to the server that was refreshed, and only if its session is still the
+                        // one refreshed: the user may have switched servers or signed in again meanwhile.
+                        settingsRepository.updateServer(cfg.serverId) {
+                            if (it.token != cfg.token) it
+                            else it.copy(token = newToken, tokenExpiresAt = tr.expiresAt?.ifBlank { null } ?: it.tokenExpiresAt)
+                        }
+                        apiProvider.updateConfig(settingsRepository.config.first())
                     }
                 }
             }
@@ -209,6 +210,7 @@ object Graph {
             ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 serverStatus.state.collect { state ->
                     if (state == ServerReachability.REACHABLE) {
+                        ensureAccountKnown()
                         uploadQueue.drain()
                         // Refresh the offline cache (all text + thumbnails) in the background.
                         syncManager.requestSync()
@@ -216,6 +218,50 @@ object Graph {
                 }
             }
         }
+    }
+
+    /**
+     * Where queued writes go right now. Not [QueueTarget.ready] unless the API client is pointed at
+     * the same server, collection and credentials as the saved settings, so a drain never sends
+     * writes through a client still catching up with a switch.
+     */
+    private suspend fun queueTarget(): QueueTarget {
+        val cfg = settingsRepository.config.first()
+        val routed = apiProvider.currentConfig()
+        return QueueTarget(
+            server = cfg.serverId,
+            tenant = cfg.activeGroupId,
+            account = cfg.accountId,
+            ready = cfg.isConfigured &&
+                routed.serverId == cfg.serverId &&
+                routed.activeGroupId == cfg.activeGroupId &&
+                routed.baseUrl() == cfg.baseUrl() &&
+                routed.authHeader() == cfg.authHeader(),
+        )
+    }
+
+    /**
+     * Records which account [serverId] is signed in as ([userId] from `/users/self`). When it differs
+     * from the one stored (another user signed in on this saved server, or its address now points at a
+     * different server), that server's offline copy is dropped, so the new account never sees the old
+     * one's data.
+     */
+    suspend fun recordAccount(serverId: String, userId: String?) {
+        val id = userId?.ifBlank { null } ?: return
+        if (serverId.isBlank()) return
+        val prior = settingsRepository.servers.first().firstOrNull { it.id == serverId }?.accountId.orEmpty()
+        if (prior.isNotBlank() && prior != id) {
+            repository.clearCachedServer(serverId)
+            apiProvider.clearCache()
+        }
+        settingsRepository.updateServer(serverId) { it.copy(accountId = id) }
+    }
+
+    /** Fills in the active server's account when it isn't known yet (e.g. right after an upgrade). */
+    private suspend fun ensureAccountKnown() {
+        val cfg = settingsRepository.config.first()
+        if (!cfg.isConfigured || cfg.accountId.isNotBlank()) return
+        repository.self().onSuccess { recordAccount(cfg.serverId, it.id) }
     }
 
     private suspend fun runReachabilityLoop() = withContext(Dispatchers.IO) {

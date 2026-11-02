@@ -117,7 +117,7 @@ data class EntityCreate(
     val parentId: String? = null,
     /** Own location, only when [parentId] is another item and this is kept somewhere else. */
     val locationId: String? = null,
-    val quantity: Int? = null,
+    val quantity: Double? = null,
     val tagIds: List<String>? = null,
     val manufacturer: String? = null,
     val modelNumber: String? = null,
@@ -132,7 +132,7 @@ data class EntityUpdate(
     val parentId: String? = null,
     /** Own location, only when [parentId] is another item and this is kept somewhere else. */
     val locationId: String? = null,
-    val quantity: Int? = null,
+    val quantity: Double? = null,
     val insured: Boolean? = null,
     val archived: Boolean? = null,
     val lifetimeWarranty: Boolean? = null,

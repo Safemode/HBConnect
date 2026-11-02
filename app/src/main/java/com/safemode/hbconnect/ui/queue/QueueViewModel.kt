@@ -3,6 +3,7 @@ package com.safemode.hbconnect.ui.queue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.queue.QueueTarget
 import com.safemode.hbconnect.data.queue.QueuedOp
 import com.safemode.hbconnect.data.remote.ServerReachability
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,11 +25,12 @@ class QueueViewModel : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
-     * Ids of ops saved for a different server or collection than the active one. They stay queued
-     * but only upload once their own server and collection are active again.
+     * Ids of ops saved for a different server, collection or account than the active one. They stay
+     * queued but only upload once their own server, collection and account are active again.
      */
     val elsewhere: StateFlow<Set<String>> = combine(queue.queue, Graph.settingsRepository.config) { ops, cfg ->
-        ops.filterNot { queue.belongsTo(it, cfg.serverId, cfg.activeGroupId) }.map { it.id }.toSet()
+        val target = QueueTarget(server = cfg.serverId, tenant = cfg.activeGroupId, account = cfg.accountId)
+        ops.filterNot { target.accepts(it) }.map { it.id }.toSet()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     val online: StateFlow<Boolean> = Graph.serverStatus.state

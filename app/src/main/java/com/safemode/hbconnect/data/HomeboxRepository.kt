@@ -57,6 +57,7 @@ import com.safemode.hbconnect.data.remote.models.TreeItem
 import com.safemode.hbconnect.data.remote.models.UserOut
 import com.safemode.hbconnect.data.remote.models.ValueInsights
 import com.safemode.hbconnect.data.remote.models.ValueOverTime
+import com.safemode.hbconnect.data.settings.ConnectionConfig
 import com.safemode.hbconnect.data.settings.ItemSortOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -183,6 +184,9 @@ class HomeboxRepository(
     }
 
     private suspend fun <T> call(block: suspend (HomeboxApi) -> Response<T>): Result<T> =
+        callOn({ api() }, block)
+
+    private suspend fun <T> callOn(api: () -> HomeboxApi, block: suspend (HomeboxApi) -> Response<T>): Result<T> =
         runCatchingCancellable {
             val response = block(api())
             if (response.isSuccessful) {
@@ -222,8 +226,14 @@ class HomeboxRepository(
     // ---- Auth / system ----
     suspend fun status(): Result<ApiSummary> = call { it.status() }
 
-    suspend fun login(username: String, password: String): Result<TokenResponse> =
-        call { it.login(LoginForm(username = username, password = password, stayLoggedIn = true)) }
+    /**
+     * Signs in to [target] (scheme, host and port) without making it the active connection, so a
+     * server being added or edited can be tried while everything else stays on the saved one.
+     */
+    suspend fun loginTo(target: ConnectionConfig, username: String, password: String): Result<TokenResponse> =
+        callOn({ apiProvider.unauthenticatedApi(target) }) {
+            it.login(LoginForm(username = username, password = password, stayLoggedIn = true))
+        }
 
     suspend fun refresh(): Result<TokenResponse> = call { it.refresh() }
 
@@ -949,9 +959,16 @@ class HomeboxRepository(
     suspend fun deleteMaintenance(id: String): Result<Unit> =
         callUnit { it.deleteMaintenance(id) }
 
-    /** Drops the offline inventory cached for a saved server (e.g. after that server is deleted). */
+    /**
+     * Drops the offline inventory cached for a saved server, list rows and full details both (after
+     * that server is deleted, or when another account signs in on it).
+     */
     suspend fun clearCachedServer(serverId: String) {
-        runCatchingCancellable { entityCache?.clearServer(serverId) }
+        runCatchingCancellable {
+            val entities = entityCache ?: return@runCatchingCancellable
+            detailCache?.let { details -> entities.idsForServer(serverId).chunked(500).forEach { details.deleteIds(it) } }
+            entities.clearServer(serverId)
+        }
     }
 
     /** Clears the saved session so the user returns to a disconnected state. */

@@ -166,7 +166,7 @@ private fun QueuedOpCard(op: QueuedOp, elsewhere: Boolean, onRemove: () -> Unit)
 }
 
 private fun statusLine(op: QueuedOp, failed: Boolean, elsewhere: Boolean): String = when {
-    elsewhere -> "Saved for another server or collection - uploads when you switch back to it"
+    elsewhere -> "Saved for another server, collection or account - uploads when you switch back to it"
     failed -> op.lastError?.takeIf { it.isNotBlank() }?.let { "Failed - $it" } ?: "Failed - will retry"
     else -> "Waiting to upload"
 }

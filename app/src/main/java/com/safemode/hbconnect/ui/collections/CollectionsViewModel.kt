@@ -120,8 +120,7 @@ class CollectionsViewModel : ViewModel() {
         if (id == _activeId.value) return
         viewModelScope.launch {
             _activeId.value = id
-            val config = settings.config.first()
-            settings.save(config.copy(activeGroupId = id))
+            settings.update { it.copy(activeGroupId = id) }
         }
     }
 

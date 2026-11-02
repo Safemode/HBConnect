@@ -128,18 +128,16 @@ class AccountViewModel : ViewModel() {
         if (_busy.value) return
         viewModelScope.launch {
             _busy.value = true
-            val result = repository.logoutAll()
+            // Read before the request, so the session cleared is the one that was signed out even if
+            // the user switches servers while it runs.
             val config = settings.config.first()
+            val result = repository.logoutAll()
             val clearedLocal = result.isSuccess && config.authMode == AuthMode.LOGIN
             if (clearedLocal) {
-                val cleared = config.copy(
-                    token = "",
-                    tokenExpiresAt = "",
-                    username = "",
-                    activeGroupId = "",
-                )
-                settings.save(cleared)
-                Graph.apiProvider.updateConfig(cleared)
+                settings.updateServer(config.serverId) {
+                    it.copy(token = "", tokenExpiresAt = "", username = "", activeGroupId = "")
+                }
+                Graph.apiProvider.updateConfig(settings.config.first())
                 Graph.serverStatus.reportChecking()
                 _state.value = UiState.NotConfigured
             }

@@ -50,6 +50,8 @@ data class ConnectionConfig(
      * offline queue and cache to one server, and [SettingsRepository.save] never writes it back.
      */
     val serverId: String = "",
+    /** The active server's verified user id (see [ServerProfile.accountId]). Read-only here, like [serverId]. */
+    val accountId: String = "",
     val scheme: String = "https",
     val host: String = "",
     val port: String = "",

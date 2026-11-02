@@ -16,6 +16,8 @@ import com.safemode.hbconnect.data.queue.OFFLINE_SAVED_MESSAGE
 import com.safemode.hbconnect.data.queue.OpKind
 import com.safemode.hbconnect.data.queue.isUndelivered
 import com.safemode.hbconnect.data.EntityEditPayload
+import com.safemode.hbconnect.data.formatQuantity
+import com.safemode.hbconnect.data.parseQuantity
 import com.safemode.hbconnect.data.isWithin
 import com.safemode.hbconnect.data.nearestLocation
 import com.safemode.hbconnect.ui.common.UiState
@@ -229,7 +231,7 @@ class ItemFormViewModel(
     private fun formFrom(entity: EntityOut) = ItemForm(
         name = entity.name.orEmpty(),
         description = entity.description.orEmpty(),
-        quantity = (entity.quantity?.toInt() ?: 1).toString(),
+        quantity = entity.quantity?.let(::formatQuantity) ?: "1",
         parentId = if (parentIsItem(entity)) entity.locationId else entity.parent?.id,
         parentItemId = entity.parent?.id?.takeIf { parentIsItem(entity) },
         parentItemName = entity.parent?.displayName?.takeIf { parentIsItem(entity) }.orEmpty(),
@@ -554,7 +556,7 @@ class ItemFormViewModel(
         entityTypeId = f.entityTypeId,
         parentId = f.effectiveParentId(),
         locationId = f.ownLocationId(),
-        quantity = f.quantity.toIntOrNull() ?: 1,
+        quantity = parseQuantity(f.quantity) ?: 1.0,
         tagIds = f.tagIds.toList().ifEmpty { null },
         manufacturer = f.manufacturer.trim().ifBlank { null },
         modelNumber = f.modelNumber.trim().ifBlank { null },
@@ -572,7 +574,7 @@ class ItemFormViewModel(
             locationId = f.ownLocationId(),
             // A cleared quantity keeps the current one rather than being sent as missing (which the
             // server stores as 0).
-            quantity = f.quantity.toIntOrNull() ?: prior?.quantity?.toInt() ?: 1,
+            quantity = parseQuantity(f.quantity) ?: prior?.quantity ?: 1.0,
             insured = f.insured,
             archived = f.archived,
             lifetimeWarranty = f.lifetimeWarranty,

@@ -16,6 +16,12 @@ data class ServerProfile(
     val tokenExpiresAt: String = "",
     val username: String = "",
     val activeGroupId: String = "",
+    /**
+     * Id of the Homebox user this server was last verified as (from `/users/self`), blank until
+     * known. Scopes queued writes to one account, and a change means another account signed in here,
+     * so the old account's offline copy is dropped.
+     */
+    val accountId: String = "",
 ) {
     /** Label for the server selector: the given label, else the host, else a placeholder. */
     val displayName: String

@@ -72,11 +72,14 @@ class SettingsRepository(private val context: Context) {
     )
 
     /** The effective connection: the active server profile merged with the app-wide preferences. */
-    val config: Flow<ConnectionConfig> = context.dataStore.data.map { prefs ->
+    val config: Flow<ConnectionConfig> = context.dataStore.data.map(::configFrom)
+
+    private fun configFrom(prefs: Preferences): ConnectionConfig {
         val servers = readServers(prefs)
         val active = servers.firstOrNull { it.id == readActiveId(prefs, servers) } ?: ServerProfile(id = "")
-        ConnectionConfig(
+        return ConnectionConfig(
             serverId = active.id,
+            accountId = active.accountId,
             scheme = active.scheme,
             host = active.host,
             port = active.port,
@@ -132,49 +135,80 @@ class SettingsRepository(private val context: Context) {
     }
 
     /**
-     * Persists app-wide preferences and folds the connection fields of [config] into the active
-     * server profile (creating one if there is none yet but connection details are present).
+     * Applies [transform] to the current config and saves the result in one atomic edit, returning
+     * it. Use this for any change built from the current settings: the transform sees the latest
+     * values, so two quick changes can't overwrite each other and a stale copy can't undo a setting
+     * changed elsewhere.
      */
-    suspend fun save(config: ConnectionConfig) {
+    suspend fun update(transform: (ConnectionConfig) -> ConnectionConfig): ConnectionConfig {
+        var result = ConnectionConfig()
         context.dataStore.edit { prefs ->
-            prefs[Keys.CACHE_SIZE] = config.cacheSize.name
-            prefs[Keys.THEME] = config.themePreference.name
-            prefs[Keys.ACCENT] = config.accent.name
-            prefs[Keys.ACCENT_COLOR] = config.accentColor
-            prefs[Keys.SORT_ORDER] = config.itemSortOrder.name
-            prefs[Keys.SHOW_DEVICE_QR] = config.showDeviceQr
-            prefs[Keys.SHOW_LOCATION_BANNERS] = config.showLocationBanners
-            prefs[Keys.SWAP_SCAN_FILTER] = config.swapScanFilter
-            prefs[Keys.LIVE_UPDATES] = config.liveUpdates
-            prefs[Keys.MAINTENANCE_REMINDERS] = config.maintenanceReminders
-            prefs[Keys.MAINTENANCE_LEAD] = config.maintenanceLead.name
-            prefs[Keys.QUEUE_UPLOAD_NOTIFICATIONS] = config.queueUploadNotifications
-            prefs[Keys.MORE_ORDER] = config.moreOrder.joinToString(",")
-            prefs[Keys.DASHBOARD_LAYOUT] = encodeDashboardLayout(config.dashboardLayout)
+            result = transform(configFrom(prefs))
+            write(prefs, result)
+        }
+        return result
+    }
 
+    /**
+     * Applies [transform] to the saved server [id] alone, in one atomic edit. A no-op when that
+     * server no longer exists. Use this for a change aimed at one server (a refreshed token, a
+     * sign-out) that may finish after the user has switched to another one.
+     */
+    suspend fun updateServer(id: String, transform: (ServerProfile) -> ServerProfile) {
+        if (id.isBlank()) return
+        context.dataStore.edit { prefs ->
             val servers = readServers(prefs).toMutableList()
-            val activeId = readActiveId(prefs, servers)
-            val index = servers.indexOfFirst { it.id == activeId }
-            if (index >= 0) {
-                val existing = servers[index]
-                servers[index] = existing.copy(
-                    scheme = config.scheme,
-                    host = config.host,
-                    port = config.port,
-                    authMode = config.authMode,
-                    token = config.token,
-                    tokenExpiresAt = config.tokenExpiresAt,
-                    username = config.username,
-                    activeGroupId = config.activeGroupId,
-                    label = existing.label.ifBlank { config.host },
-                )
-                writeServers(prefs, servers)
-            } else if (config.host.isNotBlank() || config.token.isNotBlank()) {
-                val profile = config.toProfile(UUID.randomUUID().toString())
-                servers.add(profile)
-                prefs[Keys.ACTIVE_SERVER_ID] = profile.id
-                writeServers(prefs, servers)
-            }
+            val index = servers.indexOfFirst { it.id == id }
+            if (index < 0) return@edit
+            servers[index] = transform(servers[index]).copy(id = id)
+            writeServers(prefs, servers)
+        }
+    }
+
+    /**
+     * Persists app-wide preferences and folds the connection fields of [config] into the server it
+     * came from ([ConnectionConfig.serverId]), or into the active one (creating it if there is none
+     * yet but connection details are present) when it names none. A config read before a server
+     * switch therefore never writes its host or token into the newly active server.
+     */
+    private fun write(prefs: MutablePreferences, config: ConnectionConfig) {
+        prefs[Keys.CACHE_SIZE] = config.cacheSize.name
+        prefs[Keys.THEME] = config.themePreference.name
+        prefs[Keys.ACCENT] = config.accent.name
+        prefs[Keys.ACCENT_COLOR] = config.accentColor
+        prefs[Keys.SORT_ORDER] = config.itemSortOrder.name
+        prefs[Keys.SHOW_DEVICE_QR] = config.showDeviceQr
+        prefs[Keys.SHOW_LOCATION_BANNERS] = config.showLocationBanners
+        prefs[Keys.SWAP_SCAN_FILTER] = config.swapScanFilter
+        prefs[Keys.LIVE_UPDATES] = config.liveUpdates
+        prefs[Keys.MAINTENANCE_REMINDERS] = config.maintenanceReminders
+        prefs[Keys.MAINTENANCE_LEAD] = config.maintenanceLead.name
+        prefs[Keys.QUEUE_UPLOAD_NOTIFICATIONS] = config.queueUploadNotifications
+        prefs[Keys.MORE_ORDER] = config.moreOrder.joinToString(",")
+        prefs[Keys.DASHBOARD_LAYOUT] = encodeDashboardLayout(config.dashboardLayout)
+
+        val servers = readServers(prefs).toMutableList()
+        val targetId = config.serverId.ifBlank { readActiveId(prefs, servers) }
+        val index = servers.indexOfFirst { it.id == targetId }
+        if (index >= 0) {
+            val existing = servers[index]
+            servers[index] = existing.copy(
+                scheme = config.scheme,
+                host = config.host,
+                port = config.port,
+                authMode = config.authMode,
+                token = config.token,
+                tokenExpiresAt = config.tokenExpiresAt,
+                username = config.username,
+                activeGroupId = config.activeGroupId,
+                label = existing.label.ifBlank { config.host },
+            )
+            writeServers(prefs, servers)
+        } else if (config.serverId.isBlank() && (config.host.isNotBlank() || config.token.isNotBlank())) {
+            val profile = config.toProfile(UUID.randomUUID().toString())
+            servers.add(profile)
+            prefs[Keys.ACTIVE_SERVER_ID] = profile.id
+            writeServers(prefs, servers)
         }
     }
 

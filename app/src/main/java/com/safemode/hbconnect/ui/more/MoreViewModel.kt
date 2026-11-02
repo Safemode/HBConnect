@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -21,10 +20,7 @@ class MoreViewModel : ViewModel() {
 
     /** Persists an explicit order of route ids for the reorderable section. */
     fun saveOrder(order: List<String>) {
-        viewModelScope.launch {
-            val config = settings.config.first()
-            settings.save(config.copy(moreOrder = order))
-        }
+        viewModelScope.launch { settings.update { it.copy(moreOrder = order) } }
     }
 
     /** Clears the custom order, returning the section to alphabetical. */

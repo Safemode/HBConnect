@@ -37,9 +37,9 @@ import java.util.UUID
  * failing; [drain] replays pending ops in order once the server returns. Rows live in Room so they
  * survive a force-close, and pending photos are copied into [queueDir] so they survive too.
  *
- * A drain only replays ops whose captured server ([QueuedOp.serverId]) and collection
- * ([QueuedOp.tenant]) match the ones active now, so a write queued in one place can never be sent
- * somewhere else after a switch. When a drain actually flushed queued work, it posts a completion
+ * A drain only replays ops whose captured server ([QueuedOp.serverId]), collection
+ * ([QueuedOp.tenant]) and account ([QueuedOp.accountId]) match the ones active now, and re-checks
+ * before every op, so a write queued in one place can never be sent somewhere else after a switch. When a drain actually flushed queued work, it posts a completion
  * notification (if the user enabled it) - never for ordinary online writes, which never enter the
  * queue.
  *
@@ -54,8 +54,7 @@ class UploadQueueManager(
     private val queueDir: File,
     private val serverStatus: ServerStatus,
     private val isOnline: () -> Boolean,
-    private val activeServer: suspend () -> String,
-    private val activeTenant: suspend () -> String,
+    private val activeTarget: suspend () -> QueueTarget,
     private val notificationsEnabled: suspend () -> Boolean,
     private val notifier: QueueNotifier,
 ) {
@@ -81,13 +80,6 @@ class UploadQueueManager(
 
     /** True when a write should be attempted directly rather than queued. */
     fun online(): Boolean = isOnline() && serverStatus.isReachable()
-
-    /**
-     * True when [op] would be replayed against [server] and [tenant]: same collection, and the same
-     * server (ops queued before servers were tracked have no server and follow the active one).
-     */
-    fun belongsTo(op: QueuedOp, server: String, tenant: String): Boolean =
-        (op.serverId == null || op.serverId == server) && op.tenant.orEmpty() == tenant
 
     /**
      * Runs [direct] when the server is reachable, otherwise persists the write to the outbox. Used
@@ -207,24 +199,26 @@ class UploadQueueManager(
     }
 
     /**
-     * Replays everything for the active server and collection that can be sent now. Each op that
-     * succeeds is removed (and its photos deleted); one that fails against a reachable server is
+     * Replays everything for the active server, collection and account that can be sent now. Each op
+     * that succeeds is removed (and its photos deleted); one that fails against a reachable server is
      * marked FAILED with its error and retried on the next drain (or removed by the user), so a single
-     * bad op can't wedge the queue. If the server drops mid-drain, the pass stops and the rest stay
-     * pending.
+     * bad op can't wedge the queue. If the server drops mid-drain, or the user switches server,
+     * collection or account, the pass stops and the rest stay pending.
      */
     suspend fun drain() {
         if (!online() || !drainLock.tryLock()) return
         try {
-            val server = activeServer()
-            val tenant = activeTenant()
+            val target = activeTarget()
+            if (!target.ready) return
             var uploaded = 0
             var failed = 0
             for (row in dao.getAll()) {
                 // Stop between ops if the drain was cancelled; an op already started finishes below.
                 currentCoroutineContext().ensureActive()
                 if (!online()) break
-                if (!belongsTo(toDomain(row), server, tenant)) continue
+                val now = activeTarget()
+                if (!now.ready || !now.sameScope(target)) break
+                if (!target.accepts(toDomain(row))) continue
                 val ok = withContext(NonCancellable) {
                     try {
                         process(row)
@@ -435,6 +429,7 @@ class UploadQueueManager(
         label: String,
     ) {
         val opId = UUID.randomUUID().toString()
+        val target = activeTarget()
         // Off the main thread: an attachment can be large.
         val copied = withContext(Dispatchers.IO) {
             photoSources.mapIndexedNotNull { index, src -> copyIntoQueueDir(src, opId, index) }
@@ -443,7 +438,7 @@ class UploadQueueManager(
             QueuedOpEntity(
                 id = opId,
                 kind = kind.name,
-                tenant = activeTenant(),
+                tenant = target.tenant,
                 payloadJson = payload?.let(::encode).orEmpty(),
                 targetId = targetId,
                 photoPathsJson = copied.takeIf { it.isNotEmpty() }?.let { pathsAdapter.toJson(it) },
@@ -452,7 +447,8 @@ class UploadQueueManager(
                 attempts = 0,
                 lastError = null,
                 status = QueuedOp.Status.PENDING.name,
-                serverId = activeServer().ifBlank { null },
+                serverId = target.server.ifBlank { null },
+                accountId = target.account.ifBlank { null },
             ),
         )
     }
@@ -489,6 +485,7 @@ class UploadQueueManager(
         kind = runCatching { OpKind.valueOf(e.kind) }.getOrDefault(OpKind.UPDATE_ENTITY),
         tenant = e.tenant,
         serverId = e.serverId,
+        accountId = e.accountId,
         payloadJson = e.payloadJson,
         targetId = e.targetId,
         photoPaths = e.photoPathsJson?.let { runCatching { pathsAdapter.fromJson(it) }.getOrNull() }.orEmpty(),

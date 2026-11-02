@@ -170,6 +170,9 @@ class ServerViewModel : ViewModel() {
             _busy.value = true
             _state.value = UiState.Loading
             try {
+                // The server being edited, read before signing in so a switch meanwhile can't redirect
+                // the save. Null when adding one, or when none is saved yet.
+                val target = if (_addingNew.value) null else settings.config.first().takeIf { it.serverId.isNotBlank() }
                 val token: String
                 val tokenExpires: String
                 when (form.authMode) {
@@ -178,27 +181,15 @@ class ServerViewModel : ViewModel() {
                         tokenExpires = ""
                     }
                     AuthMode.LOGIN -> {
-                        // Point the API provider at the host (no token yet) so login can be issued.
-                        // Built from the saved config so app-wide settings (cache size) don't change.
-                        val saved = settings.config.first()
-                        Graph.apiProvider.updateConfig(
-                            saved.copy(
-                                serverId = "",
-                                scheme = form.scheme,
-                                host = form.host.trim(),
-                                port = form.port,
-                                authMode = form.authMode,
-                                token = "",
-                                tokenExpiresAt = "",
-                                activeGroupId = "",
-                            ),
+                        // Sign in on a one-off connection to the typed host, so images, sync and the
+                        // upload queue keep using the saved connection until this one is saved.
+                        val login = repository.loginTo(
+                            ConnectionConfig(scheme = form.scheme, host = form.host.trim(), port = form.port),
+                            form.username.trim(),
+                            form.password,
                         )
-                        val login = repository.login(form.username.trim(), form.password)
                         val issued = login.getOrNull()?.token
                         if (login.isFailure || issued.isNullOrBlank()) {
-                            // Point the app back at the saved connection; otherwise images, sync and
-                            // the upload queue would keep talking to the draft host with no token.
-                            Graph.apiProvider.updateConfig(saved)
                             _state.value = UiState.Error(
                                 login.exceptionOrNull()?.message ?: "Login failed. Check your username and password.",
                             )
@@ -209,7 +200,7 @@ class ServerViewModel : ViewModel() {
                     }
                 }
 
-                if (_addingNew.value) {
+                if (target == null) {
                     settings.addServer(
                         ServerProfile(
                             id = UUID.randomUUID().toString(),
@@ -226,9 +217,17 @@ class ServerViewModel : ViewModel() {
                     )
                     _addingNew.value = false
                 } else {
-                    val existing = settings.config.first()
-                    settings.save(
-                        existing.copy(
+                    val current = settings.servers.first().firstOrNull { it.id == target.serverId }
+                    val sameAccount = current != null && isSameAccount(current, form, token)
+                    if (!sameAccount) {
+                        // Possibly another account, or another server at a new address: drop the old
+                        // offline copy now, so it can't show under the new sign-in.
+                        repository.clearCachedServer(target.serverId)
+                        Graph.apiProvider.clearCache()
+                    }
+                    settings.updateServer(target.serverId) {
+                        it.copy(
+                            label = it.label.ifBlank { form.host.trim() },
                             scheme = form.scheme,
                             host = form.host.trim(),
                             port = form.port,
@@ -237,8 +236,11 @@ class ServerViewModel : ViewModel() {
                             tokenExpiresAt = tokenExpires,
                             username = if (form.authMode == AuthMode.LOGIN) form.username.trim() else "",
                             activeGroupId = "",
-                        ),
-                    )
+                            // When it may be another account, unknown until validate() confirms who signed
+                            // in; until then, writes queued for the previous account stay put.
+                            accountId = if (sameAccount) it.accountId else "",
+                        )
+                    }
                 }
 
                 val config = settings.config.first()
@@ -256,11 +258,12 @@ class ServerViewModel : ViewModel() {
     fun logout() {
         viewModelScope.launch {
             _busy.value = true
+            val signedOut = settings.config.first().serverId
             repository.clearSession()
-            val cleared = settings.config.first()
-                .copy(token = "", tokenExpiresAt = "", username = "", activeGroupId = "")
-            settings.save(cleared)
-            Graph.apiProvider.updateConfig(cleared)
+            settings.updateServer(signedOut) {
+                it.copy(token = "", tokenExpiresAt = "", username = "", activeGroupId = "")
+            }
+            Graph.apiProvider.updateConfig(settings.config.first())
             Graph.serverStatus.reportChecking()
             _form.value = _form.value.copy(password = "", apiKey = "")
             _state.value = UiState.NotConfigured
@@ -268,7 +271,24 @@ class ServerViewModel : ViewModel() {
         }
     }
 
+    /**
+     * True when signing in with [form] (and its [token]) on [profile] is certainly the account that
+     * was signed in there before: same address and auth method, and the same username or API key.
+     * A sign-in after a sign-out has no username to compare, so it counts as possibly another account.
+     */
+    private fun isSameAccount(profile: ServerProfile, form: ServerForm, token: String): Boolean =
+        profile.scheme == form.scheme &&
+            profile.host.equals(form.host.trim(), ignoreCase = true) &&
+            profile.port == form.port &&
+            profile.authMode == form.authMode &&
+            when (form.authMode) {
+                AuthMode.LOGIN -> profile.username.isNotBlank() && profile.username.equals(form.username.trim(), ignoreCase = true)
+                AuthMode.API_KEY -> profile.token.isNotBlank() && profile.token == token
+            }
+
+    /** Checks the active connection and records which account it is signed in as. */
     private suspend fun validate() {
+        val serverId = settings.config.first().serverId
         val reachable = withContext(Dispatchers.IO) { Graph.apiProvider.probeReachable() }
         Graph.serverStatus.report(reachable)
         val who = repository.self()
@@ -276,6 +296,7 @@ class ServerViewModel : ViewModel() {
             _state.value = UiState.Error(who.exceptionOrNull()?.message ?: "Failed to reach server.")
             return
         }
+        Graph.recordAccount(serverId, who.getOrNull()?.id)
         val version = repository.serverVersion().getOrNull()
         Graph.loadCurrency()
         _state.value = UiState.Success(ServerInfo(user = who.getOrNull(), version = version))
