@@ -11,6 +11,7 @@ import com.safemode.hbconnect.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -28,24 +29,29 @@ class MaintenanceViewModel(private val entityId: String) : ViewModel() {
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
+    // The running load, so a new one replaces it: a slower, older response can't land after a newer
+    // one, and refresh() can wait for its load to finish before hiding the spinner.
+    private var loadJob: Job? = null
+
     init {
         load(showLoading = true)
     }
 
-    fun load(showLoading: Boolean = false) {
-        viewModelScope.launch {
+    fun load(showLoading: Boolean = false): Job {
+        loadJob?.cancel()
+        return viewModelScope.launch {
             if (showLoading) _state.value = UiState.Loading
             _state.value = repository.getMaintenance(entityId).fold(
                 onSuccess = { list -> UiState.Success(list.sortedByDescending { sortKey(it) }) },
                 onFailure = { UiState.Error(it.message ?: "Failed to load maintenance.") },
             )
-        }
+        }.also { loadJob = it }
     }
 
     fun refresh() {
         viewModelScope.launch {
             _refreshing.value = true
-            load(showLoading = false)
+            load(showLoading = false).join()
             _refreshing.value = false
         }
     }

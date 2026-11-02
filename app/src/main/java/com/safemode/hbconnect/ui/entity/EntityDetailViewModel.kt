@@ -3,7 +3,9 @@ package com.safemode.hbconnect.ui.entity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.EntityEditPayload
 import com.safemode.hbconnect.data.remote.LiveEvent
+import com.safemode.hbconnect.data.toUpdate
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
 import com.safemode.hbconnect.data.remote.models.EntityOut
 import com.safemode.hbconnect.data.remote.models.EntityPatch
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -75,6 +78,10 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
 
     private var pickersLoaded = false
 
+    // The running load, so a new one replaces it: a slower, older response can't land after a newer
+    // one, and refresh() can wait for its load to finish before hiding the spinner.
+    private var loadJob: Job? = null
+
     init {
         load(showLoading = true)
         // Refresh if this entity (or anything it shows, like its children) changes server-side.
@@ -96,8 +103,31 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
     fun setQuantity(quantity: Double, onResult: (Boolean, String?) -> Unit) =
         patch(EntityPatch(id = entityId, quantity = quantity), onResult)
 
-    fun move(parentId: String, onResult: (Boolean, String?) -> Unit) =
-        patch(EntityPatch(id = entityId, parentId = parentId), onResult)
+    /**
+     * Moves this entity under [parentId]. A sub-item that has its own location keeps that location
+     * through a plain patch (the patch can't clear a field), so it is moved with a merged update that
+     * also clears the own location, leaving it simply in the new place.
+     */
+    fun move(parentId: String, onResult: (Boolean, String?) -> Unit) {
+        val loaded = (_state.value as? UiState.Success)?.data
+        if (loaded?.locationId == null) {
+            patch(EntityPatch(id = entityId, parentId = parentId), onResult)
+            return
+        }
+        val base = loaded.toUpdate().copy(id = entityId)
+        val edited = base.copy(parentId = parentId, locationId = null)
+        viewModelScope.launch {
+            Graph.uploadQueue.submitWrite(
+                kind = OpKind.MERGE_ENTITY,
+                payload = EntityEditPayload(base, edited),
+                targetId = entityId,
+                label = "Move ${entityLabel()}",
+                direct = { repository.mergeUpdateEntity(entityId, base, edited).map {} },
+                onSent = { load(showLoading = false) },
+                onResult = onResult,
+            )
+        }
+    }
 
     fun setTags(tagIds: List<String>, onResult: (Boolean, String?) -> Unit) =
         patch(EntityPatch(id = entityId, tagIds = tagIds), onResult)
@@ -165,8 +195,9 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
         }
     }
 
-    fun load(showLoading: Boolean = false) {
-        viewModelScope.launch {
+    fun load(showLoading: Boolean = false): Job {
+        loadJob?.cancel()
+        return viewModelScope.launch {
             if (showLoading) _state.value = UiState.Loading
             val result = repository.getEntity(entityId)
             _state.value = result.fold(
@@ -183,13 +214,13 @@ class EntityDetailViewModel(private val entityId: String) : ViewModel() {
             } else {
                 emptyList()
             }
-        }
+        }.also { loadJob = it }
     }
 
     fun refresh() {
         viewModelScope.launch {
             _refreshing.value = true
-            load(showLoading = false)
+            load(showLoading = false).join()
             _refreshing.value = false
         }
     }

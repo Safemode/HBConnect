@@ -2,10 +2,12 @@ package com.safemode.hbconnect.data.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -13,11 +15,19 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "hbconnect_settings")
+// A settings file that can't be read (corrupted by a crash mid-write, say) is replaced with empty
+// settings rather than crashing every launch. Saved servers are lost then, as they would be anyway.
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "hbconnect_settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 /**
  * Persists app settings. Server connections are stored as a JSON list of [ServerProfile]s with one
@@ -68,12 +78,30 @@ class SettingsRepository(private val context: Context) {
     }
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+
+    /** The settings as stored, with a read error (an I/O failure) treated as empty settings. */
+    private val data: Flow<Preferences> = context.dataStore.data.catch { e ->
+        if (e is IOException) emit(emptyPreferences()) else throw e
+    }
+
+    /**
+     * Tokens already decrypted, by ciphertext. Every settings change re-reads the saved servers, and
+     * without this each one would be a Keystore call per server. Failed decryptions aren't cached, so
+     * a briefly unavailable Keystore is retried.
+     */
+    private val decrypted = ConcurrentHashMap<String, String>()
+
+    private fun decryptToken(cipher: String): String {
+        if (cipher.isBlank()) return ""
+        decrypted[cipher]?.let { return it }
+        return KeystoreCrypto.decrypt(cipher).also { if (it.isNotBlank()) decrypted[cipher] = it }
+    }
     private val serversAdapter = moshi.adapter<List<ServerProfile>>(
         Types.newParameterizedType(List::class.java, ServerProfile::class.java),
     )
 
     /** The effective connection: the active server profile merged with the app-wide preferences. */
-    val config: Flow<ConnectionConfig> = context.dataStore.data.map(::configFrom)
+    val config: Flow<ConnectionConfig> = data.map(::configFrom)
 
     private fun configFrom(prefs: Preferences): ConnectionConfig {
         val servers = readServers(prefs)
@@ -118,7 +146,7 @@ class SettingsRepository(private val context: Context) {
      * must not decrypt credentials (a Keystore call) on the main thread.
      */
     suspend fun appearance(): ConnectionConfig {
-        val prefs = context.dataStore.data.first()
+        val prefs = data.first()
         return ConnectionConfig(
             themePreference = runCatching { ThemePreference.valueOf(prefs[Keys.THEME] ?: "SYSTEM") }
                 .getOrDefault(ThemePreference.SYSTEM),
@@ -129,10 +157,10 @@ class SettingsRepository(private val context: Context) {
     }
 
     /** All saved servers, for the server selector. */
-    val servers: Flow<List<ServerProfile>> = context.dataStore.data.map { readServers(it) }
+    val servers: Flow<List<ServerProfile>> = data.map { readServers(it) }
 
     /** The id of the active server (falls back to the first saved one). */
-    val activeServerId: Flow<String> = context.dataStore.data.map { prefs ->
+    val activeServerId: Flow<String> = data.map { prefs ->
         readActiveId(prefs, readServers(prefs))
     }
 
@@ -256,7 +284,7 @@ class SettingsRepository(private val context: Context) {
 
     private fun readServers(prefs: Preferences): List<ServerProfile> {
         readStoredServers(prefs)?.let { stored ->
-            return stored.map { it.copy(token = KeystoreCrypto.decrypt(it.token)) }
+            return stored.map { it.copy(token = decryptToken(it.token)) }
         }
         val blob = prefs[Keys.SERVERS_BLOB]
         if (!blob.isNullOrBlank()) {
@@ -301,8 +329,11 @@ class SettingsRepository(private val context: Context) {
             // A blank token whose stored ciphertext can't be decrypted means the Keystore failed to
             // read it, not that the user cleared it (a deliberate sign-out had a readable token), so
             // keep the ciphertext instead of erasing the credential.
-            val keepOld = profile.token.isBlank() && oldCipher.isNotBlank() &&
-                KeystoreCrypto.decrypt(oldCipher).isBlank()
+            val oldPlain = decryptToken(oldCipher)
+            val keepOld = oldCipher.isNotBlank() &&
+                ((profile.token.isBlank() && oldPlain.isBlank()) || (oldPlain.isNotBlank() && oldPlain == profile.token))
+            // An unchanged token keeps its ciphertext too, so saving a setting doesn't re-encrypt
+            // every server's credential.
             profile.copy(token = if (keepOld) oldCipher else KeystoreCrypto.encrypt(profile.token))
         }
         prefs[Keys.SERVERS] = serversAdapter.toJson(stored)

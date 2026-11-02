@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Which maintenance entries the group-wide list shows; [status] is the API query value. */
@@ -33,6 +34,10 @@ class AllMaintenanceViewModel : ViewModel() {
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
+    // The running load, so a new one replaces it: a slower, older response can't land after a newer
+    // one, and refresh() can wait for its load to finish before hiding the spinner.
+    private var loadJob: Job? = null
+
     init {
         load(showLoading = true)
         refreshWhenServerReachable { load(showLoading = false) }
@@ -44,8 +49,9 @@ class AllMaintenanceViewModel : ViewModel() {
         load(showLoading = true)
     }
 
-    fun load(showLoading: Boolean = false) {
-        viewModelScope.launch {
+    fun load(showLoading: Boolean = false): Job {
+        loadJob?.cancel()
+        return viewModelScope.launch {
             val config = settings.config.first()
             if (!config.isConfigured) {
                 _state.value = UiState.NotConfigured
@@ -56,13 +62,13 @@ class AllMaintenanceViewModel : ViewModel() {
                 onSuccess = { UiState.Success(sortEntries(it)) },
                 onFailure = { UiState.Error(it.message ?: "Failed to load maintenance.") },
             )
-        }
+        }.also { loadJob = it }
     }
 
     fun refresh() {
         viewModelScope.launch {
             _refreshing.value = true
-            load(showLoading = false)
+            load(showLoading = false).join()
             _refreshing.value = false
         }
     }
