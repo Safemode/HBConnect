@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.safemode.hbconnect.data.quantityInput
 import com.safemode.hbconnect.data.remote.models.BarcodeProduct
 import com.safemode.hbconnect.ui.scan.ScanBarcodeContract
 import com.safemode.hbconnect.ui.scan.ScanMode
@@ -220,10 +221,10 @@ fun ItemFormScreen(
                     )
                     OutlinedTextField(
                         value = form.quantity,
-                        onValueChange = { v -> viewModel.update { it.copy(quantity = v.filter(Char::isDigit)) } },
+                        onValueChange = { v -> viewModel.update { it.copy(quantity = quantityInput(v)) } },
                         label = { Text("Quantity") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     // Location is required, so there's no "(None)" choice. With no locations to pick

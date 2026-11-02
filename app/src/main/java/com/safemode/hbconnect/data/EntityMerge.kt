@@ -26,7 +26,7 @@ fun EntityOut.toUpdate(): EntityUpdate = EntityUpdate(
     parentId = parent?.id,
     // Without this, a full replace would drop a sub-item's own location.
     locationId = locationId,
-    quantity = quantity?.toInt(),
+    quantity = quantity,
     insured = insured,
     archived = archived,
     lifetimeWarranty = lifetimeWarranty,

@@ -44,6 +44,32 @@ data class AttachmentRef(
 )
 
 /**
+ * Where queued writes would be sent right now: the active saved [server], its [tenant] (collection,
+ * blank for the default) and the [account] signed in there (blank until known). [ready] is false
+ * while there is nothing to send with, or the API client hasn't caught up with a switch yet.
+ */
+data class QueueTarget(
+    val server: String,
+    val tenant: String,
+    val account: String,
+    val ready: Boolean = true,
+) {
+    /** Same server, collection and account as [other] (ignoring [ready]). */
+    fun sameScope(other: QueueTarget): Boolean =
+        server == other.server && tenant == other.tenant && account == other.account
+
+    /**
+     * True when [op] would be replayed here: same collection, the same server (ops queued before
+     * servers were tracked have none and follow the active one), and the same account (ops queued
+     * before accounts were tracked, or while the account wasn't known yet, have none).
+     */
+    fun accepts(op: QueuedOp): Boolean =
+        (op.serverId == null || op.serverId == server) &&
+            op.tenant.orEmpty() == tenant &&
+            (op.accountId == null || op.accountId == account)
+}
+
+/**
  * A pending write held in the outbox, as the UI and drainer see it (the in-memory form of
  * [com.safemode.hbconnect.data.local.QueuedOpEntity]).
  */
@@ -53,6 +79,8 @@ data class QueuedOp(
     val tenant: String?,
     /** The saved server profile this op was queued against; null for ops queued before servers were tracked. */
     val serverId: String?,
+    /** The account signed in when this op was queued; null when unknown or for older ops. */
+    val accountId: String? = null,
     val payloadJson: String,
     val targetId: String?,
     val photoPaths: List<String>,

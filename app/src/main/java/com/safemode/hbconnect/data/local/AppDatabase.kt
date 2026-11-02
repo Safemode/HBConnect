@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [QueuedOpEntity::class, CachedEntity::class, CachedDetail::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -37,9 +37,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** 3 -> 4: scopes queued writes to the account signed in when they were made. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE queued_op ADD COLUMN accountId TEXT")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "hbconnect.db")
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 // No blanket destructive fallback: a version bump without a migration fails loudly in
                 // testing instead of silently wiping the user's queued writes. Version 1 predates
                 // migrations and is rebuilt, as is a downgrade (e.g. reinstalling an older build).

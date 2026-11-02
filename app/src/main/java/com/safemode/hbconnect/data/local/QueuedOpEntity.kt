@@ -18,7 +18,8 @@ import androidx.room.PrimaryKey
  * server profile; the drainer only replays an op while that same server and collection are active,
  * so a queued write is never misrouted into another collection or onto another server. (Collection
  * ids alone aren't enough: the default collection is blank on every server.) [serverId] is null for
- * rows queued before it existed; those replay against whichever server is active.
+ * rows queued before it existed; those replay against whichever server is active. [accountId] keeps
+ * a write from being sent under another account that later signs in on the same server.
  */
 @Entity(tableName = "queued_op")
 data class QueuedOpEntity(
@@ -34,4 +35,6 @@ data class QueuedOpEntity(
     val lastError: String?,
     val status: String,
     val serverId: String? = null,
+    /** The account ([com.safemode.hbconnect.data.settings.ServerProfile.accountId]) signed in at enqueue time; null when unknown or for older rows. */
+    val accountId: String? = null,
 )

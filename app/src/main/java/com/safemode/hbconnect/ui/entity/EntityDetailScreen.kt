@@ -101,6 +101,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.formatQuantity
 import com.safemode.hbconnect.data.nearestLocation
 import com.safemode.hbconnect.data.remote.models.Currency
 import com.safemode.hbconnect.data.remote.models.DuplicateOptions
@@ -498,7 +499,7 @@ private fun ItemDetails(
         val locationName = entity.location?.displayName
             ?: if (parentIsItem) path.nearestLocation()?.name else entity.parent?.displayName
         DetailCard("Overview") {
-            DetailRow("Quantity", entity.quantity?.toInt()?.toString())
+            DetailRow("Quantity", entity.quantity?.let(::formatQuantity))
             DetailRow("Location", locationName)
             if (parentIsItem) DetailRow("Parent item", entity.parent?.displayName)
             DetailRow("Asset ID", entity.assetId)

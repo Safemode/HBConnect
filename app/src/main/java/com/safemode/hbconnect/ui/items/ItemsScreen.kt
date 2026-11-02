@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.safemode.hbconnect.data.parseQuantity
+import com.safemode.hbconnect.data.quantityInput
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TagSummary
 import com.safemode.hbconnect.ui.common.EmptyState
@@ -357,16 +359,16 @@ private fun QuantityDialog(count: Int, onApply: (Double) -> Unit, onDismiss: () 
         text = {
             OutlinedTextField(
                 value = qty,
-                onValueChange = { qty = it.filter(Char::isDigit) },
+                onValueChange = { qty = quantityInput(it) },
                 label = { Text("Quantity") },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth(),
             )
         },
         confirmButton = {
-            val value = qty.toIntOrNull()
-            TextButton(enabled = value != null, onClick = { value?.let { onApply(it.toDouble()) } }) { Text("Set") }
+            val value = parseQuantity(qty)
+            TextButton(enabled = value != null, onClick = { value?.let(onApply) }) { Text("Set") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

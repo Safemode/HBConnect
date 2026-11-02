@@ -143,6 +143,28 @@ class ApiProvider(
         return api
     }
 
+    /**
+     * A one-off API for [target] that sends no credentials and bypasses the cache and reachability
+     * tracking. Used to sign in to a server before it is saved, so the rest of the app (images, sync,
+     * the upload queue) keeps talking to the saved connection meanwhile.
+     */
+    fun unauthenticatedApi(target: ConnectionConfig): HomeboxApi {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(DiagnosticLogInterceptor())
+            .addInterceptor(Interceptor { chain ->
+                chain.proceed(chain.request().newBuilder().header("Accept", "application/json").build())
+            })
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+        return Retrofit.Builder()
+            .baseUrl(target.baseUrl())
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(HomeboxApi::class.java)
+    }
+
     private fun buildClient(): OkHttpClient {
         // Request lines (URLs with search terms and ids) go to Logcat only in debug builds; release
         // builds keep just the in-app diagnostic log.

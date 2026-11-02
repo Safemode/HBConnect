@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.safemode.hbconnect.Graph
+import com.safemode.hbconnect.data.formatQuantity
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 
 /** Builds the authenticated image URL for an entity summary's thumbnail/image, if any. */
@@ -101,7 +102,7 @@ fun EntityRow(
                         val count = entity.itemCount?.toInt() ?: 0
                         add("$count item${if (count == 1) "" else "s"}")
                     } else {
-                        entity.quantity?.toInt()?.takeIf { it != 1 }?.let { add("Qty $it") }
+                        entity.quantity?.takeIf { it != 1.0 }?.let { add("Qty ${formatQuantity(it)}") }
                         entity.parent?.displayName?.let { add(it) }
                     }
                     entity.tags?.mapNotNull { it.name }?.take(2)?.let { addAll(it) }
