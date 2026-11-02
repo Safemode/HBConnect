@@ -20,6 +20,7 @@ import com.safemode.hbconnect.notifications.MaintenanceReminderScheduler
 import com.safemode.hbconnect.data.settings.AuthMode
 import com.safemode.hbconnect.data.settings.SettingsRepository
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.time.Duration
 import java.time.OffsetDateTime
 import kotlinx.coroutines.CoroutineScope
@@ -171,26 +172,10 @@ object Graph {
             }
         }
 
-        // Refresh a login token that's getting close to expiry, so the session survives. Best-effort
-        // and gated to login-mode tokens; API keys and failures are left untouched.
         appScope.launch {
             val cfg = settingsRepository.config.first()
             apiProvider.updateConfig(cfg)
             if (cfg.isConfigured) loadCurrency()
-            if (cfg.authMode == AuthMode.LOGIN && cfg.token.isNotBlank() && tokenNeedsRefresh(cfg.tokenExpiresAt)) {
-                repository.refresh().onSuccess { tr ->
-                    val newToken = tr.token
-                    if (!newToken.isNullOrBlank()) {
-                        // Written to the server that was refreshed, and only if its session is still the
-                        // one refreshed: the user may have switched servers or signed in again meanwhile.
-                        settingsRepository.updateServer(cfg.serverId) {
-                            if (it.token != cfg.token) it
-                            else it.copy(token = newToken, tokenExpiresAt = tr.expiresAt?.ifBlank { null } ?: it.tokenExpiresAt)
-                        }
-                        apiProvider.updateConfig(settingsRepository.config.first())
-                    }
-                }
-            }
         }
 
         // Reachability check: whenever a network is present but the server isn't confirmed
@@ -210,6 +195,7 @@ object Graph {
             ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 serverStatus.state.collect { state ->
                     if (state == ServerReachability.REACHABLE) {
+                        refreshTokenIfNeeded()
                         ensureAccountKnown()
                         uploadQueue.drain()
                         // Refresh the offline cache (all text + thumbnails) in the background.
@@ -256,6 +242,36 @@ object Graph {
         }
         settingsRepository.updateServer(serverId) { it.copy(accountId = id) }
     }
+
+    /**
+     * Refreshes a login token that's getting close to expiry, so the session survives. Runs each time
+     * the server becomes reachable while the app is open, not just at launch, so a process kept alive
+     * for weeks still renews it. Best-effort and gated to login-mode tokens; API keys and failures
+     * are left untouched.
+     */
+    private suspend fun refreshTokenIfNeeded() {
+        val cfg = settingsRepository.config.first()
+        if (cfg.authMode != AuthMode.LOGIN || cfg.token.isBlank() || !tokenNeedsRefresh(cfg.tokenExpiresAt)) return
+        if (!refreshing.compareAndSet(false, true)) return
+        try {
+            repository.refresh().onSuccess { tr ->
+                val newToken = tr.token
+                if (!newToken.isNullOrBlank()) {
+                    // Written to the server that was refreshed, and only if its session is still the
+                    // one refreshed: the user may have switched servers or signed in again meanwhile.
+                    settingsRepository.updateServer(cfg.serverId) {
+                        if (it.token != cfg.token) it
+                        else it.copy(token = newToken, tokenExpiresAt = tr.expiresAt?.ifBlank { null } ?: it.tokenExpiresAt)
+                    }
+                    apiProvider.updateConfig(settingsRepository.config.first())
+                }
+            }
+        } finally {
+            refreshing.set(false)
+        }
+    }
+
+    private val refreshing = AtomicBoolean(false)
 
     /** Fills in the active server's account when it isn't known yet (e.g. right after an upgrade). */
     private suspend fun ensureAccountKnown() {

@@ -68,11 +68,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.safemode.hbconnect.data.imageMimeType
 import com.safemode.hbconnect.data.remote.models.ItemAttachment
 import com.safemode.hbconnect.ui.common.EmptyState
 import com.safemode.hbconnect.ui.common.ErrorState
 import com.safemode.hbconnect.ui.common.LoadingState
 import com.safemode.hbconnect.ui.common.UiState
+import com.safemode.hbconnect.ui.common.preparePhoto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -130,9 +132,12 @@ fun AttachmentsScreen(
         val file = pendingPhotoPath?.let(::File)
         pendingPhotoPath = null
         if (success && file != null) {
-            // The view model streams the photo from disk and deletes it once uploaded or queued.
-            viewModel.upload(file, file.name, "image/jpeg") { ok, err ->
-                Toast.makeText(context, if (ok) "Uploaded" else (err ?: "Upload failed"), Toast.LENGTH_LONG).show()
+            scope.launch {
+                val photo = File(preparePhoto(file.absolutePath))
+                // The view model streams the photo from disk and deletes it once uploaded or queued.
+                viewModel.upload(photo, photo.name, imageMimeType(photo.name)) { ok, err ->
+                    Toast.makeText(context, if (ok) "Uploaded" else (err ?: "Upload failed"), Toast.LENGTH_LONG).show()
+                }
             }
         } else {
             file?.delete()

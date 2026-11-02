@@ -501,7 +501,7 @@ private fun ItemDetails(
         DetailCard("Overview") {
             DetailRow("Quantity", entity.quantity?.let(::formatQuantity))
             DetailRow("Location", locationName)
-            if (parentIsItem) DetailRow("Parent item", entity.parent?.displayName)
+            if (parentIsItem) DetailRow("Parent item", entity.parent.displayName)
             DetailRow("Asset ID", entity.assetId)
             DetailRow("Insured", entity.insured?.let { if (it) "Yes" else "No" })
             DetailRow("Archived", entity.archived?.takeIf { it }?.let { "Yes" })

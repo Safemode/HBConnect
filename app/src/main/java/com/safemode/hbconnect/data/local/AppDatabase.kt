@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [QueuedOpEntity::class, CachedEntity::class, CachedDetail::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,9 +44,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 4 -> 5: cached rows are keyed by id and server together, so two saved servers for the same
+         * Homebox keep separate copies. The table is only a cache, so it is rebuilt empty and the
+         * background sync refills it.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `cached_entity`")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `cached_entity` (`id` TEXT NOT NULL, " +
+                        "`serverId` TEXT NOT NULL DEFAULT '', `tenant` TEXT NOT NULL, `isLocation` INTEGER NOT NULL, " +
+                        "`name` TEXT NOT NULL, `archived` INTEGER NOT NULL, `parentId` TEXT, " +
+                        "`updatedAt` TEXT NOT NULL, `summaryJson` TEXT NOT NULL, PRIMARY KEY(`id`, `serverId`))",
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "hbconnect.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 // No blanket destructive fallback: a version bump without a migration fails loudly in
                 // testing instead of silently wiping the user's queued writes. Version 1 predates
                 // migrations and is rebuilt, as is a downgrade (e.g. reinstalling an older build).

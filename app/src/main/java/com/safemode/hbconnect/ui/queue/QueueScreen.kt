@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.safemode.hbconnect.data.queue.QueuedOp
+import com.safemode.hbconnect.data.queue.UploadQueueManager
 import com.safemode.hbconnect.ui.common.EmptyState
 import java.io.File
 import java.time.Instant
@@ -167,6 +168,8 @@ private fun QueuedOpCard(op: QueuedOp, elsewhere: Boolean, onRemove: () -> Unit)
 
 private fun statusLine(op: QueuedOp, failed: Boolean, elsewhere: Boolean): String = when {
     elsewhere -> "Saved for another server, collection or account - uploads when you switch back to it"
+    failed && !UploadQueueManager.shouldAttempt(op.attempts, manual = false) ->
+        "Failed ${op.attempts} times${op.lastError?.takeIf { it.isNotBlank() }?.let { " - $it" }.orEmpty()}. Tap Retry now to try again."
     failed -> op.lastError?.takeIf { it.isNotBlank() }?.let { "Failed - $it" } ?: "Failed - will retry"
     else -> "Waiting to upload"
 }

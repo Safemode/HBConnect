@@ -6,7 +6,9 @@ import com.safemode.hbconnect.data.local.CachedEntity
 import com.safemode.hbconnect.data.local.CachedEntityDao
 import com.safemode.hbconnect.data.remote.ApiProvider
 import com.safemode.hbconnect.data.remote.HomeboxApi
+import com.safemode.hbconnect.data.remote.HttpStatusException
 import com.safemode.hbconnect.data.remote.ServerUnreachableException
+import com.safemode.hbconnect.data.remote.isUnreachable
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.safemode.hbconnect.data.remote.models.ApiKeyCreate
@@ -147,7 +149,7 @@ class HomeboxRepository(
         runCatchingCancellable {
             val stale = entities.idsIn(server, tenant).filterNot { it in keep }
             stale.chunked(500).forEach { chunk ->
-                entities.deleteIds(chunk)
+                entities.deleteIds(server, chunk)
                 details.deleteIds(chunk)
             }
         }
@@ -155,7 +157,7 @@ class HomeboxRepository(
 
     /** Drops one entity from the offline cache (after it was deleted). */
     private suspend fun uncache(id: String) {
-        runCatchingCancellable { entityCache?.deleteIds(listOf(id)) }
+        runCatchingCancellable { entityCache?.deleteIds(cacheServer(), listOf(id)) }
         runCatchingCancellable { detailCache?.deleteIds(listOf(id)) }
     }
 
@@ -215,12 +217,13 @@ class HomeboxRepository(
 
     private fun mapError(code: Int, body: String?): Exception {
         val detail = body?.take(200)?.ifBlank { null }
-        return when (code) {
-            401 -> IllegalStateException("Unauthorized (401). Your session may have expired - sign in again under Server.")
-            403 -> IllegalStateException("Forbidden (403). This account lacks access.")
-            404 -> IllegalStateException("Not found (404). Check the server address.")
-            else -> IllegalStateException("Server error $code${detail?.let { ": $it" } ?: ""}")
+        val message = when (code) {
+            401 -> "Unauthorized (401). Your session may have expired - sign in again under Server."
+            403 -> "Forbidden (403). This account lacks access."
+            404 -> "Not found (404). It may have been deleted, or check the server address."
+            else -> "Server error $code${detail?.let { ": $it" } ?: ""}"
         }
+        return HttpStatusException(code, message)
     }
 
     // ---- Auth / system ----
@@ -276,6 +279,7 @@ class HomeboxRepository(
      */
     suspend fun valueInsights(): Result<ValueInsights> = runCatchingCancellable {
         val items = allItems(includeArchived = false).getOrThrow()
+        val itemsById = items.associateBy { it.id }
         val locTotal = LinkedHashMap<String, Double>()
         val locName = HashMap<String, String>()
         val tagTotal = LinkedHashMap<String, Double>()
@@ -292,8 +296,10 @@ class HomeboxRepository(
             total += price
             if (price > 0.0) priced++
             if (item.insured == true) insured += price else uninsured += price
-            item.parent?.id?.let { id ->
-                locName[id] = item.parent.displayName
+            // A sub-item counts toward the location its parent item is in, not the parent item.
+            item.locationVia(itemsById)?.let { loc ->
+                val id = loc.id ?: return@let
+                locName[id] = loc.displayName
                 locTotal[id] = (locTotal[id] ?: 0.0) + price
             }
             item.tags.orEmpty().forEach { tag ->
@@ -439,7 +445,8 @@ class HomeboxRepository(
         }.map { it.sortedWith(sortComparator(sort)) }
         return result.fold(
             onSuccess = { items -> cacheEntities(items); Result.success(items) },
-            onFailure = { e ->
+            onFailure = fallback@{ e ->
+                if (!e.isUnreachable()) return@fallback Result.failure(e)
                 // Offline: serve the last-synced copy from the local cache (search when a query is set).
                 val cached = if (!query.isNullOrBlank()) {
                     cachedSearch(query, includeArchived, OFFLINE_SEARCH_LIMIT).filterNot { it.isLocation }
@@ -474,7 +481,8 @@ class HomeboxRepository(
                 val total = r.total
                 Result.success(ItemPage(items, hasMore = items.size >= pageSize && (total == null || page * pageSize < total)))
             },
-            onFailure = { e ->
+            onFailure = fallback@{ e ->
+                if (!e.isUnreachable()) return@fallback Result.failure(e)
                 val cached = if (page == 1) {
                     cachedSearch(query.orEmpty(), includeArchived = false, limit = OFFLINE_SEARCH_LIMIT).filterNot { it.isLocation }
                 } else {
@@ -507,7 +515,8 @@ class HomeboxRepository(
         }.map { it.sortedBy { l -> l.displayName.lowercase() } }
         return result.fold(
             onSuccess = { locations -> cacheEntities(locations); Result.success(locations) },
-            onFailure = { e ->
+            onFailure = fallback@{ e ->
+                if (!e.isUnreachable()) return@fallback Result.failure(e)
                 val cached = cachedList(isLocation = true, includeArchived = includeArchived)
                 if (cached.isNotEmpty()) Result.success(cached.sortedBy { it.displayName.lowercase() }) else Result.failure(e)
             },
@@ -577,7 +586,8 @@ class HomeboxRepository(
         }
         return result.fold(
             onSuccess = { merged -> cacheEntities(merged); Result.success(merged) },
-            onFailure = { e ->
+            onFailure = fallback@{ e ->
+                if (!e.isUnreachable()) return@fallback Result.failure(e)
                 // Offline: fall back to a local name search over the cached entities.
                 val cached = if (q != null) cachedSearch(q, filters.includeArchived, limit) else emptyList()
                 if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
@@ -609,7 +619,8 @@ class HomeboxRepository(
         return result.fold(
             // Feed children into the cache too, so a location's contents are browsable offline.
             onSuccess = { children -> cacheEntities(children); Result.success(children) },
-            onFailure = { e ->
+            onFailure = fallback@{ e ->
+                if (!e.isUnreachable()) return@fallback Result.failure(e)
                 val cached = cachedChildren(parentId, includeArchived).filter { !it.isLocation }
                 if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
             },
@@ -636,7 +647,8 @@ class HomeboxRepository(
         }.map { it.sortedWith(sortComparator(ItemSortOrder.NAME_ASC)) }
         return result.fold(
             onSuccess = { children -> cacheEntities(children); Result.success(children) },
-            onFailure = { e ->
+            onFailure = fallback@{ e ->
+                if (!e.isUnreachable()) return@fallback Result.failure(e)
                 val cached = cachedChildren(parentId, includeArchived).filter { it.isLocation }
                 if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
             },
@@ -689,7 +701,10 @@ class HomeboxRepository(
         return result.fold(
             onSuccess = { entity -> cacheDetail(entity); Result.success(entity) },
             // Offline: show the last-synced detail instead of a 504.
-            onFailure = { e -> cachedDetail(id)?.let { Result.success(it) } ?: Result.failure(e) },
+            onFailure = { e ->
+                val cached = if (e.isUnreachable()) cachedDetail(id) else null
+                cached?.let { Result.success(it) } ?: Result.failure(e)
+            },
         )
     }
 

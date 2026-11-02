@@ -71,6 +71,11 @@ data class ConnectionConfig(
     val showDeviceQr: Boolean = false,
     /** Whether a location's screen shows its primary photo as a banner. On by default. */
     val showLocationBanners: Boolean = true,
+    /**
+     * When true, photos taken or chosen in the app are reduced (longest edge 2048 px, location data
+     * removed) before upload; when false they upload at original size. On by default.
+     */
+    val downscalePhotos: Boolean = true,
     /** When true, the dashboard search row shows the filter button before the scan button. */
     val swapScanFilter: Boolean = false,
     /**

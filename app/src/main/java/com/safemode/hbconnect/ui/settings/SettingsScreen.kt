@@ -125,6 +125,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 )
             }
 
+            SettingCard("Photos") {
+                SwitchRow(
+                    title = "Downscale photos",
+                    subtitle = "Reduces photos taken or chosen in the app to 2048 px on the longest " +
+                        "side and removes location data before upload. Turn off to upload originals.",
+                    checked = config.downscalePhotos,
+                    onCheckedChange = { v -> viewModel.updateAndSave { it.copy(downscalePhotos = v) } },
+                )
+            }
+
             SettingCard("Dashboard") {
                 SwitchRow(
                     title = "Swap scan & filter buttons",
