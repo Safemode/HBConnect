@@ -47,8 +47,8 @@ interface CachedEntityDao {
     @Query("SELECT id FROM cached_entity WHERE serverId = :server AND tenant = :tenant")
     suspend fun idsIn(server: String, tenant: String): List<String>
 
-    @Query("DELETE FROM cached_entity WHERE id IN (:ids)")
-    suspend fun deleteIds(ids: List<String>)
+    @Query("DELETE FROM cached_entity WHERE serverId = :server AND id IN (:ids)")
+    suspend fun deleteIds(server: String, ids: List<String>)
 
     /** Every cached id for a server, across its collections. */
     @Query("SELECT id FROM cached_entity WHERE serverId = :server")

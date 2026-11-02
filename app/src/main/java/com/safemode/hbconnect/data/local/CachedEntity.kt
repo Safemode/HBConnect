@@ -12,11 +12,13 @@ import androidx.room.PrimaryKey
  * Rows are upserted whenever a server fetch succeeds and read back when the server is unreachable,
  * so the lists and search keep working offline from the last-synced copy. [serverId] (the saved
  * server profile) and [tenant] (the collection, blank for the server's default group) scope a row to
- * where it came from, so one server's inventory never shows up while another server is active.
+ * where it came from, so one server's inventory never shows up while another server is active. The
+ * key is the id and the server together: two saved servers can point at the same Homebox (a LAN and
+ * a public address), and each keeps its own copy instead of overwriting the other's.
  */
-@Entity(tableName = "cached_entity")
+@Entity(tableName = "cached_entity", primaryKeys = ["id", "serverId"])
 data class CachedEntity(
-    @PrimaryKey val id: String,
+    val id: String,
     @ColumnInfo(defaultValue = "") val serverId: String,
     val tenant: String,
     val isLocation: Boolean,

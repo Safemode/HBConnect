@@ -201,24 +201,36 @@ class UploadQueueManager(
     /**
      * Replays everything for the active server, collection and account that can be sent now. Each op
      * that succeeds is removed (and its photos deleted); one that fails against a reachable server is
-     * marked FAILED with its error and retried on the next drain (or removed by the user), so a single
+     * marked FAILED with its error and retried on later drains (or removed by the user), so a single
      * bad op can't wedge the queue. If the server drops mid-drain, or the user switches server,
      * collection or account, the pass stops and the rest stay pending.
+     *
+     * Writes to one entity stay in order: once an op for an entity fails (or is held back), later ops
+     * for that entity wait, so an older edit is never replayed over a newer one. An op that has failed
+     * [MAX_AUTO_ATTEMPTS] times stops retrying on its own and waits for the user's retry ([manual]).
      */
-    suspend fun drain() {
+    suspend fun drain(manual: Boolean = false) {
         if (!online() || !drainLock.tryLock()) return
         try {
             val target = activeTarget()
             if (!target.ready) return
             var uploaded = 0
             var failed = 0
+            var newlyFailed = 0
+            val heldTargets = mutableSetOf<String>()
             for (row in dao.getAll()) {
                 // Stop between ops if the drain was cancelled; an op already started finishes below.
                 currentCoroutineContext().ensureActive()
                 if (!online()) break
                 val now = activeTarget()
                 if (!now.ready || !now.sameScope(target)) break
-                if (!target.accepts(toDomain(row))) continue
+                val op = toDomain(row)
+                if (!target.accepts(op)) continue
+                if (op.targetId != null && op.targetId in heldTargets) continue
+                if (!shouldAttempt(row.attempts, manual)) {
+                    op.targetId?.let { heldTargets += it }
+                    continue
+                }
                 val ok = withContext(NonCancellable) {
                     try {
                         process(row)
@@ -228,9 +240,17 @@ class UploadQueueManager(
                         false
                     }
                 }
-                if (ok) uploaded++ else failed++
+                if (ok) {
+                    uploaded++
+                } else {
+                    failed++
+                    if (row.attempts == 0) newlyFailed++
+                    op.targetId?.let { heldTargets += it }
+                }
             }
-            if ((uploaded > 0 || failed > 0) && notificationsEnabled()) {
+            // Only announce news: something uploaded, or a change failed for the first time. A change
+            // that keeps failing is not reported again on every reconnect.
+            if ((uploaded > 0 || newlyFailed > 0) && notificationsEnabled()) {
                 notifier.notifyDrainComplete(uploaded = uploaded, failed = failed)
             }
         } finally {
@@ -476,8 +496,14 @@ class UploadQueueManager(
         op.photoPaths.forEach { runCatching { File(it).delete() } }
     }
 
-    private companion object {
-        const val ORPHAN_MIN_AGE_MS = 60 * 60 * 1000L
+    companion object {
+        private const val ORPHAN_MIN_AGE_MS = 60 * 60 * 1000L
+
+        /** Failed attempts after which an op stops retrying on its own. */
+        const val MAX_AUTO_ATTEMPTS = 5
+
+        /** Whether a drain should try an op that has failed [attempts] times ([manual]: the user asked). */
+        fun shouldAttempt(attempts: Int, manual: Boolean): Boolean = manual || attempts < MAX_AUTO_ATTEMPTS
     }
 
     private fun toDomain(e: QueuedOpEntity): QueuedOp = QueuedOp(

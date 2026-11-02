@@ -38,7 +38,7 @@ class QueueViewModel : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun retryAll() {
-        viewModelScope.launch { queue.drain() }
+        viewModelScope.launch { queue.drain(manual = true) }
     }
 
     fun remove(opId: String) {

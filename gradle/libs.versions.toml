@@ -31,6 +31,8 @@ work = "2.10.1"
 
 # Images
 coil = "3.6.3"
+# Reads a photo's orientation before it is downscaled for upload
+exifinterface = "1.4.2"
 
 # QR code generation + barcode decoding (ZXing core, no Google Play Services)
 zxing = "3.5.3"
@@ -85,6 +87,7 @@ androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx"
 # Images (Coil 3: coil-core no longer bundles networking, so the OkHttp network artifact is explicit)
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 
 # QR code generation + barcode decoding (ZXing core, no Google Play Services)
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }

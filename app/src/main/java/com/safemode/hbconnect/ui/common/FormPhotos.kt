@@ -46,10 +46,21 @@ import coil3.compose.AsyncImage
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.imageExtension
 import com.safemode.hbconnect.data.imageMimeType
+import com.safemode.hbconnect.data.shrinkPhoto
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/**
+ * Prepares a taken or chosen photo for upload: downscaled (see [shrinkPhoto]) when the Downscale
+ * photos setting is on, left as it is otherwise. Returns the path to use.
+ */
+suspend fun preparePhoto(path: String): String {
+    if (!Graph.settingsRepository.config.first().downscalePhotos) return path
+    return withContext(Dispatchers.IO) { shrinkPhoto(path) }
+}
 
 /** A fresh file under the shared `attachments` cache dir for a form photo. */
 private fun newPhotoFile(context: Context, extension: String = "jpg"): File {
@@ -65,11 +76,13 @@ private fun newPhotoFile(context: Context, extension: String = "jpg"): File {
 @Composable
 fun rememberTakePhoto(onTaken: (String) -> Unit): () -> Unit {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var pendingPath by rememberSaveable { mutableStateOf<String?>(null) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         val path = pendingPath
         pendingPath = null
-        if (success && path != null) onTaken(path) else path?.let { runCatching { File(it).delete() } }
+        if (success && path != null) scope.launch { onTaken(preparePhoto(path)) }
+        else path?.let { runCatching { File(it).delete() } }
     }
     fun launch() {
         val file = newPhotoFile(context)
@@ -98,7 +111,7 @@ fun rememberChoosePhoto(onChosen: (String) -> Unit): () -> Unit {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            val path = withContext(Dispatchers.IO) { copyPickedImage(context, uri) }
+            val path = withContext(Dispatchers.IO) { copyPickedImage(context, uri) }?.let { preparePhoto(it) }
             if (path != null) onChosen(path)
             else Toast.makeText(context, "Couldn't read that photo", Toast.LENGTH_LONG).show()
         }
