@@ -1,12 +1,25 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+# Project R8 rules. AGP combines every keep rule file in src/main/keepRules and passes it to R8.
 #
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
+# Release builds don't shrink or obfuscate yet (optimization is off in app/build.gradle.kts). These
+# rules are what turning it on needs: Moshi's KotlinJsonAdapterFactory reads constructors, property
+# names and Kotlin metadata by reflection, so every class it (de)serializes must keep its members
+# and names, or JSON from the server, the offline cache and the upload queue fails to parse.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Kotlin metadata, read by kotlin-reflect to find constructor parameters and their names.
+-keep class kotlin.Metadata { *; }
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,Signature,InnerClasses,EnclosingMethod
+
+# API request and response models (also stored in the offline cache and in queued writes).
+-keep class com.safemode.hbconnect.data.remote.models.** { *; }
+
+# Saved server profiles (settings JSON).
+-keep class com.safemode.hbconnect.data.settings.ServerProfile { *; }
+-keep enum com.safemode.hbconnect.data.settings.** { *; }
+
+# Upload queue payloads.
+-keep class com.safemode.hbconnect.data.EntityEditPayload { *; }
+-keep class com.safemode.hbconnect.data.queue.AttachmentUploadPayload { *; }
+-keep class com.safemode.hbconnect.data.queue.AttachmentRef { *; }
+
+# Retrofit reads the API interface's annotations and generic return types.
+-keep,allowobfuscation interface com.safemode.hbconnect.data.remote.HomeboxApi

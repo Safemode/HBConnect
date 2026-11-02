@@ -115,7 +115,7 @@ object Graph {
             isOnline = networkMonitor::isOnline,
             activeTarget = ::queueTarget,
             notificationsEnabled = { settingsRepository.config.first().queueUploadNotifications },
-            notifier = QueueNotifier(app),
+            onDrainComplete = QueueNotifier(app)::notifyDrainComplete,
         )
 
         // Clear out queue files no pending op still needs (best-effort, once per launch).

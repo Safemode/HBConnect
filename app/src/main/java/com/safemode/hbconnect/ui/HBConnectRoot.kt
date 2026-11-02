@@ -43,8 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -212,74 +214,74 @@ fun HBConnectRoot() {
             }
             composable(Routes.TAGS) {
                 // TagsScreen owns its top bar (back + expand/collapse-all), so no SubScaffold wrapper.
-                TagsScreen(onBack = { navController.popBackStack() })
+                TagsScreen(onBack = { navController.popIfResumed() })
             }
             composable(Routes.ENTITY_TYPES) {
-                SubScaffold("Entity types", onBack = { navController.popBackStack() }) { EntityTypesScreen() }
+                SubScaffold("Entity types", onBack = { navController.popIfResumed() }) { EntityTypesScreen() }
             }
             composable(Routes.TEMPLATES) {
-                SubScaffold("Templates", onBack = { navController.popBackStack() }) {
+                SubScaffold("Templates", onBack = { navController.popIfResumed() }) {
                     TemplatesScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
                     )
                 }
             }
             composable(Routes.MAINTENANCE_ALL) {
-                SubScaffold("Maintenance", onBack = { navController.popBackStack() }) {
+                SubScaffold("Maintenance", onBack = { navController.popIfResumed() }) {
                     AllMaintenanceScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
                     )
                 }
             }
             composable(Routes.VALUE_BREAKDOWN) {
-                SubScaffold("Value breakdown", onBack = { navController.popBackStack() }) {
+                SubScaffold("Value breakdown", onBack = { navController.popIfResumed() }) {
                     ValueBreakdownScreen(
                         onOpenEntity = { id -> navController.navigate(Routes.entityDetail(id)) },
                     )
                 }
             }
             composable(Routes.TOOLS) {
-                SubScaffold("Tools", onBack = { navController.popBackStack() }) {
+                SubScaffold("Tools", onBack = { navController.popIfResumed() }) {
                     ToolsScreen(onOpen = { route -> navController.navigate(route) })
                 }
             }
             composable(Routes.IMPORT_EXPORT) {
-                SubScaffold("Import & export", onBack = { navController.popBackStack() }) {
+                SubScaffold("Import & export", onBack = { navController.popIfResumed() }) {
                     ImportExportScreen()
                 }
             }
             composable(Routes.BILL_OF_MATERIALS) {
-                SubScaffold("Bill of materials", onBack = { navController.popBackStack() }) {
+                SubScaffold("Bill of materials", onBack = { navController.popIfResumed() }) {
                     BillOfMaterialsScreen()
                 }
             }
             composable(Routes.BACKUP) {
-                SubScaffold("Backup & restore", onBack = { navController.popBackStack() }) {
+                SubScaffold("Backup & restore", onBack = { navController.popIfResumed() }) {
                     BackupScreen()
                 }
             }
             composable(Routes.LOGS) {
-                SubScaffold("Logs", onBack = { navController.popBackStack() }) {
+                SubScaffold("Logs", onBack = { navController.popIfResumed() }) {
                     LogsScreen()
                 }
             }
             composable(Routes.COLLECTIONS) {
-                SubScaffold("Collections", onBack = { navController.popBackStack() }) {
+                SubScaffold("Collections", onBack = { navController.popIfResumed() }) {
                     CollectionsScreen()
                 }
             }
             composable(Routes.MEMBERS) {
-                SubScaffold("Members", onBack = { navController.popBackStack() }) {
+                SubScaffold("Members", onBack = { navController.popIfResumed() }) {
                     MembersScreen()
                 }
             }
             composable(Routes.CURRENCY) {
-                SubScaffold("Currency", onBack = { navController.popBackStack() }) {
+                SubScaffold("Currency", onBack = { navController.popIfResumed() }) {
                     CurrencyScreen()
                 }
             }
             composable(Routes.QUEUE) {
-                SubScaffold("Upload queue", onBack = { navController.popBackStack() }) {
+                SubScaffold("Upload queue", onBack = { navController.popIfResumed() }) {
                     QueueScreen()
                 }
             }
@@ -290,7 +292,7 @@ fun HBConnectRoot() {
                 val id = entry.arguments?.getString("id").orEmpty()
                 EntityDetailScreen(
                     entityId = id,
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popIfResumed() },
                     onEditItem = { itemId -> navController.navigate(Routes.itemForm(itemId = itemId)) },
                     onEditLocation = { locId -> navController.navigate(Routes.locationForm(locationId = locId)) },
                     onOpenEntity = { childId -> navController.navigate(Routes.entityDetail(childId)) },
@@ -311,7 +313,7 @@ fun HBConnectRoot() {
                 LocationFormScreen(
                     locationId = locationId,
                     parentId = parentId,
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popIfResumed() },
                 )
             }
             composable(
@@ -320,7 +322,7 @@ fun HBConnectRoot() {
             ) { entry ->
                 MaintenanceScreen(
                     entityId = entry.arguments?.getString("entityId").orEmpty(),
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popIfResumed() },
                 )
             }
             composable(
@@ -329,7 +331,7 @@ fun HBConnectRoot() {
             ) { entry ->
                 AttachmentsScreen(
                     entityId = entry.arguments?.getString("entityId").orEmpty(),
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popIfResumed() },
                 )
             }
             composable(
@@ -344,17 +346,17 @@ fun HBConnectRoot() {
                 ItemFormScreen(
                     itemId = itemId,
                     parentId = parentId,
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popIfResumed() },
                 )
             }
             composable(Routes.ACCOUNT) {
-                SubScaffold("Account", onBack = { navController.popBackStack() }) { AccountScreen() }
+                SubScaffold("Account", onBack = { navController.popIfResumed() }) { AccountScreen() }
             }
             composable(Routes.SERVER) {
-                SubScaffold("Server", onBack = { navController.popBackStack() }) { ServerScreen() }
+                SubScaffold("Server", onBack = { navController.popIfResumed() }) { ServerScreen() }
             }
             composable(Routes.SETTINGS) {
-                SubScaffold("Settings", onBack = { navController.popBackStack() }) { SettingsScreen() }
+                SubScaffold("Settings", onBack = { navController.popIfResumed() }) { SettingsScreen() }
             }
         }
         AppBottomBar(
@@ -467,4 +469,16 @@ private fun Context.findActivity(): Activity? {
         context = context.baseContext
     }
     return null
+}
+
+/**
+ * Goes back one screen, ignoring a tap that arrives while a screen change is still animating (the
+ * current screen is started but not yet resumed then), and never pops the last screen. A double tap
+ * on a back arrow could otherwise pop two screens, or the start screen, and leave a blank window.
+ * A pop requested while the app is in the background (a delete finishing, say) still goes through.
+ */
+private fun NavController.popIfResumed() {
+    if (currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.STARTED) return
+    if (previousBackStackEntry == null) return
+    popBackStack()
 }

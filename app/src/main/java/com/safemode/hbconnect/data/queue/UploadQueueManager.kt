@@ -16,7 +16,6 @@ import com.safemode.hbconnect.data.remote.models.EntityUpdate
 import com.safemode.hbconnect.data.remote.models.MaintenanceEntryRequest
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagUpdate
-import com.safemode.hbconnect.notifications.QueueNotifier
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -31,6 +30,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * The offline write outbox. When the server is unreachable a write is persisted here instead of
@@ -56,11 +56,19 @@ class UploadQueueManager(
     private val isOnline: () -> Boolean,
     private val activeTarget: suspend () -> QueueTarget,
     private val notificationsEnabled: suspend () -> Boolean,
-    private val notifier: QueueNotifier,
+    /** Announces a drain's result (uploaded, failed); the app posts it as a notification. */
+    private val onDrainComplete: (uploaded: Int, failed: Int) -> Unit,
 ) {
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val pathsAdapter: JsonAdapter<List<String>> =
         moshi.adapter(Types.newParameterizedType(List::class.java, String::class.java))
+
+    // The last createdAt handed out. Ops sort by createdAt, so two queued in the same millisecond
+    // must not tie (the id tie-breaker is random and would replay them out of order).
+    private val lastCreatedAt = AtomicLong(0L)
+
+    private fun nextCreatedAt(): Long =
+        lastCreatedAt.updateAndGet { last -> maxOf(System.currentTimeMillis(), last + 1) }
 
     // Guards against two drains running at once (e.g. a reconnect and a manual retry overlapping).
     private val drainLock = Mutex()
@@ -251,7 +259,7 @@ class UploadQueueManager(
             // Only announce news: something uploaded, or a change failed for the first time. A change
             // that keeps failing is not reported again on every reconnect.
             if ((uploaded > 0 || newlyFailed > 0) && notificationsEnabled()) {
-                notifier.notifyDrainComplete(uploaded = uploaded, failed = failed)
+                onDrainComplete(uploaded, failed)
             }
         } finally {
             drainLock.unlock()
@@ -463,7 +471,7 @@ class UploadQueueManager(
                 targetId = targetId,
                 photoPathsJson = copied.takeIf { it.isNotEmpty() }?.let { pathsAdapter.toJson(it) },
                 label = label,
-                createdAt = System.currentTimeMillis(),
+                createdAt = nextCreatedAt(),
                 attempts = 0,
                 lastError = null,
                 status = QueuedOp.Status.PENDING.name,

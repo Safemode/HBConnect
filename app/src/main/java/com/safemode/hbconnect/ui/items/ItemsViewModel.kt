@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safemode.hbconnect.Graph
 import com.safemode.hbconnect.data.remote.models.EntityPatch
+import com.safemode.hbconnect.data.toUpdate
 import com.safemode.hbconnect.data.remote.models.EntitySummary
 import com.safemode.hbconnect.data.remote.models.TagCreate
 import com.safemode.hbconnect.data.remote.models.TagSummary
@@ -130,9 +131,24 @@ class ItemsViewModel : ViewModel() {
             ?.mapNotNull { it.id }?.toSet() ?: emptySet()
     }
 
-    /** Moves every selected item under [parentId]. */
-    fun bulkMove(parentId: String, onResult: (Boolean, String?) -> Unit) =
-        applyToSelection(onResult) { id -> repository.patchEntity(id, EntityPatch(id = id, parentId = parentId)).map {} }
+    /**
+     * Moves every selected item under [parentId]. A sub-item (its parent isn't a location) may have
+     * its own location, which a patch can't clear, so it is checked and, if so, moved with a merged
+     * update that clears it.
+     */
+    fun bulkMove(parentId: String, onResult: (Boolean, String?) -> Unit) {
+        val byId = (_state.value as? UiState.Success)?.data.orEmpty().associateBy { it.id }
+        applyToSelection(onResult) { id ->
+            val maybeSubItem = byId[id]?.parent?.let { it.entityType?.isLocation != true } == true
+            val own = if (maybeSubItem) repository.getEntity(id).getOrNull()?.takeIf { it.locationId != null } else null
+            if (own != null) {
+                val base = own.toUpdate().copy(id = id)
+                repository.mergeUpdateEntity(id, base, base.copy(parentId = parentId, locationId = null)).map {}
+            } else {
+                repository.patchEntity(id, EntityPatch(id = id, parentId = parentId)).map {}
+            }
+        }
+    }
 
     /** Sets the quantity on every selected item. */
     fun bulkSetQuantity(quantity: Double, onResult: (Boolean, String?) -> Unit) =
